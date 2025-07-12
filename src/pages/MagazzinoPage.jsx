@@ -3,6 +3,7 @@ import { Search, Package, Loader2, Tag, Settings } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { getMagazzino, setMagazzino, addStorico } from '../lib/magazzinoStorage';
+import { saveMagazzinoData, loadMagazzinoData, saveStorico } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
 // RIMUOVO: import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -42,11 +43,33 @@ const MagazzinoPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setIsLoading(true);
-    const data = getMagazzino();
-    setMagazzinoData(data);
-    setFilteredData(data);
-    setIsLoading(false);
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        // Prima prova a caricare dal database
+        const dbData = await loadMagazzinoData();
+        if (dbData && dbData.length > 0) {
+          setMagazzinoData(dbData);
+          setFilteredData(dbData);
+        } else {
+          // Fallback al localStorage
+          const data = getMagazzino();
+          setMagazzinoData(data);
+          setFilteredData(data);
+          // Salva nel database
+          await saveMagazzinoData(data);
+        }
+      } catch (error) {
+        console.error('Errore nel caricare i dati:', error);
+        // Fallback al localStorage
+        const data = getMagazzino();
+        setMagazzinoData(data);
+        setFilteredData(data);
+      }
+      setIsLoading(false);
+    };
+    
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -128,7 +151,7 @@ const MagazzinoPage = () => {
     return 'text-green-600 font-semibold';
   };
 
-  const handleSaveEdit = (sku) => {
+  const handleSaveEdit = async (sku) => {
     let updated;
     let tipo = 'modifica';
     let nuovoPrezzo = null;
@@ -157,6 +180,14 @@ const MagazzinoPage = () => {
         return item;
       });
     }
+    
+    // Salva nel database
+    try {
+      await saveMagazzinoData(updated);
+    } catch (error) {
+      console.error('Errore nel salvare nel database:', error);
+    }
+    
     setMagazzino(updated);
     setMagazzinoData(updated);
     setFilteredData(updated);
@@ -164,6 +195,15 @@ const MagazzinoPage = () => {
     setEditingField(null);
     // Aggiorna storico
     if (nuovaQuantita !== null && nuovoPrezzo !== null) {
+      // Salva nel database Supabase
+      await saveStorico(sku, {
+        data: new Date().toISOString(),
+        quantita: nuovaQuantita,
+        prezzo: nuovoPrezzo,
+        tipo
+      });
+      
+      // Mantieni anche il localStorage per compatibilità
       addStorico(sku, {
         data: new Date().toISOString(),
         quantita: nuovaQuantita,
@@ -173,9 +213,17 @@ const MagazzinoPage = () => {
     }
   };
 
-  const handleDeleteProduct = (sku) => {
+  const handleDeleteProduct = async (sku) => {
     if (window.confirm('Sei sicuro di voler eliminare questo prodotto dal magazzino?')) {
       const updated = magazzinoData.filter(item => item.sku !== sku);
+      
+      // Salva nel database
+      try {
+        await saveMagazzinoData(updated);
+      } catch (error) {
+        console.error('Errore nel salvare nel database:', error);
+      }
+      
       setMagazzino(updated);
       setMagazzinoData(updated);
       setFilteredData(updated);
@@ -225,7 +273,7 @@ const MagazzinoPage = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     setAddError('');
     const { sku, nome, quantita, prezzo, anagrafica, tipologia, marca } = newProduct;
     if (!sku.trim() || !nome.trim() || !quantita || !prezzo) {
@@ -247,6 +295,14 @@ const MagazzinoPage = () => {
     };
     // Salva su magazzino
     const nuovoMagazzino = [...magazzinoData, prodotto];
+    
+    // Salva nel database
+    try {
+      await saveMagazzinoData(nuovoMagazzino);
+    } catch (error) {
+      console.error('Errore nel salvare nel database:', error);
+    }
+    
     setMagazzino(nuovoMagazzino);
     setMagazzinoData(nuovoMagazzino);
     setFilteredData(nuovoMagazzino);
@@ -257,6 +313,15 @@ const MagazzinoPage = () => {
     // Salva foto su localStorage
     if (newProductImage) localStorage.setItem(`foto_${sku.trim()}`, newProductImage);
     // Storico
+    // Salva nel database Supabase
+    await saveStorico(sku.trim(), {
+      data: new Date().toISOString(),
+      quantita: parseInt(quantita),
+      prezzo: parseFloat(prezzo.replace(',', '.')),
+      tipo: 'manuale'
+    });
+    
+    // Mantieni anche il localStorage per compatibilità
     addStorico(sku.trim(), {
       data: new Date().toISOString(),
       quantita: parseInt(quantita),
