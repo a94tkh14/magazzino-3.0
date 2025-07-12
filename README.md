@@ -79,4 +79,4 @@ L'applicazione sarà disponibile su `http://localhost:3000`
 
 - Le funzionalità di marketing richiedono la configurazione delle credenziali OAuth
 - Senza le credenziali, la pagina Marketing mostrerà solo i dati stimati basati sugli ordini Shopify
-- Per utilizzare le API reali, configura le credenziali e riavvia l'applicazione 
+- Per utilizzare le API reali, configura le credenziali e riavvia l'applicazione
