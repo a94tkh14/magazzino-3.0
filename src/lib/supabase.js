@@ -1,193 +1,166 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://qaahhexewxybklonzxzho.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhaGhleGV3eHlia2xvbnp4emhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIzNTI3MTEsImV4cCI6MjA2NzkyODcxMX0.9OUryDbeDUSDR8MhcKbxST941SrQNHC696YdhIVtGg0';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://your-project-url.supabase.co'
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'your-anon-key'
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Funzioni per il magazzino
-export const saveMagazzinoData = async (data) => {
+export const saveMagazzino = async (data) => {
   try {
-    console.log('🔄 Salvando dati in Supabase:', data);
+    const { data: result, error } = await supabase
+      .from('magazzino')
+      .upsert(data, { onConflict: 'sku' })
     
-    // Prima elimina tutti i dati esistenti
-    const { error: deleteError } = await supabase
-      .from('magazzino')
-      .delete()
-      .neq('id', 0); // Elimina tutti i record
-
-    if (deleteError) {
-      console.error('❌ Errore nell\'eliminare i dati:', deleteError);
-      return { success: false, error: deleteError.message };
-    }
-
-    console.log('✅ Dati eliminati con successo');
-
-    // Poi inserisce i nuovi dati
-    const { data: insertedData, error: insertError } = await supabase
-      .from('magazzino')
-      .insert(data)
-      .select();
-
-    if (insertError) {
-      console.error('❌ Errore nell\'inserire i dati:', insertError);
-      return { success: false, error: insertError.message };
-    }
-
-    console.log('✅ Dati salvati con successo in Supabase:', insertedData);
-    return { success: true, data: insertedData };
+    if (error) throw error
+    console.log('Magazzino salvato:', result)
+    return result
   } catch (error) {
-    console.error('❌ Errore nel salvare i dati:', error);
-    return { success: false, error: error.message };
+    console.error('Errore nel salvare magazzino:', error)
+    throw error
   }
-};
+}
 
-export const loadMagazzinoData = async () => {
+export const loadMagazzino = async () => {
   try {
-    console.log('🔄 Caricando dati da Supabase...');
-    
     const { data, error } = await supabase
       .from('magazzino')
       .select('*')
-      .order('nome');
-
-    if (error) {
-      console.error('❌ Errore nel caricare i dati:', error);
-      return [];
-    }
-
-    console.log('✅ Dati caricati da Supabase:', data);
-    return data || [];
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    console.log('Magazzino caricato:', data)
+    return data || []
   } catch (error) {
-    console.error('❌ Errore nel caricare i dati:', error);
-    return [];
+    console.error('Errore nel caricare magazzino:', error)
+    return []
   }
-};
+}
 
 // Funzioni per lo stock
-export const saveStockData = async (data) => {
+export const saveStock = async (data) => {
   try {
-    // Prima elimina tutti i dati esistenti
-    const { error: deleteError } = await supabase
+    const { data: result, error } = await supabase
       .from('stock')
-      .delete()
-      .neq('id', 0);
-
-    if (deleteError) {
-      console.error('Errore nell\'eliminare i dati stock:', deleteError);
-      return { success: false, error: deleteError.message };
-    }
-
-    // Poi inserisce i nuovi dati
-    const { data: insertedData, error: insertError } = await supabase
-      .from('stock')
-      .insert(data)
-      .select();
-
-    if (insertError) {
-      console.error('Errore nell\'inserire i dati stock:', insertError);
-      return { success: false, error: insertError.message };
-    }
-
-    return { success: true, data: insertedData };
+      .upsert(data, { onConflict: 'sku' })
+    
+    if (error) throw error
+    console.log('Stock salvato:', result)
+    return result
   } catch (error) {
-    console.error('Errore nel salvare i dati stock:', error);
-    return { success: false, error: error.message };
+    console.error('Errore nel salvare stock:', error)
+    throw error
   }
-};
+}
 
-export const loadStockData = async () => {
+export const loadStock = async () => {
   try {
     const { data, error } = await supabase
       .from('stock')
       .select('*')
-      .order('data_aggiornamento', { ascending: false });
-
-    if (error) {
-      console.error('Errore nel caricare i dati stock:', error);
-      return [];
-    }
-
-    return data || [];
+      .order('data_aggiornamento', { ascending: false })
+    
+    if (error) throw error
+    console.log('Stock caricato:', data)
+    return data || []
   } catch (error) {
-    console.error('Errore nel caricare i dati stock:', error);
-    return [];
+    console.error('Errore nel caricare stock:', error)
+    return []
   }
-};
+}
 
 // Funzioni per gli ordini
-export const saveOrdersData = async (data) => {
+export const saveOrdine = async (data) => {
   try {
-    // Prima elimina tutti i dati esistenti
-    const { error: deleteError } = await supabase
+    const { data: result, error } = await supabase
       .from('ordini')
-      .delete()
-      .neq('id', 0);
-
-    if (deleteError) {
-      console.error('Errore nell\'eliminare i dati ordini:', deleteError);
-      return { success: false, error: deleteError.message };
-    }
-
-    // Poi inserisce i nuovi dati
-    const { data: insertedData, error: insertError } = await supabase
-      .from('ordini')
-      .insert(data)
-      .select();
-
-    if (insertError) {
-      console.error('Errore nell\'inserire i dati ordini:', insertError);
-      return { success: false, error: insertError.message };
-    }
-
-    return { success: true, data: insertedData };
+      .upsert(data, { onConflict: 'numero_ordine' })
+    
+    if (error) throw error
+    console.log('Ordine salvato:', result)
+    return result
   } catch (error) {
-    console.error('Errore nel salvare i dati ordini:', error);
-    return { success: false, error: error.message };
+    console.error('Errore nel salvare ordine:', error)
+    throw error
   }
-};
+}
 
-export const loadOrdersData = async () => {
+export const loadOrdini = async () => {
   try {
     const { data, error } = await supabase
       .from('ordini')
       .select('*')
-      .order('data_ordine', { ascending: false });
-
-    if (error) {
-      console.error('Errore nel caricare i dati ordini:', error);
-      return [];
-    }
-
-    return data || [];
+      .order('data_ordine', { ascending: false })
+    
+    if (error) throw error
+    console.log('Ordini caricati:', data)
+    return data || []
   } catch (error) {
-    console.error('Errore nel caricare i dati ordini:', error);
-    return [];
+    console.error('Errore nel caricare ordini:', error)
+    return []
   }
-};
+}
 
-// Funzione per salvare lo storico
-export const saveStorico = async (sku, storicoData) => {
+// Funzioni per lo storico
+export const saveStorico = async (data) => {
+  try {
+    const { data: result, error } = await supabase
+      .from('storico')
+      .insert(data)
+    
+    if (error) throw error
+    console.log('Storico salvato:', result)
+    return result
+  } catch (error) {
+    console.error('Errore nel salvare storico:', error)
+    throw error
+  }
+}
+
+export const loadStorico = async () => {
   try {
     const { data, error } = await supabase
       .from('storico')
-      .insert({
-        sku: sku,
-        quantita: storicoData.quantita,
-        prezzo: storicoData.prezzo,
-        tipo: storicoData.tipo,
-        data: storicoData.data
-      })
-      .select();
-
-    if (error) {
-      console.error('Errore nel salvare lo storico:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, data };
+      .select('*')
+      .order('data', { ascending: false })
+    
+    if (error) throw error
+    console.log('Storico caricato:', data)
+    return data || []
   } catch (error) {
-    console.error('Errore nel salvare lo storico:', error);
-    return { success: false, error: error.message };
+    console.error('Errore nel caricare storico:', error)
+    return []
   }
-}; 
+}
+
+// Funzioni per le impostazioni
+export const saveSettings = async (data) => {
+  try {
+    const { data: result, error } = await supabase
+      .from('settings')
+      .upsert(data, { onConflict: 'id' })
+    
+    if (error) throw error
+    console.log('Impostazioni salvate:', result)
+    return result
+  } catch (error) {
+    console.error('Errore nel salvare impostazioni:', error)
+    throw error
+  }
+}
+
+export const loadSettings = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('*')
+      .single()
+    
+    if (error) throw error
+    console.log('Impostazioni caricate:', data)
+    return data || {}
+  } catch (error) {
+    console.error('Errore nel caricare impostazioni:', error)
+    return {}
+  }
+} 

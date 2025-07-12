@@ -8,6 +8,7 @@ import {
   saveSupplierOrder, 
   generateOrderNumber
 } from '../lib/supplierOrders';
+import { saveSupplierOrdersData } from '../lib/magazzinoStorage';
 
 const SupplierOrdersPage = () => {
   const navigate = useNavigate();
@@ -123,6 +124,13 @@ const SupplierOrdersPage = () => {
       };
 
       await saveSupplierOrder(order);
+      
+      // Salva anche nel database Supabase
+      try {
+        await saveSupplierOrdersData([order]);
+      } catch (error) {
+        console.error('Errore nel salvare ordine fornitore nel database:', error);
+      }
       
       // Reset form
       setCsvData(null);

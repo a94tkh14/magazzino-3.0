@@ -11,7 +11,7 @@ import {
   deleteSupplierOrder
 } from '../lib/supplierOrders';
 import { getTrackingInfo, formatTrackingDate, getStatusColor } from '../lib/trackingAPI';
-import { getMagazzino } from '../lib/magazzinoStorage';
+import { loadMagazzinoData } from '../lib/magazzinoStorage';
 
 const SupplierOrdersListPage = () => {
   const [orders, setOrders] = useState([]);

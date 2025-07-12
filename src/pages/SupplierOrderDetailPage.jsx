@@ -11,7 +11,7 @@ import {
   ORDER_STATUS 
 } from '../lib/supplierOrders';
 import { getTrackingInfo, formatTrackingDate, getStatusColor } from '../lib/trackingAPI';
-import { getMagazzino, setMagazzino, addStorico } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, saveMagazzinoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { Plus } from 'lucide-react';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
 

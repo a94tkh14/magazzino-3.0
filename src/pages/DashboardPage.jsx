@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
-import { getMagazzino } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, loadOrdersData } from '../lib/magazzinoStorage';
 import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, RefreshCw, ArrowUpRight, ArrowDownRight, ArrowRight, TruckIcon } from 'lucide-react';
 import { formatPrice } from '../lib/utils';
 import DateTimeRangePicker from '../components/DateTimeRangePicker';
@@ -119,15 +119,36 @@ const DashboardPage = () => {
     });
   };
 
-  // Carica gli ordini dal localStorage
+  // Carica gli ordini dal database
   useEffect(() => {
-    const loadOrders = () => {
-      const savedOrders = localStorage.getItem('shopify_orders');
-      if (savedOrders) {
-        const parsedOrders = JSON.parse(savedOrders);
-        setOrders(parsedOrders);
-        calculateStats(parsedOrders);
-        calculateTopProducts(parsedOrders);
+    const loadOrders = async () => {
+      try {
+        // Carica dal database
+        const dbOrders = await loadOrdersData();
+        if (dbOrders && dbOrders.length > 0) {
+          setOrders(dbOrders);
+          await calculateStats(dbOrders);
+          calculateTopProducts(dbOrders);
+        } else {
+          // Fallback al localStorage
+          const savedOrders = localStorage.getItem('shopify_orders');
+          if (savedOrders) {
+            const parsedOrders = JSON.parse(savedOrders);
+            setOrders(parsedOrders);
+            await calculateStats(parsedOrders);
+            calculateTopProducts(parsedOrders);
+          }
+        }
+      } catch (error) {
+        console.error('Errore nel caricare ordini:', error);
+        // Fallback al localStorage
+        const savedOrders = localStorage.getItem('shopify_orders');
+        if (savedOrders) {
+          const parsedOrders = JSON.parse(savedOrders);
+          setOrders(parsedOrders);
+          await calculateStats(parsedOrders);
+          calculateTopProducts(parsedOrders);
+        }
       }
     };
     
@@ -165,9 +186,16 @@ const DashboardPage = () => {
 
   useEffect(() => {
     // Estrai tutte le tipologie uniche dal magazzino
-    const magazzino = getMagazzino();
-    const tipi = Array.from(new Set(magazzino.map(item => item.tipologia).filter(Boolean)));
-    setTipologie(tipi);
+    const loadTipologie = async () => {
+      try {
+        const magazzino = await loadMagazzinoData();
+        const tipi = Array.from(new Set(magazzino.map(item => item.tipologia).filter(Boolean)));
+        setTipologie(tipi);
+      } catch (error) {
+        console.error('Errore nel caricare tipologie:', error);
+      }
+    };
+    loadTipologie();
   }, []);
 
   // Gestione filtri rapidi per periodo principale
@@ -243,22 +271,32 @@ const DashboardPage = () => {
     });
   }, [startDate, endDate]);
 
-  const calculateStats = (ordersList) => {
+  const calculateStats = async (ordersList) => {
     const totalRevenue = ordersList.reduce((sum, order) => sum + order.totalPrice, 0);
     const totalProducts = ordersList.reduce((sum, order) => 
       sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
     );
     
-    // Conta prodotti con scorte basse
-    const magazzino = getMagazzino();
-    const lowStockCount = magazzino.filter(item => item.quantita <= lowStockThreshold).length;
+    try {
+      // Conta prodotti con scorte basse
+      const magazzino = await loadMagazzinoData();
+      const lowStockCount = magazzino.filter(item => item.quantita <= lowStockThreshold).length;
 
-    setStats({
-      totalOrders: ordersList.length,
-      totalRevenue,
-      totalProducts,
-      lowStockCount
-    });
+      setStats({
+        totalOrders: ordersList.length,
+        totalRevenue,
+        totalProducts,
+        lowStockCount
+      });
+    } catch (error) {
+      console.error('Errore nel caricare magazzino per statistiche:', error);
+      setStats({
+        totalOrders: ordersList.length,
+        totalRevenue,
+        totalProducts,
+        lowStockCount: 0
+      });
+    }
   };
 
   const calculateTopProducts = (ordersList) => {
@@ -304,7 +342,7 @@ const DashboardPage = () => {
       
       if (data.success) {
         setOrders(data.orders);
-        calculateStats(data.orders);
+        await calculateStats(data.orders);
         calculateTopProducts(data.orders);
       }
     } catch (error) {
@@ -314,39 +352,44 @@ const DashboardPage = () => {
     }
   };
 
-  const getLowStockProducts = () => {
-    const magazzino = getMagazzino();
-    
-    // Filtra prodotti con scorte basse usando la soglia configurabile
-    const lowStockProducts = magazzino.filter(item => item.quantita <= lowStockThreshold);
-    
-    // Calcola i prodotti più venduti per dare priorità
-    const productSalesMap = new Map();
-    filteredOrders.forEach(order => {
-      order.items.forEach(item => {
-        if (item.sku) {
-          const existing = productSalesMap.get(item.sku) || { sku: item.sku, totalSold: 0 };
-          existing.totalSold += item.quantity;
-          productSalesMap.set(item.sku, existing);
-        }
+  const getLowStockProducts = async () => {
+    try {
+      const magazzino = await loadMagazzinoData();
+      
+      // Filtra prodotti con scorte basse usando la soglia configurabile
+      const lowStockProducts = magazzino.filter(item => item.quantita <= lowStockThreshold);
+      
+      // Calcola i prodotti più venduti per dare priorità
+      const productSalesMap = new Map();
+      filteredOrders.forEach(order => {
+        order.items.forEach(item => {
+          if (item.sku) {
+            const existing = productSalesMap.get(item.sku) || { sku: item.sku, totalSold: 0 };
+            existing.totalSold += item.quantity;
+            productSalesMap.set(item.sku, existing);
+          }
+        });
       });
-    });
-    
-    // Ordina i prodotti con scorte basse: prima i più venduti, poi per quantità crescente
-    return lowStockProducts
-      .map(product => ({
-        ...product,
-        totalSold: productSalesMap.get(product.sku)?.totalSold || 0
-      }))
-      .sort((a, b) => {
-        // Prima ordina per vendite totali (decrescente)
-        if (b.totalSold !== a.totalSold) {
-          return b.totalSold - a.totalSold;
-        }
-        // Poi per quantità crescente (più critici prima)
-        return a.quantita - b.quantita;
-      })
-      .slice(0, 5);
+      
+      // Ordina i prodotti con scorte basse: prima i più venduti, poi per quantità crescente
+      return lowStockProducts
+        .map(product => ({
+          ...product,
+          totalSold: productSalesMap.get(product.sku)?.totalSold || 0
+        }))
+        .sort((a, b) => {
+          // Prima ordina per vendite totali (decrescente)
+          if (b.totalSold !== a.totalSold) {
+            return b.totalSold - a.totalSold;
+          }
+          // Poi per quantità crescente (più critici prima)
+          return a.quantita - b.quantita;
+        })
+        .slice(0, 5);
+    } catch (error) {
+      console.error('Errore nel caricare prodotti scorte basse:', error);
+      return [];
+    }
   };
 
   const getRecentOrders = () => {

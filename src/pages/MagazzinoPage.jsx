@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Package, Loader2, Tag, Settings } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { getMagazzino, setMagazzino, addStorico } from '../lib/magazzinoStorage';
-import { saveMagazzinoData, loadMagazzinoData, saveStorico } from '../lib/supabase';
+import { saveMagazzinoData, loadMagazzinoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
 // RIMUOVO: import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -46,23 +45,25 @@ const MagazzinoPage = () => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        // Prima prova a caricare dal database
+        // Carica dal database Supabase
         const dbData = await loadMagazzinoData();
         if (dbData && dbData.length > 0) {
           setMagazzinoData(dbData);
           setFilteredData(dbData);
         } else {
           // Fallback al localStorage
-          const data = getMagazzino();
+          const data = loadFromLocalStorage('magazzino_data', []);
           setMagazzinoData(data);
           setFilteredData(data);
-          // Salva nel database
-          await saveMagazzinoData(data);
+          // Salva nel database se ci sono dati
+          if (data.length > 0) {
+            await saveMagazzinoData(data);
+          }
         }
       } catch (error) {
         console.error('Errore nel caricare i dati:', error);
         // Fallback al localStorage
-        const data = getMagazzino();
+        const data = loadFromLocalStorage('magazzino_data', []);
         setMagazzinoData(data);
         setFilteredData(data);
       }
@@ -184,33 +185,19 @@ const MagazzinoPage = () => {
     // Salva nel database
     try {
       await saveMagazzinoData(updated);
+      // Salva anche in localStorage come backup
+      saveToLocalStorage('magazzino_data', updated);
     } catch (error) {
       console.error('Errore nel salvare nel database:', error);
+      // Fallback al localStorage
+      saveToLocalStorage('magazzino_data', updated);
     }
     
-    setMagazzino(updated);
     setMagazzinoData(updated);
     setFilteredData(updated);
     setEditingSku(null);
     setEditingField(null);
-    // Aggiorna storico
-    if (nuovaQuantita !== null && nuovoPrezzo !== null) {
-      // Salva nel database Supabase
-      await saveStorico(sku, {
-        data: new Date().toISOString(),
-        quantita: nuovaQuantita,
-        prezzo: nuovoPrezzo,
-        tipo
-      });
-      
-      // Mantieni anche il localStorage per compatibilità
-      addStorico(sku, {
-        data: new Date().toISOString(),
-        quantita: nuovaQuantita,
-        prezzo: nuovoPrezzo,
-        tipo
-      });
-    }
+  };
   };
 
   const handleDeleteProduct = async (sku) => {
@@ -220,11 +207,14 @@ const MagazzinoPage = () => {
       // Salva nel database
       try {
         await saveMagazzinoData(updated);
+        // Salva anche in localStorage come backup
+        saveToLocalStorage('magazzino_data', updated);
       } catch (error) {
         console.error('Errore nel salvare nel database:', error);
+        // Fallback al localStorage
+        saveToLocalStorage('magazzino_data', updated);
       }
       
-      setMagazzino(updated);
       setMagazzinoData(updated);
       setFilteredData(updated);
     }
@@ -299,11 +289,14 @@ const MagazzinoPage = () => {
     // Salva nel database
     try {
       await saveMagazzinoData(nuovoMagazzino);
+      // Salva anche in localStorage come backup
+      saveToLocalStorage('magazzino_data', nuovoMagazzino);
     } catch (error) {
       console.error('Errore nel salvare nel database:', error);
+      // Fallback al localStorage
+      saveToLocalStorage('magazzino_data', nuovoMagazzino);
     }
     
-    setMagazzino(nuovoMagazzino);
     setMagazzinoData(nuovoMagazzino);
     setFilteredData(nuovoMagazzino);
     // Salva anagrafica su localStorage
@@ -312,22 +305,6 @@ const MagazzinoPage = () => {
     if (marca) localStorage.setItem(`marca_${sku.trim()}`, marca.trim());
     // Salva foto su localStorage
     if (newProductImage) localStorage.setItem(`foto_${sku.trim()}`, newProductImage);
-    // Storico
-    // Salva nel database Supabase
-    await saveStorico(sku.trim(), {
-      data: new Date().toISOString(),
-      quantita: parseInt(quantita),
-      prezzo: parseFloat(prezzo.replace(',', '.')),
-      tipo: 'manuale'
-    });
-    
-    // Mantieni anche il localStorage per compatibilità
-    addStorico(sku.trim(), {
-      data: new Date().toISOString(),
-      quantita: parseInt(quantita),
-      prezzo: parseFloat(prezzo.replace(',', '.')),
-      tipo: 'manuale'
-    });
     setShowAddModal(false);
     setNewProduct({ sku: '', nome: '', quantita: '', prezzo: '', anagrafica: '', tipologia: '', marca: '' });
     setNewProductImage(null);

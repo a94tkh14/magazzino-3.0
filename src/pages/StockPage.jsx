@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FileText, Trash2, Send, Download, Package, Database } from 'lucide-react';
 import Button from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { getMagazzino, setMagazzino, addStorico } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, saveMagazzinoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
 
 const StockPage = () => {
@@ -169,15 +169,25 @@ const StockPage = () => {
     }
     setIsLoading(true);
 
-    let magazzino = getMagazzino();
-    let toImport = [...csvData];
+    try {
+      let magazzino = await loadMagazzinoData();
+      let toImport = [...csvData];
 
-    const processNext = () => {
+    const processNext = async () => {
       if (toImport.length === 0) {
-        setIsLoading(false);
-        setMessage('Stock caricato e magazzino aggiornato!');
-        setCsvData([]);
-        setMagazzino(magazzino);
+        try {
+          // Salva nel database
+          await saveMagazzinoData(magazzino);
+          // Salva anche in localStorage come backup
+          saveToLocalStorage('magazzino_data', magazzino);
+          setIsLoading(false);
+          setMessage('Stock caricato e magazzino aggiornato!');
+          setCsvData([]);
+        } catch (error) {
+          console.error('Errore nel salvare magazzino:', error);
+          setMessage('Errore nel salvare i dati');
+          setIsLoading(false);
+        }
         return;
       }
       const newItem = toImport.shift();
@@ -206,15 +216,7 @@ const StockPage = () => {
             }
             // Se ignora, non aggiorna nulla
             setModalOpen(false);
-            // Aggiorna storico
-            if (decision !== 'ignora') {
-              addStorico(newItem.sku, {
-                data: new Date().toISOString(),
-                quantita: magazzino[idx].quantita,
-                prezzo: magazzino[idx].prezzo,
-                tipo: 'import'
-              });
-            }
+            // Storico gestito automaticamente dal database
             setTimeout(processNext, 0);
           }
         });
@@ -225,26 +227,21 @@ const StockPage = () => {
         if (newItem.anagrafica) magazzino[idx].anagrafica = newItem.anagrafica;
         if (newItem.tipologia) magazzino[idx].tipologia = newItem.tipologia;
         if (newItem.marca) magazzino[idx].marca = newItem.marca;
-        addStorico(newItem.sku, {
-          data: new Date().toISOString(),
-          quantita: magazzino[idx].quantita,
-          prezzo: magazzino[idx].prezzo,
-          tipo: 'import'
-        });
+        // Storico gestito automaticamente dal database
         setTimeout(processNext, 0);
       } else {
         magazzino.push({ ...newItem });
-        addStorico(newItem.sku, {
-          data: new Date().toISOString(),
-          quantita: newItem.quantita,
-          prezzo: newItem.prezzo,
-          tipo: 'import'
-        });
+        // Storico gestito automaticamente dal database
         setTimeout(processNext, 0);
       }
     };
 
-    processNext();
+      await processNext();
+    } catch (error) {
+      console.error('Errore nel caricare magazzino:', error);
+      setMessage('Errore nel caricare i dati del magazzino');
+      setIsLoading(false);
+    }
   };
 
   const handleManualInput = (e, index) => {
@@ -262,96 +259,110 @@ const StockPage = () => {
     }
   };
 
-  const handleManualSubmit = (e) => {
+  const handleManualSubmit = async (e) => {
     e.preventDefault();
     const validProducts = manualProducts.filter(p => p.sku && p.quantita && p.prezzo);
     if (validProducts.length === 0) {
       setMessage('Compila almeno SKU, quantità e prezzo per aggiungere un prodotto');
       return;
     }
-    let magazzino = getMagazzino();
-    let hasError = false;
-    let errorMessage = '';
     
-    validProducts.forEach(product => {
-      const newItem = {
-        sku: product.sku.trim(),
-        nome: product.nome.trim() || 'Prodotto senza nome',
-        quantita: parseInt(product.quantita),
-        prezzo: parseFloat(product.prezzo.replace(',', '.'))
-      };
-      const idx = magazzino.findIndex(item => item.sku === newItem.sku);
-      if (idx !== -1) {
-        magazzino[idx].quantita += newItem.quantita;
-        magazzino[idx].prezzo = newItem.prezzo;
-        if (product.nome.trim()) {
-          magazzino[idx].nome = newItem.nome;
+    try {
+      let magazzino = await loadMagazzinoData();
+      let hasError = false;
+      let errorMessage = '';
+      
+      validProducts.forEach(product => {
+        const newItem = {
+          sku: product.sku.trim(),
+          nome: product.nome.trim() || 'Prodotto senza nome',
+          quantita: parseInt(product.quantita),
+          prezzo: parseFloat(product.prezzo.replace(',', '.'))
+        };
+        const idx = magazzino.findIndex(item => item.sku === newItem.sku);
+        if (idx !== -1) {
+          magazzino[idx].quantita += newItem.quantita;
+          magazzino[idx].prezzo = newItem.prezzo;
+          if (product.nome.trim()) {
+            magazzino[idx].nome = newItem.nome;
+          }
+        } else {
+          if (!product.nome.trim()) {
+            hasError = true;
+            errorMessage = `Il nome è obbligatorio per il nuovo prodotto con SKU: ${newItem.sku}`;
+            return;
+          }
+          magazzino.push(newItem);
         }
-      } else {
-        if (!product.nome.trim()) {
-          hasError = true;
-          errorMessage = `Il nome è obbligatorio per il nuovo prodotto con SKU: ${newItem.sku}`;
-          return;
-        }
-        magazzino.push(newItem);
-      }
-      addStorico(newItem.sku, {
-        data: new Date().toISOString(),
-        quantita: magazzino[idx !== -1 ? idx : magazzino.length - 1].quantita,
-        prezzo: magazzino[idx !== -1 ? idx : magazzino.length - 1].prezzo,
-        tipo: 'manuale'
       });
-    });
-    
-    if (hasError) {
-      setMessage(errorMessage);
-      return;
+      
+      if (hasError) {
+        setMessage(errorMessage);
+        return;
+      }
+      
+      // Salva nel database
+      await saveMagazzinoData(magazzino);
+      // Salva anche in localStorage come backup
+      saveToLocalStorage('magazzino_data', magazzino);
+      
+      setManualProducts([{ sku: '', nome: '', quantita: '', prezzo: '' }]);
+      setMessage(`${validProducts.length} prodotto/i aggiunto/i manualmente!`);
+    } catch (error) {
+      console.error('Errore nel salvare dati:', error);
+      setMessage('Errore nel salvare i dati');
     }
-    
-    setMagazzino(magazzino);
-    setManualProducts([{ sku: '', nome: '', quantita: '', prezzo: '' }]);
-    setMessage(`${validProducts.length} prodotto/i aggiunto/i manualmente!`);
   };
 
-  const handleUploadAnagrafica = () => {
+  const handleUploadAnagrafica = async () => {
     if (anagraficaData.length === 0) {
       setAnagraficaMessage('Nessun dato anagrafica da caricare');
       return;
     }
     setIsLoading(true);
 
-    let magazzino = getMagazzino();
-    let updatedCount = 0;
-    let newCount = 0;
+    try {
+      let magazzino = await loadMagazzinoData();
+      let updatedCount = 0;
+      let newCount = 0;
 
-    anagraficaData.forEach(item => {
-      const idx = magazzino.findIndex(existing => existing.sku === item.sku);
-      if (idx !== -1) {
-        // Aggiorna anagrafica esistente
-        magazzino[idx].nome = item.nome;
-        if (item.anagrafica) magazzino[idx].anagrafica = item.anagrafica;
-        if (item.tipologia) magazzino[idx].tipologia = item.tipologia;
-        if (item.marca) magazzino[idx].marca = item.marca;
-        updatedCount++;
-      } else {
-        // Crea nuovo prodotto con solo anagrafica (quantità e prezzo a 0)
-        magazzino.push({
-          sku: item.sku,
-          nome: item.nome,
-          quantita: 0,
-          prezzo: 0,
-          anagrafica: item.anagrafica || '',
-          tipologia: item.tipologia || '',
-          marca: item.marca || ''
-        });
-        newCount++;
-      }
-    });
+      anagraficaData.forEach(item => {
+        const idx = magazzino.findIndex(existing => existing.sku === item.sku);
+        if (idx !== -1) {
+          // Aggiorna anagrafica esistente
+          magazzino[idx].nome = item.nome;
+          if (item.anagrafica) magazzino[idx].anagrafica = item.anagrafica;
+          if (item.tipologia) magazzino[idx].tipologia = item.tipologia;
+          if (item.marca) magazzino[idx].marca = item.marca;
+          updatedCount++;
+        } else {
+          // Crea nuovo prodotto con solo anagrafica (quantità e prezzo a 0)
+          magazzino.push({
+            sku: item.sku,
+            nome: item.nome,
+            quantita: 0,
+            prezzo: 0,
+            anagrafica: item.anagrafica || '',
+            tipologia: item.tipologia || '',
+            marca: item.marca || ''
+          });
+          newCount++;
+        }
+      });
 
-    setMagazzino(magazzino);
-    setAnagraficaData([]);
-    setIsLoading(false);
-    setAnagraficaMessage(`Anagrafica caricata: ${updatedCount} aggiornati, ${newCount} nuovi prodotti`);
+      // Salva nel database
+      await saveMagazzinoData(magazzino);
+      // Salva anche in localStorage come backup
+      saveToLocalStorage('magazzino_data', magazzino);
+      
+      setAnagraficaData([]);
+      setIsLoading(false);
+      setAnagraficaMessage(`Anagrafica caricata: ${updatedCount} aggiornati, ${newCount} nuovi prodotti`);
+    } catch (error) {
+      console.error('Errore nel salvare anagrafica:', error);
+      setAnagraficaMessage('Errore nel salvare i dati anagrafica');
+      setIsLoading(false);
+    }
   };
 
   const handleReset = () => {

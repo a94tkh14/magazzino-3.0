@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMagazzino, getStorico } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 function formatDateTime(isoString) {
@@ -22,20 +22,27 @@ export default function MagazzinoDetailPage() {
   const [isEditingTipologia, setIsEditingTipologia] = useState(false);
 
   useEffect(() => {
-    const magazzino = getMagazzino();
-    setProdotto(magazzino.find(p => p.sku === sku));
-    // Carica la foto da localStorage se presente
-    const saved = localStorage.getItem(`foto_${sku}`);
-    if (saved) setFoto(saved);
-    // Carica marca da localStorage se presente
-    const savedMarca = localStorage.getItem(`marca_${sku}`);
-    if (savedMarca) setMarca(savedMarca);
-    // Carica tipologia da localStorage se presente
-    const savedTipologia = localStorage.getItem(`tipologia_${sku}`);
-    if (savedTipologia) setTipologia(savedTipologia);
-    // Carica storico
-    const allStorico = getStorico();
-    setStorico(allStorico[sku] || []);
+    const loadProductData = async () => {
+      try {
+        const magazzino = await loadMagazzinoData();
+        setProdotto(magazzino.find(p => p.sku === sku));
+        // Carica la foto da localStorage se presente
+        const saved = localStorage.getItem(`foto_${sku}`);
+        if (saved) setFoto(saved);
+        // Carica marca da localStorage se presente
+        const savedMarca = localStorage.getItem(`marca_${sku}`);
+        if (savedMarca) setMarca(savedMarca);
+        // Carica tipologia da localStorage se presente
+        const savedTipologia = localStorage.getItem(`tipologia_${sku}`);
+        if (savedTipologia) setTipologia(savedTipologia);
+        // Carica storico da localStorage
+        const allStorico = loadFromLocalStorage('magazzino_storico', {});
+        setStorico(allStorico[sku] || []);
+      } catch (error) {
+        console.error('Errore nel caricare dati prodotto:', error);
+      }
+    };
+    loadProductData();
   }, [sku]);
 
   const handleFotoChange = (e) => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
-import { getMagazzino } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, loadOrdersData, saveOrdersData } from '../lib/magazzinoStorage';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -32,14 +32,47 @@ const OrdiniPage = () => {
   const [filterPerfume, setFilterPerfume] = useState('all');
 
   useEffect(() => {
-    const savedOrders = localStorage.getItem('shopify_orders');
-    if (savedOrders) {
-      setOrders(JSON.parse(savedOrders));
-    }
+    const loadOrders = async () => {
+      try {
+        // Carica ordini dal database
+        const dbOrders = await loadOrdersData();
+        if (dbOrders && dbOrders.length > 0) {
+          setOrders(dbOrders);
+        } else {
+          // Fallback al localStorage
+          const savedOrders = localStorage.getItem('shopify_orders');
+          if (savedOrders) {
+            const parsedOrders = JSON.parse(savedOrders);
+            setOrders(parsedOrders);
+            // Salva nel database
+            await saveOrdersData(parsedOrders);
+          }
+        }
+      } catch (error) {
+        console.error('Errore nel caricare ordini:', error);
+        // Fallback al localStorage
+        const savedOrders = localStorage.getItem('shopify_orders');
+        if (savedOrders) {
+          setOrders(JSON.parse(savedOrders));
+        }
+      }
+    };
+    
+    loadOrders();
   }, []);
 
-  const saveOrders = (newOrders) => {
-    localStorage.setItem('shopify_orders', JSON.stringify(newOrders));
+  const saveOrders = async (newOrders) => {
+    try {
+      // Salva nel database
+      await saveOrdersData(newOrders);
+      // Salva anche in localStorage come backup
+      localStorage.setItem('shopify_orders', JSON.stringify(newOrders));
+    } catch (error) {
+      console.error('Errore nel salvare ordini nel database:', error);
+      // Fallback al localStorage
+      localStorage.setItem('shopify_orders', JSON.stringify(newOrders));
+    }
+    
     setOrders(newOrders);
     
     // Emetti evento per aggiornare la dashboard
@@ -137,7 +170,7 @@ const OrdiniPage = () => {
   };
 
   // Filtra e ordina gli ordini in base a status, data e range
-  const getFilteredOrders = () => {
+  const getFilteredOrders = async () => {
     let filtered = orders;
     
     // Filtro per status
@@ -170,15 +203,19 @@ const OrdiniPage = () => {
     
     // Filtro per tipologia (dal magazzino)
     if (filterTipologia !== 'all') {
-      const magazzino = getMagazzino();
-      filtered = filtered.filter(order => 
-        order.items.some(item => {
-          const magazzinoItem = magazzino.find(m => m.sku === item.sku);
-          if (!magazzinoItem) return false;
-          const tipologia = localStorage.getItem(`tipologia_${item.sku}`) || '';
-          return tipologia === filterTipologia;
-        })
-      );
+      try {
+        const magazzino = await loadMagazzinoData();
+        filtered = filtered.filter(order => 
+          order.items.some(item => {
+            const magazzinoItem = magazzino.find(m => m.sku === item.sku);
+            if (!magazzinoItem) return false;
+            const tipologia = localStorage.getItem(`tipologia_${item.sku}`) || '';
+            return tipologia === filterTipologia;
+          })
+        );
+      } catch (error) {
+        console.error('Errore nel caricare magazzino per filtri:', error);
+      }
     }
     
     // Filtro per profumo (dal nome del prodotto)
@@ -205,7 +242,15 @@ const OrdiniPage = () => {
     return filtered;
   };
 
-  const filteredOrders = getFilteredOrders();
+  const [filteredOrders, setFilteredOrders] = useState([]);
+
+  useEffect(() => {
+    const loadFilteredOrders = async () => {
+      const orders = await getFilteredOrders();
+      setFilteredOrders(orders);
+    };
+    loadFilteredOrders();
+  }, [orders, filterStatus, range, startTime, endTime, searchTerm, filterTipologia, filterPerfume, sortBy]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -226,13 +271,17 @@ const OrdiniPage = () => {
   };
 
   // Funzione per ottenere le tipologie disponibili dal magazzino
-  const getAvailableTipologie = () => {
-    const magazzino = getMagazzino();
+  const getAvailableTipologie = async () => {
     const tipi = new Set();
-    magazzino.forEach(item => {
-      const tipologia = localStorage.getItem(`tipologia_${item.sku}`);
-      if (tipologia) tipi.add(tipologia);
-    });
+    try {
+      const magazzino = await loadMagazzinoData();
+      magazzino.forEach(item => {
+        const tipologia = localStorage.getItem(`tipologia_${item.sku}`);
+        if (tipologia) tipi.add(tipologia);
+      });
+    } catch (error) {
+      console.error('Errore nel caricare magazzino per tipologie:', error);
+    }
     return Array.from(tipi).sort();
   };
 
