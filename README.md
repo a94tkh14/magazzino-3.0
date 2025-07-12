@@ -1,0 +1,2 @@
+# magazzino
+gestionale di magazzino 
