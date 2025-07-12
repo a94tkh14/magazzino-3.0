@@ -1,0 +1,4 @@
+SKU;Nome;Quantità;Prezzo;Anagrafica;Tipologia;Marca
+SKU001;Prodotto Test 1;10;29,99;Anagrafica Test;Tipologia Test;Marca Test
+SKU002;Prodotto Test 2;5;15,50;Anagrafica 2;Tipologia 2;Marca 2
+SKU003;Prodotto Test 3;20;45,00;Anagrafica 3;Tipologia 3;Marca 3 
