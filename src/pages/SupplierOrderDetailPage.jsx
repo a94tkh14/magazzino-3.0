@@ -11,7 +11,7 @@ import {
   ORDER_STATUS 
 } from '../lib/supplierOrders';
 import { getTrackingInfo, formatTrackingDate, getStatusColor } from '../lib/trackingAPI';
-import { loadMagazzinoData, saveMagazzinoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, saveMagazzinoData, saveStoricoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { Plus } from 'lucide-react';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
 
@@ -1134,12 +1134,14 @@ const SupplierOrderDetailPage = () => {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
             <h2 className="text-xl font-bold mb-3 text-center">Aggiungi nuovo prodotto</h2>
-            <form onSubmit={e => {
+            <form onSubmit={async e => {
               e.preventDefault();
               // Validazione base
               if (!addProductData.sku.trim() || !addProductData.nome.trim() || !addProductData.quantita || !addProductData.prezzo) return;
-              const magazzino = getMagazzino();
-              if (magazzino.some(item => item.sku === addProductData.sku.trim())) return;
+              // Carica il magazzino corrente
+              const currentMagazzino = await loadMagazzinoData();
+              if (currentMagazzino.some(item => item.sku === addProductData.sku.trim())) return;
+              
               const prodotto = {
                 sku: addProductData.sku.trim(),
                 nome: addProductData.nome.trim(),
@@ -1149,9 +1151,15 @@ const SupplierOrderDetailPage = () => {
                 tipologia: addProductData.tipologia.trim(),
                 marca: addProductData.marca.trim()
               };
-              const nuovoMagazzino = [...magazzino, prodotto];
+              
+              // Aggiungi il nuovo prodotto al magazzino
+              const nuovoMagazzino = [...currentMagazzino, prodotto];
+              await saveMagazzinoData(nuovoMagazzino);
               setMagazzino(nuovoMagazzino);
-              addStorico(prodotto.sku, {
+              
+              // Aggiungi allo storico
+              await saveStoricoData({
+                sku: prodotto.sku,
                 data: new Date().toISOString(),
                 quantita: prodotto.quantita,
                 prezzo: prodotto.prezzo,
