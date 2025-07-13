@@ -939,7 +939,7 @@ const SupplierOrdersListPage = () => {
               </Card>
             );
           })
-        )}
+        })
       </div>
     </div>
   );
