@@ -12,6 +12,7 @@ import { getSupplierOrders, ORDER_STATUS } from '../lib/supplierOrders';
 
 const DashboardPage = () => {
   const [orders, setOrders] = useState([]);
+  const [magazzinoData, setMagazzinoData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topProducts, setTopProducts] = useState([]);
   const [stats, setStats] = useState({
@@ -199,10 +200,12 @@ const DashboardPage = () => {
         const magazzino = await loadMagazzinoData();
         // Assicura che magazzino sia un array
         const magazzinoArray = Array.isArray(magazzino) ? magazzino : [];
+        setMagazzinoData(magazzinoArray);
         const tipi = Array.from(new Set(magazzinoArray.map(item => item.tipologia).filter(Boolean)));
         setTipologie(tipi);
       } catch (error) {
         console.error('Errore nel caricare tipologie:', error);
+        setMagazzinoData([]);
         setTipologie([]);
       }
     };
@@ -363,9 +366,10 @@ const DashboardPage = () => {
     }
   };
 
-  const getLowStockProducts = async () => {
+  const getLowStockProducts = () => {
     try {
-      const magazzino = await loadMagazzinoData();
+      // Usa i dati già caricati dal magazzino
+      const magazzino = Array.isArray(magazzinoData) ? magazzinoData : [];
       
       // Filtra prodotti con scorte basse usando la soglia configurabile
       const lowStockProducts = magazzino.filter(item => item.quantita <= lowStockThreshold);
@@ -404,7 +408,8 @@ const DashboardPage = () => {
   };
 
   const getRecentOrders = () => {
-    return orders
+    const ordersArray = Array.isArray(orders) ? orders : [];
+    return ordersArray
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 5);
   };
@@ -1073,7 +1078,7 @@ const DashboardPage = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {getLowStockProducts().map((product) => (
+              {(Array.isArray(getLowStockProducts()) ? getLowStockProducts() : []).map((product) => (
                 <div key={product.sku} className="flex justify-between items-center p-3 border rounded">
                   <div>
                     <div className="font-medium">{product.nome}</div>
@@ -1094,7 +1099,7 @@ const DashboardPage = () => {
                   </div>
                 </div>
               ))}
-              {getLowStockProducts().length === 0 && (
+              {(Array.isArray(getLowStockProducts()) ? getLowStockProducts() : []).length === 0 && (
                 <div className="text-center py-4 text-muted-foreground">
                   Nessun prodotto con scorte basse
                 </div>
@@ -1116,7 +1121,7 @@ const DashboardPage = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {getRecentOrders().map((order) => (
+              {(Array.isArray(getRecentOrders()) ? getRecentOrders() : []).map((order) => (
                 <div key={order.orderNumber} className="flex justify-between items-center p-3 border rounded">
                   <div>
                     <div className="font-medium">#{order.orderNumber}</div>
@@ -1137,7 +1142,7 @@ const DashboardPage = () => {
                   </div>
                 </div>
               ))}
-              {getRecentOrders().length === 0 && (
+              {(Array.isArray(getRecentOrders()) ? getRecentOrders() : []).length === 0 && (
                 <div className="text-center py-4 text-muted-foreground">
                   Nessun ordine ancora
                 </div>
