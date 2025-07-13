@@ -61,6 +61,31 @@ export const loadOrdersData = async () => {
   }
 };
 
+// Funzioni per gli ordini fornitori (placeholder)
+export const saveSupplierOrdersData = async (data) => {
+  try {
+    console.log('🔄 Salvando ordini fornitori in localStorage...');
+    saveToLocalStorage('supplier_orders_data', data);
+    console.log('✅ Ordini fornitori salvati con successo');
+    return { success: true, data };
+  } catch (error) {
+    console.error('❌ Errore nel salvare ordini fornitori:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const loadSupplierOrdersData = async () => {
+  try {
+    console.log('🔄 Caricando ordini fornitori da localStorage...');
+    const data = loadFromLocalStorage('supplier_orders_data', []);
+    console.log('✅ Ordini fornitori caricati:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Errore nel caricare ordini fornitori:', error);
+    return [];
+  }
+};
+
 // Funzioni per lo stock
 export const saveStockData = async (data) => {
   try {
