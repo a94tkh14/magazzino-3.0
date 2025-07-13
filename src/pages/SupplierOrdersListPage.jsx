@@ -668,23 +668,7 @@ const SupplierOrdersListPage = () => {
 
       {/* Lista Ordini */}
       <div className="space-y-4">
-        {displayedOrders.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center">
-              <Truck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Nessun ordine trovato
-              </h3>
-              <p className="text-gray-600">
-                {orders.length === 0 
-                  ? 'Non ci sono ancora ordini. Crea il primo ordine!'
-                  : 'Prova a modificare i filtri di ricerca.'
-                }
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          displayedOrders.map((order) => {
+        {(Array.isArray(displayedOrders) ? displayedOrders : []).map((order) => {
             const progress = getReceiptProgress(order);
             
             return (

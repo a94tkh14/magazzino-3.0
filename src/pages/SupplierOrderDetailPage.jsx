@@ -830,7 +830,7 @@ const SupplierOrderDetailPage = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {order.products.map((product) => {
+            {(Array.isArray(order.products) ? order.products : []).map((product) => {
               const receivedProduct = findReceivedProduct(product.sku);
               const receivedQuantity = receivedProduct ? receivedProduct.quantity : 0;
               const isComplete = receivedQuantity >= product.quantity;

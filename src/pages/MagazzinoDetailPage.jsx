@@ -66,7 +66,7 @@ export default function MagazzinoDetailPage() {
     setIsEditingTipologia(false);
   };
 
-  const priceChartData = storico.map(entry => ({
+  const priceChartData = (Array.isArray(storico) ? storico : []).map(entry => ({
     date: formatDateTime(entry.data).date + ' ' + formatDateTime(entry.data).time,
     prezzo: entry.prezzo
   }));
@@ -154,14 +154,14 @@ export default function MagazzinoDetailPage() {
             </tr>
           </thead>
           <tbody>
-            {storico.length === 0 ? (
+            {(Array.isArray(storico) ? storico : []).length === 0 ? (
               <tr>
                 <td colSpan={4} className="border border-border px-4 py-4 text-center text-muted-foreground">
                   Nessun caricamento registrato
                 </td>
               </tr>
             ) : (
-              storico.map((entry, idx) => {
+              (Array.isArray(storico) ? storico : []).map((entry, idx) => {
                 const { date, time } = formatDateTime(entry.data);
                 return (
                   <tr key={idx}>

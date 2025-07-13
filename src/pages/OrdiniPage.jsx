@@ -95,7 +95,7 @@ const OrdiniPage = () => {
         setProgress({ count, page, active: true });
       }, daysBack);
       
-      const convertedOrders = shopifyOrders.map(convertShopifyOrder);
+      const convertedOrders = (Array.isArray(shopifyOrders) ? shopifyOrders : []).map(convertShopifyOrder);
       const existingOrders = orders;
       
       // Trova ordini nuovi (che non esistono già)
@@ -275,7 +275,7 @@ const OrdiniPage = () => {
     const tipi = new Set();
     try {
       const magazzino = await loadMagazzinoData();
-      magazzino.forEach(item => {
+      (Array.isArray(magazzino) ? magazzino : []).forEach(item => {
         const tipologia = localStorage.getItem(`tipologia_${item.sku}`);
         if (tipologia) tipi.add(tipologia);
       });
@@ -302,7 +302,7 @@ const OrdiniPage = () => {
     }
 
     // Se c'è una ricerca, filtra solo i prodotti che corrispondono
-    const matchingItems = filteredOrders.flatMap(order => 
+    const matchingItems = (Array.isArray(filteredOrders) ? filteredOrders : []).flatMap(order => 
       order.items.filter(item => {
         // Cerca nel numero ordine
         if (order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -321,7 +321,7 @@ const OrdiniPage = () => {
 
     // Raggruppa per SKU per evitare duplicati
     const groupedItems = {};
-    matchingItems.forEach(item => {
+    (Array.isArray(matchingItems) ? matchingItems : []).forEach(item => {
       if (!groupedItems[item.sku]) {
         groupedItems[item.sku] = {
           sku: item.sku,
@@ -339,11 +339,11 @@ const OrdiniPage = () => {
     });
 
     const uniqueProducts = Object.values(groupedItems);
-    const totalOrders = new Set(matchingItems.map(item => item.orderNumber)).size;
+    const totalOrders = new Set((Array.isArray(matchingItems) ? matchingItems : []).map(item => item.orderNumber)).size;
     const totalValue = uniqueProducts.reduce((sum, product) => sum + product.totalValue, 0);
     const totalProducts = uniqueProducts.reduce((sum, product) => sum + product.totalQuantity, 0);
-    const paidOrders = matchingItems.filter(item => item.orderStatus === 'paid').length;
-    const pendingOrders = matchingItems.filter(item => item.orderStatus === 'pending').length;
+    const paidOrders = (Array.isArray(matchingItems) ? matchingItems : []).filter(item => item.orderStatus === 'paid').length;
+    const pendingOrders = (Array.isArray(matchingItems) ? matchingItems : []).filter(item => item.orderStatus === 'pending').length;
 
     return {
       totalOrders,
@@ -639,7 +639,7 @@ const OrdiniPage = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredOrders.map((order) => (
+              {(Array.isArray(filteredOrders) ? filteredOrders : []).map((order) => (
                 <div key={order.id} className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
@@ -670,11 +670,11 @@ const OrdiniPage = () => {
                       : 'Gratuita'
                     }
                   </div>
-                  {order.items.length > 0 && (
+                  {(Array.isArray(order.items) ? order.items : []).length > 0 && (
                     <div className="border-t pt-3">
                       <h4 className="font-medium mb-2">Prodotti:</h4>
                       <div className="space-y-1">
-                        {order.items.map((item, index) => (
+                        {(Array.isArray(order.items) ? order.items : []).map((item, index) => (
                           <div key={index} className="flex justify-between text-sm">
                             <span>{item.name} (SKU: {item.sku || 'N/A'})</span>
                             <span>{item.quantity}x {formatPrice(item.price)}</span>
@@ -704,7 +704,7 @@ const OrdiniPage = () => {
               {(() => {
                 // Raggruppa i prodotti per SKU per evitare duplicati
                 const groupedItems = {};
-                filteredOrders.flatMap(order => 
+                (Array.isArray(filteredOrders) ? filteredOrders : []).flatMap(order => 
                   order.items.filter(item => {
                     // Cerca nel numero ordine
                     if (order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase())) {

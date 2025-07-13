@@ -399,7 +399,7 @@ const SalesChart = ({
       return (
         <div className="bg-white p-3 border rounded-lg shadow-lg">
           <p className="font-medium">{isSingleDay ? `Ora: ${label}` : `Data: ${label}`}</p>
-          {payload.map((entry, index) => (
+          {(Array.isArray(payload) ? payload : []).map((entry, index) => (
             <p key={index} style={{ color: entry.color }}>
               {entry.name}: {entry.dataKey === 'revenue' || entry.dataKey === 'comparisonRevenue' 
                 ? formatPrice(entry.value) 
@@ -487,7 +487,7 @@ const SalesChart = ({
       <CardContent>
         {/* Controlli metriche */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {metricOptions.map(option => (
+          {(Array.isArray(metricOptions) ? metricOptions : []).map(option => (
             <Button
               key={option.key}
               variant={selectedMetrics.includes(option.key) ? "default" : "outline"}

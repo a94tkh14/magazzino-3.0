@@ -415,13 +415,13 @@ const OrderDetailPage = () => {
             )}
 
             {/* Dettagli Shipping Lines */}
-            {order.shippingLines && order.shippingLines.length > 0 && (
+            {order.shippingLines && (Array.isArray(order.shippingLines) ? order.shippingLines : []).length > 0 && (
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Dettagli Spedizione
                 </label>
                 <div className="space-y-2">
-                  {order.shippingLines.map((line, index) => (
+                  {(Array.isArray(order.shippingLines) ? order.shippingLines : []).map((line, index) => (
                     <div key={index} className="bg-gray-50 p-3 rounded border text-sm">
                       <div className="font-medium">{line.title}</div>
                       <div className="text-gray-600">
@@ -454,7 +454,7 @@ const OrderDetailPage = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {order.items.map((item, index) => (
+                {(Array.isArray(order.items) ? order.items : []).map((item, index) => (
                   <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">

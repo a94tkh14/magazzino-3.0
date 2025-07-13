@@ -30,7 +30,7 @@ const StockPage = () => {
     
     const csvContent = [
       headers.join(';'),
-      ...sampleData.map(row => row.join(';'))
+      ...(Array.isArray(sampleData) ? sampleData : []).map(row => row.join(';'))
     ].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -53,7 +53,7 @@ const StockPage = () => {
     
     const csvContent = [
       headers.join(';'),
-      ...sampleData.map(row => row.join(';'))
+      ...(Array.isArray(sampleData) ? sampleData : []).map(row => row.join(';'))
     ].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -510,13 +510,13 @@ const StockPage = () => {
 
       <form onSubmit={handleManualSubmit} className="mt-8 p-4 border rounded bg-muted/30 space-y-2">
         <h3 className="font-semibold mb-2">Aggiungi prodotti manualmente</h3>
-        {manualProducts.map((product, index) => (
+        {(Array.isArray(manualProducts) ? manualProducts : []).map((product, index) => (
           <div key={index} className="flex flex-col sm:flex-row gap-2 items-center">
             <input name="sku" value={product.sku} onChange={(e) => handleManualInput(e, index)} placeholder="SKU" className="flex-1 px-2 py-1 border rounded" />
             <input name="nome" value={product.nome} onChange={(e) => handleManualInput(e, index)} placeholder="Nome" className="flex-1 px-2 py-1 border rounded" />
             <input name="quantita" value={product.quantita} onChange={(e) => handleManualInput(e, index)} placeholder="Quantità" type="number" min={1} className="w-24 px-2 py-1 border rounded" />
             <input name="prezzo" value={product.prezzo} onChange={(e) => handleManualInput(e, index)} placeholder="Prezzo" type="text" className="w-24 px-2 py-1 border rounded" />
-            {manualProducts.length > 1 && (
+            {(Array.isArray(manualProducts) ? manualProducts : []).length > 1 && (
               <button type="button" onClick={() => removeManualProduct(index)} className="bg-destructive text-destructive-foreground px-2 py-1 rounded">×</button>
             )}
           </div>
@@ -546,7 +546,7 @@ const StockPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {csvData.map((item, index) => (
+                  {(Array.isArray(csvData) ? csvData : []).map((item, index) => (
                     <tr key={index} className="hover:bg-muted/30">
                       <td className="border border-border px-4 py-2">{item.sku}</td>
                       <td className="border border-border px-4 py-2">{item.quantita}</td>
@@ -559,12 +559,12 @@ const StockPage = () => {
           </CardContent>
         </Card>
       )}
-      {anagraficaData.length > 0 && (
+      {(Array.isArray(anagraficaData) ? anagraficaData : []).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Anteprima Dati Anagrafica</CardTitle>
             <CardDescription>
-              {anagraficaData.length} elementi pronti per il caricamento
+              {(Array.isArray(anagraficaData) ? anagraficaData : []).length} elementi pronti per il caricamento
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -580,7 +580,7 @@ const StockPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {anagraficaData.map((item, index) => (
+                  {(Array.isArray(anagraficaData) ? anagraficaData : []).map((item, index) => (
                     <tr key={index} className="hover:bg-muted/30">
                       <td className="border border-border px-4 py-2">{item.sku}</td>
                       <td className="border border-border px-4 py-2">{item.nome}</td>

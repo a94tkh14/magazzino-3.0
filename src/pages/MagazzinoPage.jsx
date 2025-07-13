@@ -67,7 +67,7 @@ const MagazzinoPage = () => {
   }, []);
 
   useEffect(() => {
-    let filtered = magazzinoData.filter(item => {
+    let filtered = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => {
       const matchesSearch = item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            item.nome.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
@@ -87,7 +87,7 @@ const MagazzinoPage = () => {
     if (editingField === 'quantita') {
       const newQty = parseInt(editingValue);
       if (isNaN(newQty) || newQty < 0) return;
-      updated = magazzinoData.map(item => {
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
         if (item.sku === sku) {
           return { ...item, quantita: newQty };
         }
@@ -97,7 +97,7 @@ const MagazzinoPage = () => {
       let newPrezzo = editingValue.replace(',', '.');
       const parsed = parseFloat(newPrezzo);
       if (isNaN(parsed) || parsed < 0) return;
-      updated = magazzinoData.map(item => {
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
         if (item.sku === sku) {
           return { ...item, prezzo: parsed };
         }
@@ -122,7 +122,7 @@ const MagazzinoPage = () => {
   const handleDeleteProduct = async (sku) => {
     if (!window.confirm('Sei sicuro di voler eliminare questo prodotto?')) return;
     
-    const updated = magazzinoData.filter(item => item.sku !== sku);
+    const updated = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => item.sku !== sku);
     
     try {
       await saveMagazzinoData(updated);
@@ -180,7 +180,7 @@ const MagazzinoPage = () => {
       marca: newProduct.marca
     };
 
-    const updated = [...magazzinoData, newItem];
+    const updated = [...(Array.isArray(magazzinoData) ? magazzinoData : []), newItem];
     
     try {
       await saveMagazzinoData(updated);
@@ -394,7 +394,7 @@ const MagazzinoPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredData.map((item, index) => (
+                  {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
                       <td className="p-3 font-mono text-sm">{item.sku}</td>
                       <td className="p-3 cursor-pointer hover:underline text-blue-600" onClick={() => navigate(`/magazzino/${item.sku}`)}>

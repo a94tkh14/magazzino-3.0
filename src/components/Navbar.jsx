@@ -86,7 +86,7 @@ const Navbar = () => {
 
           {/* Menu di Navigazione */}
           <div className="flex items-center space-x-1">
-            {navItems.map((item) => {
+            {(Array.isArray(navItems) ? navItems : []).map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               

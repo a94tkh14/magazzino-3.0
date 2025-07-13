@@ -559,7 +559,7 @@ const MarketingPage = () => {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {COLORS.map((color, index) => (
+                  {(Array.isArray(COLORS) ? COLORS : []).map((color, index) => (
                     <Cell key={`cell-${index}`} fill={color} />
                   ))}
                 </Pie>
@@ -571,7 +571,7 @@ const MarketingPage = () => {
       </Card>
 
       {/* Tabella Campagne API (se connesse) */}
-      {combinedCampaigns.length > 0 && (
+      {(Array.isArray(combinedCampaigns) ? combinedCampaigns : []).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Campagne API Connesse</CardTitle>
@@ -594,7 +594,7 @@ const MarketingPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {combinedCampaigns.map((campaign) => (
+                  {(Array.isArray(combinedCampaigns) ? combinedCampaigns : []).map((campaign) => (
                     <tr key={campaign.id} className="border-b hover:bg-gray-50">
                       <td className="py-3 px-2 font-medium">{campaign.name}</td>
                       <td className="py-3 px-2">
@@ -704,7 +704,7 @@ const MarketingPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {regionalData.map((region) => (
+                {(Array.isArray(regionalData) ? regionalData : []).map((region) => (
                   <tr key={region.name} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-2 font-medium">{region.name}</td>
                     <td className="py-3 px-2 text-right">{region.orders}</td>

@@ -605,7 +605,7 @@ const DashboardPage = () => {
               onChange={e => setTipologia(e.target.value)}
             >
               <option value="">Tutte le tipologie</option>
-              {tipologie.map(t => (
+              {(Array.isArray(tipologie) ? tipologie : []).map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -662,7 +662,7 @@ const DashboardPage = () => {
                 onChange={e => setComparisonTipologia(e.target.value)}
               >
                 <option value="">Tutte le tipologie</option>
-                {tipologie.map(t => (
+                {(Array.isArray(tipologie) ? tipologie : []).map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -906,7 +906,7 @@ const DashboardPage = () => {
                 className="border rounded px-2 py-1 text-sm"
               >
                 <option value="tutte">Tutte le categorie</option>
-                {productCategories.map(category => (
+                {(Array.isArray(productCategories) ? productCategories : []).map(category => (
                   <option key={category} value={category}>{category}</option>
                 ))}
               </select>
