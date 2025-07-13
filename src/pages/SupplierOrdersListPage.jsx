@@ -44,20 +44,7 @@ const SupplierOrdersListPage = () => {
     dueLast5Days: 0
   });
 
-  const [magazzino, setMagazzino] = useState([]);
 
-  // Carica i dati del magazzino
-  useEffect(() => {
-    const loadMagazzino = async () => {
-      try {
-        const data = await loadMagazzinoData();
-        setMagazzino(data);
-      } catch (error) {
-        console.error('Errore nel caricare magazzino:', error);
-      }
-    };
-    loadMagazzino();
-  }, []);
 
   // Carica gli ordini
   useEffect(() => {

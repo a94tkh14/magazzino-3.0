@@ -10,9 +10,7 @@ import {
   saveSettings,
   loadSettings,
   saveSupplierOrder,
-  loadSupplierOrders,
-  saveOrder,
-  loadOrders
+  loadSupplierOrders
 } from './supabase';
 
 // Funzioni per il magazzino

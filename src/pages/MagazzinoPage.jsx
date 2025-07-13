@@ -214,8 +214,6 @@ const MagazzinoPage = () => {
     };
   };
 
-  const stats = calculateMagazzinoStats();
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -226,6 +224,8 @@ const MagazzinoPage = () => {
       </div>
     );
   }
+
+  const stats = calculateMagazzinoStats();
 
   return (
     <div className="space-y-6">

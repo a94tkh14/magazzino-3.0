@@ -233,21 +233,21 @@ const SupplierOrderDetailPage = () => {
           return;
         }
         
-        const existingIndex = magazzino.findIndex(item => item.sku === receivedItem.sku);
+        const existingIndex = magazzinoData.findIndex(item => item.sku === receivedItem.sku);
         
-        if (existingIndex !== -1 && magazzino[existingIndex].prezzo !== product.price && product.price > 0) {
+        if (existingIndex !== -1 && magazzinoData[existingIndex].prezzo !== product.price && product.price > 0) {
           // Mostra popup AI per conferma prezzo
           setModalData({
             sku: receivedItem.sku,
-            nome: magazzino[existingIndex].nome,
-            oldPrice: magazzino[existingIndex].prezzo,
+            nome: magazzinoData[existingIndex].nome,
+            oldPrice: magazzinoData[existingIndex].prezzo,
             newPrice: product.price,
             onDecision: async (decision) => {
               if (decision === 'aggiorna') {
-                magazzino[existingIndex].prezzo = product.price;
-                magazzino[existingIndex].quantita += receivedItem.quantity;
+                magazzinoData[existingIndex].prezzo = product.price;
+                magazzinoData[existingIndex].quantita += receivedItem.quantity;
               } else if (decision === 'mantieni') {
-                magazzino[existingIndex].quantita += receivedItem.quantity;
+                magazzinoData[existingIndex].quantita += receivedItem.quantity;
               }
               // Se ignora, non aggiorna nulla
               
@@ -256,8 +256,8 @@ const SupplierOrderDetailPage = () => {
                 await saveStoricoData({
                   sku: receivedItem.sku,
                   data: new Date().toISOString(),
-                  quantita: magazzino[existingIndex].quantita,
-                  prezzo: magazzino[existingIndex].prezzo,
+                  quantita: magazzinoData[existingIndex].quantita,
+                  prezzo: magazzinoData[existingIndex].prezzo,
                   tipo: 'ordine_fornitore',
                   descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
                   dettagli: {
@@ -277,9 +277,9 @@ const SupplierOrderDetailPage = () => {
           setModalOpen(true);
         } else if (existingIndex !== -1) {
           // Aggiorna prodotto esistente senza conflitto prezzo
-          magazzino[existingIndex].quantita += receivedItem.quantity;
+          magazzinoData[existingIndex].quantita += receivedItem.quantity;
           if (product.price > 0) {
-            magazzino[existingIndex].prezzo = product.price;
+            magazzinoData[existingIndex].prezzo = product.price;
           }
           updatedCount++;
           
@@ -287,8 +287,8 @@ const SupplierOrderDetailPage = () => {
           await saveStoricoData({
             sku: receivedItem.sku,
             data: new Date().toISOString(),
-            quantita: magazzino[existingIndex].quantita,
-            prezzo: magazzino[existingIndex].prezzo,
+            quantita: magazzinoData[existingIndex].quantita,
+            prezzo: magazzinoData[existingIndex].prezzo,
             tipo: 'ordine_fornitore',
             descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
             dettagli: {
@@ -302,7 +302,7 @@ const SupplierOrderDetailPage = () => {
           setTimeout(processNext, 0);
         } else {
           // Crea nuovo prodotto
-          magazzino.push({
+          magazzinoData.push({
             sku: receivedItem.sku,
             nome: product.name || receivedItem.sku,
             quantita: receivedItem.quantity,
@@ -339,14 +339,14 @@ const SupplierOrderDetailPage = () => {
     }
   };
 
-  const [magazzino, setMagazzino] = useState([]);
+  const [magazzinoData, setMagazzinoData] = useState([]);
 
   // Carica i dati del magazzino
   useEffect(() => {
     const loadMagazzino = async () => {
       try {
         const data = await loadMagazzinoData();
-        setMagazzino(data);
+        setMagazzinoData(data);
       } catch (error) {
         console.error('Errore nel caricare magazzino:', error);
       }
