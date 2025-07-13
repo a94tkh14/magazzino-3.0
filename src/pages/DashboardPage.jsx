@@ -134,9 +134,13 @@ const DashboardPage = () => {
           const savedOrders = localStorage.getItem('shopify_orders');
           if (savedOrders) {
             const parsedOrders = JSON.parse(savedOrders);
-            setOrders(parsedOrders);
-            // await calculateStats(parsedOrders);
-            // calculateTopProducts(parsedOrders);
+            // Assicura che sia un array
+            const ordersArray = Array.isArray(parsedOrders) ? parsedOrders : [];
+            setOrders(ordersArray);
+            // await calculateStats(ordersArray);
+            // calculateTopProducts(ordersArray);
+          } else {
+            setOrders([]);
           }
         // }
       } catch (error) {
@@ -145,9 +149,13 @@ const DashboardPage = () => {
         const savedOrders = localStorage.getItem('shopify_orders');
         if (savedOrders) {
           const parsedOrders = JSON.parse(savedOrders);
-          setOrders(parsedOrders);
-          // await calculateStats(parsedOrders);
-          // calculateTopProducts(parsedOrders);
+          // Assicura che sia un array
+          const ordersArray = Array.isArray(parsedOrders) ? parsedOrders : [];
+          setOrders(ordersArray);
+          // await calculateStats(ordersArray);
+          // calculateTopProducts(ordersArray);
+        } else {
+          setOrders([]);
         }
       }
     };
@@ -189,10 +197,13 @@ const DashboardPage = () => {
     const loadTipologie = async () => {
       try {
         const magazzino = await loadMagazzinoData();
-        const tipi = Array.from(new Set(magazzino.map(item => item.tipologia).filter(Boolean)));
+        // Assicura che magazzino sia un array
+        const magazzinoArray = Array.isArray(magazzino) ? magazzino : [];
+        const tipi = Array.from(new Set(magazzinoArray.map(item => item.tipologia).filter(Boolean)));
         setTipologie(tipi);
       } catch (error) {
         console.error('Errore nel caricare tipologie:', error);
+        setTipologie([]);
       }
     };
     loadTipologie();

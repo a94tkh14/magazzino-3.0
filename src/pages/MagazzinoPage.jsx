@@ -37,22 +37,28 @@ const MagazzinoPage = () => {
       setIsLoading(true);
       try {
         const dbData = await loadMagazzinoData();
-        if (dbData && dbData.length > 0) {
-          setMagazzinoData(dbData);
-          setFilteredData(dbData);
+        // Assicura che i dati siano un array
+        const dataArray = Array.isArray(dbData) ? dbData : [];
+        if (dataArray.length > 0) {
+          setMagazzinoData(dataArray);
+          setFilteredData(dataArray);
         } else {
           const data = loadFromLocalStorage('magazzino_data', []);
-          setMagazzinoData(data);
-          setFilteredData(data);
-          if (data.length > 0) {
-            await saveMagazzinoData(data);
+          // Assicura che anche i dati dal localStorage siano un array
+          const localDataArray = Array.isArray(data) ? data : [];
+          setMagazzinoData(localDataArray);
+          setFilteredData(localDataArray);
+          if (localDataArray.length > 0) {
+            await saveMagazzinoData(localDataArray);
           }
         }
       } catch (error) {
         console.error('Errore nel caricare i dati:', error);
         const data = loadFromLocalStorage('magazzino_data', []);
-        setMagazzinoData(data);
-        setFilteredData(data);
+        // Assicura che anche i dati dal localStorage siano un array
+        const localDataArray = Array.isArray(data) ? data : [];
+        setMagazzinoData(localDataArray);
+        setFilteredData(localDataArray);
       }
       setIsLoading(false);
     };
@@ -200,17 +206,20 @@ const MagazzinoPage = () => {
   };
 
   const calculateMagazzinoStats = () => {
-    const totalValue = magazzinoData.reduce((sum, item) => sum + (item.prezzo * item.quantita), 0);
-    const totalQuantity = magazzinoData.reduce((sum, item) => sum + item.quantita, 0);
-    const lowStockItems = magazzinoData.filter(item => item.quantita <= lowStockThreshold).length;
-    const outOfStockItems = magazzinoData.filter(item => item.quantita === 0).length;
+    // Assicura che magazzinoData sia un array
+    const data = Array.isArray(magazzinoData) ? magazzinoData : [];
+    
+    const totalValue = data.reduce((sum, item) => sum + (item.prezzo * item.quantita), 0);
+    const totalQuantity = data.reduce((sum, item) => sum + item.quantita, 0);
+    const lowStockItems = data.filter(item => item.quantita <= lowStockThreshold).length;
+    const outOfStockItems = data.filter(item => item.quantita === 0).length;
     
     return {
       totalValue,
       totalQuantity,
       lowStockItems,
       outOfStockItems,
-      totalProducts: magazzinoData.length
+      totalProducts: data.length
     };
   };
 
