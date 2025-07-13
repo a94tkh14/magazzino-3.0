@@ -163,4 +163,54 @@ export const loadSettings = async () => {
     console.error('Errore nel caricare impostazioni:', error)
     return {}
   }
+}
+
+// Funzioni per gli ordini fornitori
+export const saveSupplierOrder = async (data) => {
+  try {
+    const { data: result, error } = await supabase
+      .from('supplier_orders')
+      .upsert(data, { onConflict: 'numero_ordine' })
+    
+    if (error) throw error
+    console.log('Ordine fornitore salvato:', result)
+    return result
+  } catch (error) {
+    console.error('Errore nel salvare ordine fornitore:', error)
+    throw error
+  }
+}
+
+export const loadSupplierOrders = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('supplier_orders')
+      .select('*')
+      .order('data_ordine', { ascending: false })
+    
+    if (error) throw error
+    console.log('Ordini fornitori caricati:', data)
+    return data || []
+  } catch (error) {
+    console.error('Errore nel caricare ordini fornitori:', error)
+    return []
+  }
+}
+
+// Funzioni di compatibilità per ordini normali
+export const saveOrder = async (data) => {
+  return saveOrdine(data);
+}
+
+export const loadOrders = async () => {
+  return loadOrdini();
+}
+
+// Funzioni per gli ordini fornitori (compatibilità)
+export const saveSupplierOrdersData = async (data) => {
+  return saveSupplierOrder(data);
+}
+
+export const loadSupplierOrdersData = async () => {
+  return loadSupplierOrders();
 } 

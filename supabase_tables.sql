@@ -1,80 +1,90 @@
--- Tabelle per Magazzino 3.0 (Struttura utente)
-
--- Tabella Magazzino
+-- Tabella magazzino
 CREATE TABLE IF NOT EXISTS magazzino (
   id SERIAL PRIMARY KEY,
-  sku VARCHAR(50) UNIQUE NOT NULL,
+  sku VARCHAR(255) UNIQUE NOT NULL,
   nome VARCHAR(255) NOT NULL,
-  quantita INTEGER NOT NULL DEFAULT 0,
-  prezzo DECIMAL(10,2) NOT NULL DEFAULT 0,
-  anagrafica TEXT,
-  tipologia VARCHAR(100),
-  marca VARCHAR(100),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  categoria VARCHAR(100),
+  prezzo DECIMAL(10,2),
+  quantita INTEGER DEFAULT 0,
+  quantita_minima INTEGER DEFAULT 0,
+  fornitore VARCHAR(255),
+  note TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabella Stock
-CREATE TABLE IF NOT EXISTS stock (
-  id SERIAL PRIMARY KEY,
-  sku VARCHAR(50) NOT NULL,
-  quantita INTEGER NOT NULL,
-  prezzo DECIMAL(10,2) NOT NULL,
-  data_aggiornamento TIMESTAMP DEFAULT NOW(),
-  tipo VARCHAR(50) DEFAULT 'manuale'
-);
-
--- Tabella Ordini
+-- Tabella ordini
 CREATE TABLE IF NOT EXISTS ordini (
   id SERIAL PRIMARY KEY,
-  numero_ordine VARCHAR(50) UNIQUE NOT NULL,
-  fornitore VARCHAR(255),
-  data_ordine TIMESTAMP DEFAULT NOW(),
+  numero_ordine VARCHAR(255) UNIQUE NOT NULL,
+  cliente VARCHAR(255),
+  data_ordine DATE,
   stato VARCHAR(50) DEFAULT 'in_attesa',
-  totale DECIMAL(10,2) DEFAULT 0,
-  note TEXT
+  totale DECIMAL(10,2),
+  prodotti JSONB,
+  note TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabella Storico
+-- Tabella ordini fornitori
+CREATE TABLE IF NOT EXISTS supplier_orders (
+  id SERIAL PRIMARY KEY,
+  numero_ordine VARCHAR(255) UNIQUE NOT NULL,
+  fornitore VARCHAR(255),
+  data_ordine DATE,
+  stato VARCHAR(50) DEFAULT 'in_attesa',
+  totale DECIMAL(10,2),
+  prodotti JSONB,
+  note TEXT,
+  tracking_info JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Tabella stock
+CREATE TABLE IF NOT EXISTS stock (
+  id SERIAL PRIMARY KEY,
+  sku VARCHAR(255) UNIQUE NOT NULL,
+  quantita INTEGER DEFAULT 0,
+  quantita_minima INTEGER DEFAULT 0,
+  data_aggiornamento TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  note TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Tabella storico
 CREATE TABLE IF NOT EXISTS storico (
   id SERIAL PRIMARY KEY,
-  sku VARCHAR(50) NOT NULL,
-  quantita INTEGER NOT NULL,
-  prezzo DECIMAL(10,2) NOT NULL,
   tipo VARCHAR(50) NOT NULL,
-  data TIMESTAMP DEFAULT NOW()
+  sku VARCHAR(255),
+  quantita INTEGER,
+  prezzo DECIMAL(10,2),
+  data TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  note TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabella Impostazioni
+-- Tabella impostazioni
 CREATE TABLE IF NOT EXISTS settings (
-  id SERIAL PRIMARY KEY,
-  shopify_store_url VARCHAR(255),
-  shopify_api_key VARCHAR(255),
-  shopify_api_password VARCHAR(255),
-  shopify_api_version VARCHAR(10),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  low_stock_threshold INTEGER DEFAULT 10,
+  currency VARCHAR(10) DEFAULT 'EUR',
+  date_format VARCHAR(20) DEFAULT 'DD/MM/YYYY',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indici per performance
+-- Inserisci impostazioni di default
+INSERT INTO settings (id, low_stock_threshold, currency, date_format) 
+VALUES (1, 10, 'EUR', 'DD/MM/YYYY')
+ON CONFLICT (id) DO NOTHING;
+
+-- Indici per migliorare le performance
 CREATE INDEX IF NOT EXISTS idx_magazzino_sku ON magazzino(sku);
-CREATE INDEX IF NOT EXISTS idx_magazzino_tipologia ON magazzino(tipologia);
-CREATE INDEX IF NOT EXISTS idx_magazzino_marca ON magazzino(marca);
+CREATE INDEX IF NOT EXISTS idx_ordini_numero ON ordini(numero_ordine);
+CREATE INDEX IF NOT EXISTS idx_supplier_orders_numero ON supplier_orders(numero_ordine);
 CREATE INDEX IF NOT EXISTS idx_stock_sku ON stock(sku);
-CREATE INDEX IF NOT EXISTS idx_ordini_stato ON ordini(stato);
-CREATE INDEX IF NOT EXISTS idx_ordini_fornitore ON ordini(fornitore);
-CREATE INDEX IF NOT EXISTS idx_storico_sku ON storico(sku);
 CREATE INDEX IF NOT EXISTS idx_storico_data ON storico(data);
-
--- Funzione per aggiornare updated_at automaticamente
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Trigger per aggiornare updated_at
-CREATE TRIGGER update_magazzino_updated_at BEFORE UPDATE ON magazzino FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 
+CREATE INDEX IF NOT EXISTS idx_storico_tipo ON storico(tipo); 

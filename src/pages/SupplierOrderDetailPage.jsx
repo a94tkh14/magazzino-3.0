@@ -210,129 +210,149 @@ const SupplierOrderDetailPage = () => {
   };
 
   // Aggiorna il magazzino con i prodotti ricevuti
-  const updateMagazzinoFromOrder = () => {
+  const updateMagazzinoFromOrder = async () => {
     if (!order || !order.receivedItems || order.receivedItems.length === 0) return;
     
-    let magazzino = getMagazzino();
-    let updatedCount = 0;
-    let newCount = 0;
-    let toProcess = [...order.receivedItems];
+    try {
+      let magazzino = await loadMagazzinoData();
+      let updatedCount = 0;
+      let newCount = 0;
+      let toProcess = [...order.receivedItems];
 
-    const processNext = () => {
-      if (toProcess.length === 0) {
-        // Salva il magazzino aggiornato
-        setMagazzino(magazzino);
-        return { updatedCount, newCount };
-      }
-
-      const receivedItem = toProcess.shift();
-      const product = findProductBySku(receivedItem.sku);
-      if (!product) {
-        setTimeout(processNext, 0);
-        return;
-      }
-      
-      const existingIndex = magazzino.findIndex(item => item.sku === receivedItem.sku);
-      
-      if (existingIndex !== -1 && magazzino[existingIndex].prezzo !== product.price && product.price > 0) {
-        // Mostra popup AI per conferma prezzo
-        setModalData({
-          sku: receivedItem.sku,
-          nome: magazzino[existingIndex].nome,
-          oldPrice: magazzino[existingIndex].prezzo,
-          newPrice: product.price,
-          onDecision: (decision) => {
-            if (decision === 'aggiorna') {
-              magazzino[existingIndex].prezzo = product.price;
-              magazzino[existingIndex].quantita += receivedItem.quantity;
-            } else if (decision === 'mantieni') {
-              magazzino[existingIndex].quantita += receivedItem.quantity;
-            }
-            // Se ignora, non aggiorna nulla
-            
-            // Aggiungi allo storico
-            if (decision !== 'ignora') {
-              addStorico(receivedItem.sku, {
-                data: new Date().toISOString(),
-                quantita: magazzino[existingIndex].quantita,
-                prezzo: magazzino[existingIndex].prezzo,
-                tipo: 'ordine_fornitore',
-                descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
-                dettagli: {
-                  orderId: orderId,
-                  orderNumber: order.orderNumber,
-                  supplier: order.supplier,
-                  quantityReceived: receivedItem.quantity
-                }
-              });
-            }
-            
-            updatedCount++;
-            setModalOpen(false);
-            setTimeout(processNext, 0);
-          }
-        });
-        setModalOpen(true);
-      } else if (existingIndex !== -1) {
-        // Aggiorna prodotto esistente senza conflitto prezzo
-        magazzino[existingIndex].quantita += receivedItem.quantity;
-        if (product.price > 0) {
-          magazzino[existingIndex].prezzo = product.price;
+      const processNext = async () => {
+        if (toProcess.length === 0) {
+          // Salva il magazzino aggiornato
+          await saveMagazzinoData(magazzino);
+          return { updatedCount, newCount };
         }
-        updatedCount++;
-        
-        // Aggiungi allo storico
-        addStorico(receivedItem.sku, {
-          data: new Date().toISOString(),
-          quantita: magazzino[existingIndex].quantita,
-          prezzo: magazzino[existingIndex].prezzo,
-          tipo: 'ordine_fornitore',
-          descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
-          dettagli: {
-            orderId: orderId,
-            orderNumber: order.orderNumber,
-            supplier: order.supplier,
-            quantityReceived: receivedItem.quantity
-          }
-        });
-        
-        setTimeout(processNext, 0);
-      } else {
-        // Crea nuovo prodotto
-        magazzino.push({
-          sku: receivedItem.sku,
-          nome: product.name || receivedItem.sku,
-          quantita: receivedItem.quantity,
-          prezzo: product.price || 0,
-          anagrafica: product.anagrafica || '',
-          tipologia: product.tipologia || '',
-          marca: product.marca || ''
-        });
-        newCount++;
-        
-        // Aggiungi allo storico
-        addStorico(receivedItem.sku, {
-          data: new Date().toISOString(),
-          quantita: receivedItem.quantity,
-          prezzo: product.price || 0,
-          tipo: 'ordine_fornitore',
-          descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
-          dettagli: {
-            orderId: orderId,
-            orderNumber: order.orderNumber,
-            supplier: order.supplier,
-            quantityReceived: receivedItem.quantity
-          }
-        });
-        
-        setTimeout(processNext, 0);
-      }
-    };
 
-    processNext();
+        const receivedItem = toProcess.shift();
+        const product = findProductBySku(receivedItem.sku);
+        if (!product) {
+          setTimeout(processNext, 0);
+          return;
+        }
+        
+        const existingIndex = magazzino.findIndex(item => item.sku === receivedItem.sku);
+        
+        if (existingIndex !== -1 && magazzino[existingIndex].prezzo !== product.price && product.price > 0) {
+          // Mostra popup AI per conferma prezzo
+          setModalData({
+            sku: receivedItem.sku,
+            nome: magazzino[existingIndex].nome,
+            oldPrice: magazzino[existingIndex].prezzo,
+            newPrice: product.price,
+            onDecision: async (decision) => {
+              if (decision === 'aggiorna') {
+                magazzino[existingIndex].prezzo = product.price;
+                magazzino[existingIndex].quantita += receivedItem.quantity;
+              } else if (decision === 'mantieni') {
+                magazzino[existingIndex].quantita += receivedItem.quantity;
+              }
+              // Se ignora, non aggiorna nulla
+              
+              // Aggiungi allo storico
+              if (decision !== 'ignora') {
+                await saveStoricoData({
+                  sku: receivedItem.sku,
+                  data: new Date().toISOString(),
+                  quantita: magazzino[existingIndex].quantita,
+                  prezzo: magazzino[existingIndex].prezzo,
+                  tipo: 'ordine_fornitore',
+                  descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
+                  dettagli: {
+                    orderId: orderId,
+                    orderNumber: order.orderNumber,
+                    supplier: order.supplier,
+                    quantityReceived: receivedItem.quantity
+                  }
+                });
+              }
+              
+              updatedCount++;
+              setModalOpen(false);
+              setTimeout(processNext, 0);
+            }
+          });
+          setModalOpen(true);
+        } else if (existingIndex !== -1) {
+          // Aggiorna prodotto esistente senza conflitto prezzo
+          magazzino[existingIndex].quantita += receivedItem.quantity;
+          if (product.price > 0) {
+            magazzino[existingIndex].prezzo = product.price;
+          }
+          updatedCount++;
+          
+          // Aggiungi allo storico
+          await saveStoricoData({
+            sku: receivedItem.sku,
+            data: new Date().toISOString(),
+            quantita: magazzino[existingIndex].quantita,
+            prezzo: magazzino[existingIndex].prezzo,
+            tipo: 'ordine_fornitore',
+            descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
+            dettagli: {
+              orderId: orderId,
+              orderNumber: order.orderNumber,
+              supplier: order.supplier,
+              quantityReceived: receivedItem.quantity
+            }
+          });
+          
+          setTimeout(processNext, 0);
+        } else {
+          // Crea nuovo prodotto
+          magazzino.push({
+            sku: receivedItem.sku,
+            nome: product.name || receivedItem.sku,
+            quantita: receivedItem.quantity,
+            prezzo: product.price || 0,
+            anagrafica: product.anagrafica || '',
+            tipologia: product.tipologia || '',
+            marca: product.marca || ''
+          });
+          newCount++;
+          
+          // Aggiungi allo storico
+          await saveStoricoData({
+            sku: receivedItem.sku,
+            data: new Date().toISOString(),
+            quantita: receivedItem.quantity,
+            prezzo: product.price || 0,
+            tipo: 'ordine_fornitore',
+            descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
+            dettagli: {
+              orderId: orderId,
+              orderNumber: order.orderNumber,
+              supplier: order.supplier,
+              quantityReceived: receivedItem.quantity
+            }
+          });
+          
+          setTimeout(processNext, 0);
+        }
+      };
+
+      await processNext();
+    } catch (error) {
+      console.error('Errore nell\'aggiornamento del magazzino:', error);
+    }
   };
 
-  const magazzino = getMagazzino();
+  const [magazzino, setMagazzino] = useState([]);
+
+  // Carica i dati del magazzino
+  useEffect(() => {
+    const loadMagazzino = async () => {
+      try {
+        const data = await loadMagazzinoData();
+        setMagazzino(data);
+      } catch (error) {
+        console.error('Errore nel caricare magazzino:', error);
+      }
+    };
+    loadMagazzino();
+  }, []);
 
   if (!order) {
     return (

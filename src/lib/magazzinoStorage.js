@@ -8,7 +8,11 @@ import {
   saveStorico,
   loadStorico,
   saveSettings,
-  loadSettings
+  loadSettings,
+  saveSupplierOrder,
+  loadSupplierOrders,
+  saveOrder,
+  loadOrders
 } from './supabase';
 
 // Funzioni per il magazzino
@@ -61,13 +65,13 @@ export const loadOrdersData = async () => {
   }
 };
 
-// Funzioni per gli ordini fornitori (placeholder)
+// Funzioni per gli ordini fornitori
 export const saveSupplierOrdersData = async (data) => {
   try {
-    console.log('🔄 Salvando ordini fornitori in localStorage...');
-    saveToLocalStorage('supplier_orders_data', data);
+    console.log('🔄 Salvando ordini fornitori in Supabase...');
+    const result = await saveSupplierOrder(data);
     console.log('✅ Ordini fornitori salvati con successo');
-    return { success: true, data };
+    return { success: true, data: result };
   } catch (error) {
     console.error('❌ Errore nel salvare ordini fornitori:', error);
     return { success: false, error: error.message };
@@ -76,8 +80,8 @@ export const saveSupplierOrdersData = async (data) => {
 
 export const loadSupplierOrdersData = async () => {
   try {
-    console.log('🔄 Caricando ordini fornitori da localStorage...');
-    const data = loadFromLocalStorage('supplier_orders_data', []);
+    console.log('🔄 Caricando ordini fornitori da Supabase...');
+    const data = await loadSupplierOrders();
     console.log('✅ Ordini fornitori caricati:', data);
     return data;
   } catch (error) {
