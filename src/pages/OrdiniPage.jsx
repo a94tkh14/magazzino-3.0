@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
-import { loadMagazzinoData, loadOrdersData, saveOrdersData } from '../lib/magazzinoStorage';
+import { loadMagazzinoData } from '../lib/magazzinoStorage';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -35,19 +35,19 @@ const OrdiniPage = () => {
     const loadOrders = async () => {
       try {
         // Carica ordini dal database
-        const dbOrders = await loadOrdersData();
-        if (dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders);
-        } else {
+        // const dbOrders = await loadOrdersData();
+        // if (dbOrders && dbOrders.length > 0) {
+        //   setOrders(dbOrders);
+        // } else {
           // Fallback al localStorage
           const savedOrders = localStorage.getItem('shopify_orders');
           if (savedOrders) {
             const parsedOrders = JSON.parse(savedOrders);
             setOrders(parsedOrders);
             // Salva nel database
-            await saveOrdersData(parsedOrders);
+            // await saveOrdersData(parsedOrders);
           }
-        }
+        // }
       } catch (error) {
         console.error('Errore nel caricare ordini:', error);
         // Fallback al localStorage
@@ -64,7 +64,7 @@ const OrdiniPage = () => {
   const saveOrders = async (newOrders) => {
     try {
       // Salva nel database
-      await saveOrdersData(newOrders);
+      // await saveOrdersData(newOrders);
       // Salva anche in localStorage come backup
       localStorage.setItem('shopify_orders', JSON.stringify(newOrders));
     } catch (error) {

@@ -233,21 +233,21 @@ const SupplierOrderDetailPage = () => {
           return;
         }
         
-        const existingIndex = magazzinoData.findIndex(item => item.sku === receivedItem.sku);
+        const existingIndex = magazzino.findIndex(item => item.sku === receivedItem.sku);
         
-        if (existingIndex !== -1 && magazzinoData[existingIndex].prezzo !== product.price && product.price > 0) {
+        if (existingIndex !== -1 && magazzino[existingIndex].prezzo !== product.price && product.price > 0) {
           // Mostra popup AI per conferma prezzo
           setModalData({
             sku: receivedItem.sku,
-            nome: magazzinoData[existingIndex].nome,
-            oldPrice: magazzinoData[existingIndex].prezzo,
+            nome: magazzino[existingIndex].nome,
+            oldPrice: magazzino[existingIndex].prezzo,
             newPrice: product.price,
             onDecision: async (decision) => {
               if (decision === 'aggiorna') {
-                magazzinoData[existingIndex].prezzo = product.price;
-                magazzinoData[existingIndex].quantita += receivedItem.quantity;
+                magazzino[existingIndex].prezzo = product.price;
+                magazzino[existingIndex].quantita += receivedItem.quantity;
               } else if (decision === 'mantieni') {
-                magazzinoData[existingIndex].quantita += receivedItem.quantity;
+                magazzino[existingIndex].quantita += receivedItem.quantity;
               }
               // Se ignora, non aggiorna nulla
               
@@ -256,8 +256,8 @@ const SupplierOrderDetailPage = () => {
                 await saveStoricoData({
                   sku: receivedItem.sku,
                   data: new Date().toISOString(),
-                  quantita: magazzinoData[existingIndex].quantita,
-                  prezzo: magazzinoData[existingIndex].prezzo,
+                  quantita: magazzino[existingIndex].quantita,
+                  prezzo: magazzino[existingIndex].prezzo,
                   tipo: 'ordine_fornitore',
                   descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
                   dettagli: {
@@ -277,9 +277,9 @@ const SupplierOrderDetailPage = () => {
           setModalOpen(true);
         } else if (existingIndex !== -1) {
           // Aggiorna prodotto esistente senza conflitto prezzo
-          magazzinoData[existingIndex].quantita += receivedItem.quantity;
+          magazzino[existingIndex].quantita += receivedItem.quantity;
           if (product.price > 0) {
-            magazzinoData[existingIndex].prezzo = product.price;
+            magazzino[existingIndex].prezzo = product.price;
           }
           updatedCount++;
           
@@ -287,8 +287,8 @@ const SupplierOrderDetailPage = () => {
           await saveStoricoData({
             sku: receivedItem.sku,
             data: new Date().toISOString(),
-            quantita: magazzinoData[existingIndex].quantita,
-            prezzo: magazzinoData[existingIndex].prezzo,
+            quantita: magazzino[existingIndex].quantita,
+            prezzo: magazzino[existingIndex].prezzo,
             tipo: 'ordine_fornitore',
             descrizione: `Ordine ${order.orderNumber} - ${order.supplier}`,
             dettagli: {
@@ -302,7 +302,7 @@ const SupplierOrderDetailPage = () => {
           setTimeout(processNext, 0);
         } else {
           // Crea nuovo prodotto
-          magazzinoData.push({
+          magazzino.push({
             sku: receivedItem.sku,
             nome: product.name || receivedItem.sku,
             quantita: receivedItem.quantity,
@@ -835,7 +835,7 @@ const SupplierOrderDetailPage = () => {
               const receivedQuantity = receivedProduct ? receivedProduct.quantity : 0;
               const isComplete = receivedQuantity >= product.quantity;
               const isPartial = receivedQuantity > 0 && receivedQuantity < product.quantity;
-              const magazzinoProd = magazzino.find(m => m.sku === product.sku);
+              const magazzinoProd = magazzinoData.find(m => m.sku === product.sku);
               
               // Carica foto del prodotto se disponibile
               const productImage = localStorage.getItem(`foto_${product.sku}`);
@@ -1155,7 +1155,7 @@ const SupplierOrderDetailPage = () => {
               // Aggiungi il nuovo prodotto al magazzino
               const nuovoMagazzino = [...currentMagazzino, prodotto];
               await saveMagazzinoData(nuovoMagazzino);
-              setMagazzino(nuovoMagazzino);
+              setMagazzinoData(nuovoMagazzino);
               
               // Aggiungi allo storico
               await saveStoricoData({

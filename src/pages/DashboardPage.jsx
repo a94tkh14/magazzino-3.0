@@ -124,21 +124,21 @@ const DashboardPage = () => {
     const loadOrders = async () => {
       try {
         // Carica dal database
-        const dbOrders = await loadOrdersData();
-        if (dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders);
-          await calculateStats(dbOrders);
-          calculateTopProducts(dbOrders);
-        } else {
+        // const dbOrders = await loadOrdersData();
+        // if (dbOrders && dbOrders.length > 0) {
+        //   setOrders(dbOrders);
+        //   await calculateStats(dbOrders);
+        //   calculateTopProducts(dbOrders);
+        // } else {
           // Fallback al localStorage
           const savedOrders = localStorage.getItem('shopify_orders');
           if (savedOrders) {
             const parsedOrders = JSON.parse(savedOrders);
             setOrders(parsedOrders);
-            await calculateStats(parsedOrders);
-            calculateTopProducts(parsedOrders);
+            // await calculateStats(parsedOrders);
+            // calculateTopProducts(parsedOrders);
           }
-        }
+        // }
       } catch (error) {
         console.error('Errore nel caricare ordini:', error);
         // Fallback al localStorage
@@ -146,8 +146,8 @@ const DashboardPage = () => {
         if (savedOrders) {
           const parsedOrders = JSON.parse(savedOrders);
           setOrders(parsedOrders);
-          await calculateStats(parsedOrders);
-          calculateTopProducts(parsedOrders);
+          // await calculateStats(parsedOrders);
+          // calculateTopProducts(parsedOrders);
         }
       }
     };
@@ -342,8 +342,8 @@ const DashboardPage = () => {
       
       if (data.success) {
         setOrders(data.orders);
-        await calculateStats(data.orders);
-        calculateTopProducts(data.orders);
+        // await calculateStats(data.orders);
+        // calculateTopProducts(data.orders);
       }
     } catch (error) {
       console.error('Errore durante la sincronizzazione:', error);
@@ -361,15 +361,15 @@ const DashboardPage = () => {
       
       // Calcola i prodotti più venduti per dare priorità
       const productSalesMap = new Map();
-      filteredOrders.forEach(order => {
-        order.items.forEach(item => {
-          if (item.sku) {
-            const existing = productSalesMap.get(item.sku) || { sku: item.sku, totalSold: 0 };
-            existing.totalSold += item.quantity;
-            productSalesMap.set(item.sku, existing);
-          }
-        });
-      });
+      // filteredOrders.forEach(order => {
+      //   order.items.forEach(item => {
+      //     if (item.sku) {
+      //       const existing = productSalesMap.get(item.sku) || { sku: item.sku, totalSold: 0 };
+      //       existing.totalSold += item.quantity;
+      //       productSalesMap.set(item.sku, existing);
+      //     }
+      //   });
+      // });
       
       // Ordina i prodotti con scorte basse: prima i più venduti, poi per quantità crescente
       return lowStockProducts

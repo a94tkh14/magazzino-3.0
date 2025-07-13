@@ -1,16 +1,12 @@
 import { 
   saveMagazzino, 
   loadMagazzino, 
-  saveOrdine, 
-  loadOrdini, 
   saveStock,
   loadStock,
   saveStorico,
   loadStorico,
   saveSettings,
-  loadSettings,
-  saveSupplierOrder,
-  loadSupplierOrders
+  loadSettings
 } from './supabase';
 
 // Funzioni per il magazzino
@@ -34,56 +30,6 @@ export const loadMagazzinoData = async () => {
     return data;
   } catch (error) {
     console.error('❌ Errore nel caricare dati magazzino:', error);
-    return [];
-  }
-};
-
-// Funzioni per gli ordini
-export const saveOrdersData = async (data) => {
-  try {
-    console.log('🔄 Salvando ordini in Supabase...');
-    const result = await saveOrdine(data);
-    console.log('✅ Ordini salvati con successo');
-    return { success: true, data: result };
-  } catch (error) {
-    console.error('❌ Errore nel salvare ordini:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const loadOrdersData = async () => {
-  try {
-    console.log('🔄 Caricando ordini da Supabase...');
-    const data = await loadOrdini();
-    console.log('✅ Ordini caricati:', data);
-    return data;
-  } catch (error) {
-    console.error('❌ Errore nel caricare ordini:', error);
-    return [];
-  }
-};
-
-// Funzioni per gli ordini fornitori
-export const saveSupplierOrdersData = async (data) => {
-  try {
-    console.log('🔄 Salvando ordini fornitori in Supabase...');
-    const result = await saveSupplierOrder(data);
-    console.log('✅ Ordini fornitori salvati con successo');
-    return { success: true, data: result };
-  } catch (error) {
-    console.error('❌ Errore nel salvare ordini fornitori:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const loadSupplierOrdersData = async () => {
-  try {
-    console.log('🔄 Caricando ordini fornitori da Supabase...');
-    const data = await loadSupplierOrders();
-    console.log('✅ Ordini fornitori caricati:', data);
-    return data;
-  } catch (error) {
-    console.error('❌ Errore nel caricare ordini fornitori:', error);
     return [];
   }
 };
