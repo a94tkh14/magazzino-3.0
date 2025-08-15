@@ -10,6 +10,7 @@ import SupplierOrdersPage from './pages/SupplierOrdersPage';
 import SupplierOrdersListPage from './pages/SupplierOrdersListPage';
 import SupplierOrderDetailPage from './pages/SupplierOrderDetailPage';
 import CostiPage from './pages/CostiPage';
+import ContoEconomicoPage from './pages/ContoEconomicoPage';
 import MagazzinoDetailPage from './pages/MagazzinoDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import MarketingPage from './pages/MarketingPage';
@@ -112,6 +113,7 @@ function App() {
                 <Route path="/ordini-fornitori/:orderId" element={<SupplierOrderDetailPage />} />
                 <Route path="/marketing" element={<MarketingPage />} />
                 <Route path="/costi" element={<CostiPage />} />
+                <Route path="/conto-economico" element={<ContoEconomicoPage />} />
                 <Route path="/magazzino/:sku" element={<MagazzinoDetailPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>

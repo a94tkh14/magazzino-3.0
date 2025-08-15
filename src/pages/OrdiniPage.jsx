@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
-import { loadMagazzinoData } from '../lib/magazzinoStorage';
+import { loadMagazzino, saveMagazzino } from '../lib/supabase';
+import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -30,52 +31,46 @@ const OrdiniPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipologia, setFilterTipologia] = useState('all');
   const [filterPerfume, setFilterPerfume] = useState('all');
+  const [availableTipologie, setAvailableTipologie] = useState([]);
 
   useEffect(() => {
     const loadOrders = async () => {
       try {
-        // Carica ordini dal database
-        // const dbOrders = await loadOrdersData();
-        // if (dbOrders && dbOrders.length > 0) {
-        //   setOrders(dbOrders);
-        // } else {
-          // Fallback al localStorage
-          const savedOrders = localStorage.getItem('shopify_orders');
-          if (savedOrders) {
-            const parsedOrders = JSON.parse(savedOrders);
-            setOrders(parsedOrders);
-            // Salva nel database
-            // await saveOrdersData(parsedOrders);
-          }
-        // }
+        const parsedOrders = await loadLargeData('shopify_orders');
+        setOrders(parsedOrders);
+        console.log(`✅ Caricati ${parsedOrders.length} ordini da localStorage`);
+        // Pulisci dati vecchi (più di 30 giorni)
+        await cleanupOldData('shopify_orders', 30);
       } catch (error) {
         console.error('Errore nel caricare ordini:', error);
-        // Fallback al localStorage
-        const savedOrders = localStorage.getItem('shopify_orders');
-        if (savedOrders) {
-          setOrders(JSON.parse(savedOrders));
-        }
+        setOrders([]);
+      }
+    };
+    loadOrders();
+  }, []);
+
+  // Carica le tipologie disponibili
+  useEffect(() => {
+    const loadTipologie = async () => {
+      try {
+        const tipologie = await getAvailableTipologie();
+        setAvailableTipologie(tipologie);
+      } catch (error) {
+        console.error('Errore nel caricare tipologie:', error);
+        setAvailableTipologie([]);
       }
     };
     
-    loadOrders();
+    loadTipologie();
   }, []);
 
   const saveOrders = async (newOrders) => {
     try {
-      // Salva nel database
-      // await saveOrdersData(newOrders);
-      // Salva anche in localStorage come backup
-      localStorage.setItem('shopify_orders', JSON.stringify(newOrders));
+      await saveLargeData('shopify_orders', newOrders, 500);
     } catch (error) {
       console.error('Errore nel salvare ordini nel database:', error);
-      // Fallback al localStorage
-      localStorage.setItem('shopify_orders', JSON.stringify(newOrders));
     }
-    
     setOrders(newOrders);
-    
-    // Emetti evento per aggiornare la dashboard
     window.dispatchEvent(new CustomEvent('dashboard-update'));
   };
 
@@ -204,7 +199,7 @@ const OrdiniPage = () => {
     // Filtro per tipologia (dal magazzino)
     if (filterTipologia !== 'all') {
       try {
-        const magazzino = await loadMagazzinoData();
+        const magazzino = await loadMagazzino();
         filtered = filtered.filter(order => 
           order.items.some(item => {
             const magazzinoItem = magazzino.find(m => m.sku === item.sku);
@@ -274,7 +269,7 @@ const OrdiniPage = () => {
   const getAvailableTipologie = async () => {
     const tipi = new Set();
     try {
-      const magazzino = await loadMagazzinoData();
+              const magazzino = await loadMagazzino();
       (Array.isArray(magazzino) ? magazzino : []).forEach(item => {
         const tipologia = localStorage.getItem(`tipologia_${item.sku}`);
         if (tipologia) tipi.add(tipologia);
@@ -289,6 +284,9 @@ const OrdiniPage = () => {
   const getFilteredStats = () => {
     if (!searchTerm) {
       // Se non c'è ricerca, usa le statistiche normali
+      const paidShippingOrders = filteredOrders.filter(order => order.shippingPrice > 0);
+      const shippingRevenue = paidShippingOrders.reduce((sum, order) => sum + order.shippingPrice, 0);
+      
       return {
         totalOrders: filteredOrders.length,
         totalValue: filteredOrders.reduce((sum, order) => sum + order.totalPrice, 0),
@@ -297,7 +295,11 @@ const OrdiniPage = () => {
         ),
         totalInvoices: filteredOrders.length,
         paidOrders: filteredOrders.filter(order => order.status === 'paid').length,
-        pendingOrders: filteredOrders.filter(order => order.status === 'pending').length
+        pendingOrders: filteredOrders.filter(order => order.status === 'pending').length,
+        paidShippingOrders: paidShippingOrders.length,
+        shippingRevenue: shippingRevenue,
+        freeShippingOrders: filteredOrders.filter(order => order.shippingPrice === 0).length,
+        avgShippingCost: paidShippingOrders.length > 0 ? shippingRevenue / paidShippingOrders.length : 0
       };
     }
 
@@ -315,7 +317,8 @@ const OrdiniPage = () => {
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
         orderStatus: order.status,
-        orderTotal: order.totalPrice
+        orderTotal: order.totalPrice,
+        shippingPrice: order.shippingPrice
       }))
     );
 
@@ -344,6 +347,14 @@ const OrdiniPage = () => {
     const totalProducts = uniqueProducts.reduce((sum, product) => sum + product.totalQuantity, 0);
     const paidOrders = (Array.isArray(matchingItems) ? matchingItems : []).filter(item => item.orderStatus === 'paid').length;
     const pendingOrders = (Array.isArray(matchingItems) ? matchingItems : []).filter(item => item.orderStatus === 'pending').length;
+    
+    // Calcola statistiche spedizione per ricerca
+    const matchingOrders = (Array.isArray(filteredOrders) ? filteredOrders : []).filter(order => 
+      order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.items.some(item => item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+    const paidShippingOrders = matchingOrders.filter(order => order.shippingPrice > 0);
+    const shippingRevenue = paidShippingOrders.reduce((sum, order) => sum + order.shippingPrice, 0);
 
     return {
       totalOrders,
@@ -351,7 +362,11 @@ const OrdiniPage = () => {
       totalProducts,
       totalInvoices: totalOrders,
       paidOrders,
-      pendingOrders
+      pendingOrders,
+      paidShippingOrders: paidShippingOrders.length,
+      shippingRevenue: shippingRevenue,
+      freeShippingOrders: matchingOrders.filter(order => order.shippingPrice === 0).length,
+      avgShippingCost: paidShippingOrders.length > 0 ? shippingRevenue / paidShippingOrders.length : 0
     };
   };
 
@@ -518,7 +533,7 @@ const OrdiniPage = () => {
                 className="w-full px-3 py-2 border rounded"
               >
                 <option value="all">Tutte</option>
-                {getAvailableTipologie().map(tipologia => (
+                {availableTipologie.map(tipologia => (
                   <option key={tipologia} value={tipologia}>{tipologia}</option>
                 ))}
               </select>
@@ -584,7 +599,7 @@ const OrdiniPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{getFilteredStats().totalOrders}</div>
                 <div className="text-sm text-muted-foreground">Totale Ordini</div>
@@ -602,12 +617,6 @@ const OrdiniPage = () => {
                 <div className="text-sm text-muted-foreground">Totale Prodotti</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {getFilteredStats().totalInvoices}
-                </div>
-                <div className="text-sm text-muted-foreground">Totale Conti</div>
-              </div>
-              <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
                   {getFilteredStats().paidOrders}
                 </div>
@@ -618,6 +627,49 @@ const OrdiniPage = () => {
                   {getFilteredStats().pendingOrders}
                 </div>
                 <div className="text-sm text-muted-foreground">In Attesa</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-700">
+                  {getFilteredStats().paidShippingOrders}
+                </div>
+                <div className="text-sm text-muted-foreground">Con Spedizione</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-700">
+                  {getFilteredStats().freeShippingOrders}
+                </div>
+                <div className="text-sm text-muted-foreground">Spedizione Gratuita</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-700">
+                  {formatPrice(getFilteredStats().shippingRevenue)}
+                </div>
+                <div className="text-sm text-muted-foreground">Incasso Spedizioni</div>
+              </div>
+            </div>
+            
+            {/* Riepilogo spedizioni */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <div className="text-sm font-medium text-blue-800 mb-1">📦 Riepilogo Spedizioni:</div>
+              <div className="text-xs text-blue-700">
+                {getFilteredStats().totalOrders > 0 && (
+                  <>
+                    {getFilteredStats().paidShippingOrders > 0 ? (
+                      <>
+                        <span className="font-medium">{((getFilteredStats().paidShippingOrders / getFilteredStats().totalOrders) * 100).toFixed(1)}%</span> degli ordini ha una spedizione a pagamento, 
+                        generando <span className="font-medium">{formatPrice(getFilteredStats().shippingRevenue)}</span> di ricavi aggiuntivi 
+                        ({getFilteredStats().totalValue > 0 ? ((getFilteredStats().shippingRevenue / getFilteredStats().totalValue) * 100).toFixed(1) : 0}% del valore totale).
+                        {getFilteredStats().paidShippingOrders > 0 && (
+                          <> Media costo spedizione: <span className="font-medium">{formatPrice(getFilteredStats().avgShippingCost)}</span></>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Tutti gli ordini hanno spedizione gratuita. Considera di implementare costi di spedizione per aumentare i ricavi.
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
@@ -664,11 +716,20 @@ const OrdiniPage = () => {
                   <div className="text-sm text-muted-foreground">
                     Data: {formatDate(order.createdAt)}
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    Spedizione: {order.shippingType || 'Standard'} - {order.shippingPrice > 0 
-                      ? `${order.shippingPrice.toFixed(2)} ${order.currency}`
-                      : 'Gratuita'
-                    }
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="text-muted-foreground">
+                      Spedizione: {order.shippingType || 'Standard'}
+                    </div>
+                    <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                      order.shippingPrice > 0 
+                        ? 'bg-blue-100 text-blue-700' 
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {order.shippingPrice > 0 
+                        ? `💰 ${order.shippingPrice.toFixed(2)} ${order.currency}`
+                        : '🆓 Gratuita'
+                      }
+                    </div>
                   </div>
                   {(Array.isArray(order.items) ? order.items : []).length > 0 && (
                     <div className="border-t pt-3">
