@@ -125,19 +125,7 @@ function App() {
                 <Route path="/magazzino/:sku" element={<MagazzinoDetailPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 
-                {/* Nuove route per i menu aggiuntivi */}
-                <Route path="/partners" element={<div className="p-6"><h1 className="text-2xl font-bold">Partners</h1><p>Gestione partners e collaboratori</p></div>} />
-                <Route path="/listini" element={<div className="p-6"><h1 className="text-2xl font-bold">Listini</h1><p>Gestione prezzi e listini</p></div>} />
-                <Route path="/vendite" element={<div className="p-6"><h1 className="text-2xl font-bold">Vendite</h1><p>Gestione vendite e ordini clienti</p></div>} />
-                <Route path="/acquisti" element={<div className="p-6"><h1 className="text-2xl font-bold">Acquisti</h1><p>Gestione acquisti e fornitori</p></div>} />
-                <Route path="/scadenzario" element={<div className="p-6"><h1 className="text-2xl font-bold">Scadenzario</h1><p>Gestione scadenze e promemoria</p></div>} />
-                <Route path="/produzione" element={<div className="p-6"><h1 className="text-2xl font-bold">Produzione</h1><p>Gestione produzione e pianificazione</p></div>} />
-                <Route path="/negozi" element={<div className="p-6"><h1 className="text-2xl font-bold">Negozi</h1><p>Gestione punti vendita</p></div>} />
-                <Route path="/contabilita" element={<div className="p-6"><h1 className="text-2xl font-bold">Contabilità</h1><p>Gestione contabile e fiscale</p></div>} />
-                <Route path="/personale" element={<div className="p-6"><h1 className="text-2xl font-bold">Personale</h1><p>Gestione risorse umane</p></div>} />
-                <Route path="/statistiche" element={<div className="p-6"><h1 className="text-2xl font-bold">Statistiche e Analisi</h1><p>Analisi dati e report</p></div>} />
-                <Route path="/report-magazzino" element={<div className="p-6"><h1 className="text-2xl font-bold">Report di Magazzino</h1><p>Report specifici per il magazzino</p></div>} />
-                <Route path="/anagrafiche" element={<div className="p-6"><h1 className="text-2xl font-bold">Anagrafiche</h1><p>Gestione dati anagrafici</p></div>} />
+
               </Routes>
             </main>
           </div>
