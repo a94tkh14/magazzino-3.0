@@ -9,11 +9,13 @@ import {
   BarChart3, 
   Truck, 
   TrendingUp, 
-  Calculator
+  Calculator,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-const Sidebar = () => {
+const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [logo, setLogo] = useState(null);
@@ -117,7 +119,10 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 h-screen flex flex-col">
+    <div className={cn(
+      "bg-white border-r border-gray-200 h-screen flex flex-col transition-all duration-300",
+      isCollapsed ? "w-16" : "w-64"
+    )}>
       {/* Header con Logo e Nome */}
       <div className="p-4 border-b border-gray-200">
         <div 
@@ -135,14 +140,16 @@ const Sidebar = () => {
               <span className="text-white font-bold text-xl">M</span>
             </div>
           )}
-          <div className="flex flex-col">
-            <span className="text-lg font-bold text-gray-900">
-              {appName}
-            </span>
-            <span className="text-xs text-gray-500">
-              magazzino-app.netlify.app
-            </span>
-          </div>
+          {!isCollapsed && (
+            <div className="flex flex-col">
+              <span className="text-lg font-bold text-gray-900">
+                {appName}
+              </span>
+              <span className="text-xs text-gray-500">
+                magazzino-app.netlify.app
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -163,23 +170,41 @@ const Sidebar = () => {
                       ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-600'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   )}
+                  title={isCollapsed ? item.label : undefined}
                 >
                   <div className="flex items-center space-x-3">
                     <Icon className={cn(
                       'h-5 w-5',
                       isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
                     )} />
-                    <span>{item.label}</span>
+                    {!isCollapsed && <span>{item.label}</span>}
                   </div>
-                  <div className="text-gray-400 group-hover:text-gray-600">
-                    →
-                  </div>
+                  {!isCollapsed && (
+                    <div className="text-gray-400 group-hover:text-gray-600">
+                      →
+                    </div>
+                  )}
                 </Link>
               </li>
             );
           })}
         </ul>
       </nav>
+
+      {/* Pulsante per collassare/espandere */}
+      <div className="p-4 border-t border-gray-200">
+        <button
+          onClick={onToggle}
+          className="w-full flex items-center justify-center p-2 rounded-md hover:bg-gray-100 transition-colors"
+          title={isCollapsed ? "Espandi sidebar" : "Collassa sidebar"}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="h-5 w-5 text-gray-600" />
+          ) : (
+            <ChevronLeft className="h-5 w-5 text-gray-600" />
+          )}
+        </button>
+      </div>
     </div>
   );
 };
