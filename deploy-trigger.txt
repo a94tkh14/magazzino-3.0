@@ -1,0 +1,2 @@
+Deploy trigger - $(date)
+Questo file serve per forzare un nuovo deploy su Netlify 
