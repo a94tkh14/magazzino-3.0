@@ -55,7 +55,7 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
             )}
           </button>
           
-          <h1 className="text-lg font-semibold">Magazzino 3.0</h1>
+          <h1 className="text-lg font-semibold">MVL</h1>
           <div className="flex items-center space-x-2 text-blue-100">
             <Wifi className="h-4 w-4" />
             <span className="text-sm">Online</span>
