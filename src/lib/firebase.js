@@ -249,6 +249,32 @@ export const loadSettings = async () => {
     }
   } catch (error) {
     console.error('❌ Errore nel caricamento impostazioni:', error);
+    return { success: true, data: {} };
+  }
+};
+
+// Funzione per salvare ordini fornitori
+export const saveSupplierOrder = async (orderData) => {
+  try {
+    console.log('🔄 Salvando ordine fornitore in Firebase...');
+    
+    if (orderData.id) {
+      const docRef = doc(db, 'supplier-orders', orderData.id);
+      await updateDoc(docRef, {
+        ...orderData,
+        updatedAt: serverTimestamp()
+      });
+      return { success: true, id: orderData.id };
+    } else {
+      const docRef = await addDoc(collection(db, 'supplier-orders'), {
+        ...orderData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return { success: true, id: docRef.id };
+    }
+  } catch (error) {
+    console.error('❌ Errore nel salvataggio ordine fornitore:', error);
     return { success: false, error: error.message };
   }
 }; 

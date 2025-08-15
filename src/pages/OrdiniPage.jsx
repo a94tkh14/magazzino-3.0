@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
-import { loadMagazzino, saveMagazzino } from '../lib/supabase';
+import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
 import { DateRange } from 'react-date-range';

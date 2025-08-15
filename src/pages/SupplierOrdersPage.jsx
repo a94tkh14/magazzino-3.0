@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { 
   generateOrderNumber
 } from '../lib/supplierOrders';
-import { saveSupplierOrder } from '../lib/supabase';
+import { saveSupplierOrder } from '../lib/firebase';
 
 const SupplierOrdersPage = () => {
   const navigate = useNavigate();
