@@ -277,4 +277,98 @@ export const saveSupplierOrder = async (orderData) => {
     console.error('❌ Errore nel salvataggio ordine fornitore:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Funzione per caricare ordini
+export const loadOrdini = async () => {
+  try {
+    console.log('🔄 Caricando ordini da Firebase...');
+    
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    const ordersData = [];
+    
+    querySnapshot.forEach((doc) => {
+      ordersData.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return { success: true, data: ordersData };
+  } catch (error) {
+    console.error('❌ Errore nel caricamento ordini:', error);
+    return { success: true, data: [] };
+  }
+};
+
+// Funzione per caricare storico
+export const loadStorico = async () => {
+  try {
+    console.log('🔄 Caricando storico da Firebase...');
+    
+    const querySnapshot = await getDocs(collection(db, 'storico'));
+    const storicoData = [];
+    
+    querySnapshot.forEach((doc) => {
+      storicoData.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return { success: true, data: storicoData };
+  } catch (error) {
+    console.error('❌ Errore nel caricamento storico:', error);
+    return { success: true, data: [] };
+  }
+};
+
+// Funzione per caricare ordini fornitori
+export const loadSupplierOrders = async () => {
+  try {
+    console.log('🔄 Caricando ordini fornitori da Firebase...');
+    
+    const q = query(collection(db, 'supplier-orders'), orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    const supplierOrdersData = [];
+    
+    querySnapshot.forEach((doc) => {
+      supplierOrdersData.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return { success: true, data: supplierOrdersData };
+  } catch (error) {
+    console.error('❌ Errore nel caricamento ordini fornitori:', error);
+    return { success: true, data: [] };
+  }
+};
+
+// Funzione per salvare storico
+export const saveStorico = async (storicoData) => {
+  try {
+    console.log('🔄 Salvando storico in Firebase...');
+    
+    if (storicoData.id) {
+      const docRef = doc(db, 'storico', storicoData.id);
+      await updateDoc(docRef, {
+        ...storicoData,
+        updatedAt: serverTimestamp()
+      });
+      return { success: true, id: storicoData.id };
+    } else {
+      const docRef = await addDoc(collection(db, 'storico'), {
+        ...storicoData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      return { success: true, id: docRef.id };
+    }
+  } catch (error) {
+    console.error('❌ Errore nel salvataggio storico:', error);
+    return { success: false, error: error.message };
+  }
 }; 

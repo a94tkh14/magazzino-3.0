@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
 
 const DebugInfo = () => {
   const [connectionStatus, setConnectionStatus] = useState('testing');
