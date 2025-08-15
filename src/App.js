@@ -114,7 +114,10 @@ function App() {
           {/* Contenuto principale */}
           <div className="flex-1 flex flex-col">
             {/* Header blu */}
-            <Header />
+            <Header 
+              sidebarCollapsed={sidebarCollapsed}
+              onToggleSidebar={toggleSidebar}
+            />
             
             {/* Area contenuto principale */}
             <main className="flex-1 overflow-auto p-6">
