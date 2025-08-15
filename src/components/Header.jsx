@@ -61,7 +61,7 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
             <img 
               src="/MVL solo scirtta.png" 
               alt="Logo MVL" 
-              className="h-12 w-auto object-contain"
+              className="h-16 w-auto object-contain"
             />
           </div>
         </div>
