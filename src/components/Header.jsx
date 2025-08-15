@@ -38,14 +38,14 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
   };
 
   return (
-    <div className="bg-blue-600 text-white px-6 py-3 shadow-sm">
+    <div className="bg-[#604EC2] text-white px-6 py-3 shadow-sm">
       <div className="flex justify-between items-center">
         {/* Lato sinistro - Nome applicazione e pulsante toggle */}
         <div className="flex items-center space-x-4">
           {/* Pulsante toggle sidebar */}
           <button
             onClick={onToggleSidebar}
-            className="p-2 rounded-md hover:bg-blue-700 transition-colors"
+            className="p-2 rounded-md hover:bg-[#4A3DA8] transition-colors"
             title={sidebarCollapsed ? "Mostra sidebar" : "Nascondi sidebar"}
           >
             {sidebarCollapsed ? (
@@ -56,7 +56,7 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
           </button>
           
           <h1 className="text-lg font-semibold">MVL</h1>
-          <div className="flex items-center space-x-2 text-blue-100">
+          <div className="flex items-center space-x-2 text-purple-100">
             <Wifi className="h-4 w-4" />
             <span className="text-sm">Online</span>
           </div>
@@ -65,7 +65,7 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
         {/* Lato destro - Info utente e sincronizzazione */}
         <div className="flex items-center space-x-6">
           {/* Sincronizzazione */}
-          <div className="flex items-center space-x-2 text-blue-100">
+          <div className="flex items-center space-x-2 text-purple-100">
             <Clock className="h-4 w-4" />
             <span className="text-sm">
               Sync: {formatDate(syncTime)} {formatTime(syncTime)}
@@ -79,7 +79,7 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
           </div>
 
           {/* Ora corrente */}
-          <div className="text-blue-100 text-sm">
+          <div className="text-purple-100 text-sm">
             {formatTime(currentTime)}
           </div>
         </div>
