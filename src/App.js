@@ -95,12 +95,21 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
   return (
     <ErrorBoundary>
       <Router>
         <div className="flex h-screen bg-gray-50">
           {/* Sidebar sinistra */}
-          <Sidebar />
+          <Sidebar 
+            isCollapsed={sidebarCollapsed} 
+            onToggle={toggleSidebar} 
+          />
           
           {/* Contenuto principale */}
           <div className="flex-1 flex flex-col">
