@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { db } from './firebase';
 
 class BackupManager {
   constructor() {
@@ -91,8 +91,8 @@ class BackupManager {
         timestamp: new Date().toISOString(),
         type: this.backupTypes.CONFIG,
         version: '1.0',
-        supabase: {
-          url: process.env.REACT_APP_SUPABASE_URL || 'https://fljxahdybqllfwzlkeum.supabase.co',
+        firebase: {
+          projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || 'mvl-17245',
           // Non includiamo le chiavi per sicurezza
         },
         shopify: await this.getShopifyConfig(),
