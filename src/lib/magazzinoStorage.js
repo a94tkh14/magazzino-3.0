@@ -7,7 +7,7 @@ import {
   loadStorico,
   saveSettings,
   loadSettings
-} from './supabase';
+} from './firebase';
 
 // Funzioni per il magazzino
 export const saveMagazzinoData = async (data) => {
