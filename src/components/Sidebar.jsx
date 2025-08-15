@@ -9,14 +9,7 @@ import {
   BarChart3, 
   Truck, 
   TrendingUp, 
-  Calculator,
-  Users,
-  FileText,
-  Store,
-  Eye,
-  User,
-  Calendar,
-  LineChart
+  Calculator
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -25,8 +18,6 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const [logo, setLogo] = useState(null);
   const [appName, setAppName] = useState('Magazzino App');
-  const [expandedItems, setExpandedItems] = useState({});
-
   // Carica il logo e il nome dal localStorage all'avvio
   useEffect(() => {
     const savedLogo = localStorage.getItem('appLogo');
@@ -66,19 +57,14 @@ const Sidebar = () => {
     navigate('/');
   };
 
-  const toggleExpanded = (key) => {
-    setExpandedItems(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+
 
   const navItems = [
     { 
-      key: 'partners',
-      icon: Users, 
-      label: 'Partners',
-      path: '/partners'
+      key: 'dashboard',
+      icon: BarChart3, 
+      label: 'Dashboard',
+      path: '/dashboard'
     },
     { 
       key: 'magazzino',
@@ -87,75 +73,45 @@ const Sidebar = () => {
       path: '/magazzino'
     },
     { 
-      key: 'listini',
-      icon: DollarSign, 
-      label: 'Listini',
-      path: '/listini'
-    },
-    { 
-      key: 'vendite',
-      icon: ShoppingCart, 
-      label: 'Vendite',
-      path: '/vendite'
-    },
-    { 
-      key: 'acquisti',
+      key: 'stock',
       icon: Package, 
-      label: 'Acquisti',
-      path: '/acquisti'
+      label: 'Stock',
+      path: '/stock'
     },
     { 
-      key: 'scadenzario',
-      icon: Calendar, 
-      label: 'Scadenzario',
-      path: '/scadenzario'
+      key: 'ordini',
+      icon: ShoppingCart, 
+      label: 'Ordini',
+      path: '/ordini'
     },
     { 
-      key: 'produzione',
-      icon: LineChart, 
-      label: 'Produzione',
-      path: '/produzione'
+      key: 'ordini-fornitori',
+      icon: Truck, 
+      label: 'Ordini Fornitori',
+      path: '/ordini-fornitori'
     },
     { 
-      key: 'negozi',
-      icon: Store, 
-      label: 'Negozi',
-      path: '/negozi'
+      key: 'marketing',
+      icon: TrendingUp, 
+      label: 'Marketing',
+      path: '/marketing'
     },
     { 
-      key: 'contabilita',
-      icon: Eye, 
-      label: 'Contabilità',
-      path: '/contabilita'
+      key: 'costi',
+      icon: DollarSign, 
+      label: 'Costi',
+      path: '/costi'
     },
     { 
-      key: 'personale',
-      icon: User, 
-      label: 'Personale',
-      path: '/personale'
+      key: 'conto-economico',
+      icon: Calculator, 
+      label: 'Conto Economico',
+      path: '/conto-economico'
     },
     { 
-      key: 'statistiche',
-      icon: BarChart3, 
-      label: 'Statistiche e Analisi',
-      path: '/statistiche'
-    },
-    { 
-      key: 'report-magazzino',
-      icon: BarChart3, 
-      label: 'Report di Magazzino',
-      path: '/report-magazzino'
-    },
-    { 
-      key: 'anagrafiche',
-      icon: FileText, 
-      label: 'Anagrafiche',
-      path: '/anagrafiche'
-    },
-    { 
-      key: 'configurazione',
+      key: 'settings',
       icon: Settings, 
-      label: 'Configurazione',
+      label: 'Impostazioni',
       path: '/settings'
     }
   ];
