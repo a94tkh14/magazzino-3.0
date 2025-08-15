@@ -57,17 +57,12 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
           
           {/* Logo MVL Ufficiale */}
           <div className="flex items-center space-x-3">
-            {/* M stilizzata con cerchio */}
-            <div className="relative">
-              <div className="text-white text-3xl font-bold">M</div>
-              <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-white rounded-full"></div>
-            </div>
-            
-            {/* Testo MVL e sottotitolo */}
-            <div className="text-white">
-              <div className="text-xl font-bold tracking-wider">MVL</div>
-              <div className="text-xs font-medium tracking-wide">IL TUO PARTNER DI LOGISTICA</div>
-            </div>
+            {/* Immagine logo MVL */}
+            <img 
+              src="/MVL solo scirtta.png" 
+              alt="Logo MVL" 
+              className="h-12 w-auto object-contain"
+            />
           </div>
         </div>
 
