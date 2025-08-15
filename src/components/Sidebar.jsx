@@ -195,13 +195,13 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
       <div className="p-4 border-t border-gray-200">
         <button
           onClick={onToggle}
-          className="w-full flex items-center justify-center p-2 rounded-md hover:bg-gray-100 transition-colors"
+          className="w-full flex items-center justify-center p-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 transition-all duration-200 border border-blue-200 hover:border-blue-300"
           title={isCollapsed ? "Espandi sidebar" : "Collassa sidebar"}
         >
           {isCollapsed ? (
-            <ChevronRight className="h-5 w-5 text-gray-600" />
+            <ChevronRight className="h-5 w-5" />
           ) : (
-            <ChevronLeft className="h-5 w-5 text-gray-600" />
+            <ChevronLeft className="h-5 w-5" />
           )}
         </button>
       </div>

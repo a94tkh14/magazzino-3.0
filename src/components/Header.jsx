@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User, Clock, Wifi } from 'lucide-react';
+import { User, Clock, Wifi, Menu, X } from 'lucide-react';
 
-const Header = () => {
+const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [syncTime, setSyncTime] = useState(new Date());
 
@@ -40,8 +40,21 @@ const Header = () => {
   return (
     <div className="bg-blue-600 text-white px-6 py-3 shadow-sm">
       <div className="flex justify-between items-center">
-        {/* Lato sinistro - Nome applicazione */}
+        {/* Lato sinistro - Nome applicazione e pulsante toggle */}
         <div className="flex items-center space-x-4">
+          {/* Pulsante toggle sidebar */}
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 rounded-md hover:bg-blue-700 transition-colors"
+            title={sidebarCollapsed ? "Mostra sidebar" : "Nascondi sidebar"}
+          >
+            {sidebarCollapsed ? (
+              <Menu className="h-5 w-5 text-white" />
+            ) : (
+              <X className="h-5 w-5 text-white" />
+            )}
+          </button>
+          
           <h1 className="text-lg font-semibold">Magazzino 3.0</h1>
           <div className="flex items-center space-x-2 text-blue-100">
             <Wifi className="h-4 w-4" />
