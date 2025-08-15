@@ -40,7 +40,7 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
   return (
     <div className="bg-[#604EC2] text-white px-6 py-3 shadow-sm">
       <div className="flex justify-between items-center">
-        {/* Lato sinistro - Nome applicazione e pulsante toggle */}
+                {/* Lato sinistro - Logo MVL e pulsante toggle */}
         <div className="flex items-center space-x-4">
           {/* Pulsante toggle sidebar */}
           <button
@@ -55,10 +55,17 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
             )}
           </button>
           
-          <h1 className="text-lg font-semibold">MVL</h1>
-          <div className="flex items-center space-x-2 text-purple-100">
-            <Wifi className="h-4 w-4" />
-            <span className="text-sm">Online</span>
+          {/* Logo MVL */}
+          <div className="flex items-center space-x-3">
+            <div className="bg-white rounded-lg p-2 shadow-sm">
+              <div className="text-[#604EC2] font-bold text-xl tracking-wider">
+                MVL
+              </div>
+            </div>
+            <div className="text-white">
+              <div className="text-sm font-medium">IL TUO PARTNER</div>
+              <div className="text-xs text-purple-100">DI LOGISTICA</div>
+            </div>
           </div>
         </div>
 
