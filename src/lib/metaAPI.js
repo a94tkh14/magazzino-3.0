@@ -7,10 +7,18 @@ class MetaAPI {
     this.adAccountId = null;
     this.clientId = process.env.REACT_APP_META_CLIENT_ID;
     this.clientSecret = process.env.REACT_APP_META_CLIENT_SECRET;
+    this.testMode = true; // Modalità test per simulare i dati
   }
 
-  // Autenticazione OAuth 2.0
+  // Autenticazione OAuth 2.0 (simulata in test mode)
   async authenticate() {
+    if (this.testMode) {
+      // Simula autenticazione di successo
+      this.accessToken = 'test_token_' + Date.now();
+      localStorage.setItem('metaAccessToken', this.accessToken);
+      return true;
+    }
+
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
       `client_id=${this.clientId}&` +
       `redirect_uri=${encodeURIComponent(window.location.origin + '/auth/meta/callback')}&` +
@@ -22,6 +30,10 @@ class MetaAPI {
 
   // Gestisce il callback OAuth
   async handleCallback(code) {
+    if (this.testMode) {
+      return true;
+    }
+
     try {
       const response = await fetch('/api/meta/auth', {
         method: 'POST',
@@ -45,6 +57,14 @@ class MetaAPI {
 
   // Carica gli ad accounts disponibili
   async getAdAccounts() {
+    if (this.testMode) {
+      // Simula ad accounts
+      return [
+        { id: 'act_123456789', name: 'Test Ad Account 1' },
+        { id: 'act_987654321', name: 'Test Ad Account 2' }
+      ];
+    }
+
     if (!this.accessToken) {
       throw new Error('Non autenticato. Esegui prima authenticate()');
     }
@@ -67,6 +87,60 @@ class MetaAPI {
 
   // Carica i dati delle campagne
   async getCampaigns(dateRange = 'last_30d') {
+    if (this.testMode) {
+      // Simula dati delle campagne
+      return [
+        {
+          id: 'camp_001',
+          name: 'Campagna Test 1',
+          platform: 'Meta',
+          status: 'active',
+          budget: 500.00,
+          spent: 245.50,
+          impressions: 12500,
+          clicks: 890,
+          conversions: 45,
+          revenue: 1250.00,
+          cpa: 5.46,
+          roas: 5.09,
+          ctr: 7.12,
+          cpc: 0.28
+        },
+        {
+          id: 'camp_002',
+          name: 'Campagna Test 2',
+          platform: 'Meta',
+          status: 'active',
+          budget: 300.00,
+          spent: 187.25,
+          impressions: 8900,
+          clicks: 623,
+          conversions: 32,
+          revenue: 890.00,
+          cpa: 5.85,
+          roas: 4.75,
+          ctr: 7.00,
+          cpc: 0.30
+        },
+        {
+          id: 'camp_003',
+          name: 'Campagna Test 3',
+          platform: 'Meta',
+          status: 'paused',
+          budget: 200.00,
+          spent: 89.75,
+          impressions: 4200,
+          clicks: 298,
+          conversions: 18,
+          revenue: 450.00,
+          cpa: 4.99,
+          roas: 5.01,
+          ctr: 7.10,
+          cpc: 0.30
+        }
+      ];
+    }
+
     if (!this.accessToken || !this.adAccountId) {
       throw new Error('Non autenticato o ad account non selezionato');
     }
@@ -118,6 +192,28 @@ class MetaAPI {
 
   // Carica dati giornalieri
   async getDailyData(dateRange = 'last_30d') {
+    if (this.testMode) {
+      // Simula dati giornalieri degli ultimi 7 giorni
+      const dailyData = [];
+      const today = new Date();
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        
+        dailyData.push({
+          date: date.toISOString().split('T')[0],
+          spend: Math.random() * 50 + 20,
+          conversions: Math.floor(Math.random() * 10) + 2,
+          revenue: Math.random() * 200 + 100,
+          impressions: Math.floor(Math.random() * 2000) + 1000,
+          clicks: Math.floor(Math.random() * 150) + 50
+        });
+      }
+      
+      return dailyData;
+    }
+
     if (!this.accessToken || !this.adAccountId) {
       throw new Error('Non autenticato');
     }

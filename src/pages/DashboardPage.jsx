@@ -457,14 +457,18 @@ const DashboardPage = () => {
     orders: filteredOrders.length,
     revenue: filteredOrders.reduce((sum, order) => sum + order.totalPrice, 0),
     products: filteredOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0),
-    avgOrderValue: filteredOrders.length > 0 ? filteredOrders.reduce((sum, order) => sum + order.totalPrice, 0) / filteredOrders.length : 0
+    avgOrderValue: filteredOrders.length > 0 ? filteredOrders.reduce((sum, order) => sum + order.totalPrice, 0) / filteredOrders.length : 0,
+    paidShipping: filteredOrders.filter(order => order.shippingPrice > 0).length,
+    shippingRevenue: filteredOrders.filter(order => order.shippingPrice > 0).reduce((sum, order) => sum + order.shippingPrice, 0)
   };
 
   const comparisonStats = {
     orders: comparisonFilteredOrders.length,
     revenue: comparisonFilteredOrders.reduce((sum, order) => sum + order.totalPrice, 0),
     products: comparisonFilteredOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0),
-    avgOrderValue: comparisonFilteredOrders.length > 0 ? comparisonFilteredOrders.reduce((sum, order) => sum + order.totalPrice, 0) / comparisonFilteredOrders.length : 0
+    avgOrderValue: comparisonFilteredOrders.length > 0 ? comparisonFilteredOrders.reduce((sum, order) => sum + order.totalPrice, 0) / comparisonFilteredOrders.length : 0,
+    paidShipping: comparisonFilteredOrders.filter(order => order.shippingPrice > 0).length,
+    shippingRevenue: comparisonFilteredOrders.filter(order => order.shippingPrice > 0).reduce((sum, order) => sum + order.shippingPrice, 0)
   };
 
   // Calcola le variazioni percentuali
@@ -485,7 +489,9 @@ const DashboardPage = () => {
     orders: calculatePercentageChange(mainStats.orders, comparisonStats.orders),
     revenue: calculatePercentageChange(mainStats.revenue, comparisonStats.revenue),
     products: calculatePercentageChange(mainStats.products, comparisonStats.products),
-    avgOrderValue: calculatePercentageChange(mainStats.avgOrderValue, comparisonStats.avgOrderValue)
+    avgOrderValue: calculatePercentageChange(mainStats.avgOrderValue, comparisonStats.avgOrderValue),
+    paidShipping: calculatePercentageChange(mainStats.paidShipping, comparisonStats.paidShipping),
+    shippingRevenue: calculatePercentageChange(mainStats.shippingRevenue, comparisonStats.shippingRevenue)
   };
 
   // Colori per ogni statistica
@@ -493,7 +499,9 @@ const DashboardPage = () => {
     orders: getComparisonColor(mainStats.orders, comparisonStats.orders),
     revenue: getComparisonColor(mainStats.revenue, comparisonStats.revenue),
     products: getComparisonColor(mainStats.products, comparisonStats.products),
-    avgOrderValue: getComparisonColor(mainStats.avgOrderValue, comparisonStats.avgOrderValue)
+    avgOrderValue: getComparisonColor(mainStats.avgOrderValue, comparisonStats.avgOrderValue),
+    paidShipping: getComparisonColor(mainStats.paidShipping, comparisonStats.paidShipping),
+    shippingRevenue: getComparisonColor(mainStats.shippingRevenue, comparisonStats.shippingRevenue)
   };
 
   // Statistiche ordini fornitori
@@ -825,21 +833,61 @@ const DashboardPage = () => {
             )}
           </CardContent>
         </Card>
-        {/* Nuova card: Spedizioni Pagate */}
+        {/* Card: Spedizioni Pagate */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Spedizioni Pagate</CardTitle>
             <TruckIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {filteredOrders.filter(order => order.shippingPrice > 0).length}
-            </div>
+            <div className="text-2xl font-bold">{mainStats.paidShipping}</div>
             <div className="text-xs text-muted-foreground mb-1">ordini con spedizione a pagamento</div>
+            {showComparison && (
+              <div className="flex items-center gap-1 text-xs mb-2">
+                {comparisonColors.paidShipping === 'green' ? (
+                  <ArrowUpRight className="h-3 w-3 text-green-600" />
+                ) : comparisonColors.paidShipping === 'red' ? (
+                  <ArrowDownRight className="h-3 w-3 text-red-600" />
+                ) : (
+                  <ArrowRight className="h-3 w-3 text-orange-600" />
+                )}
+                <span className={
+                  comparisonColors.paidShipping === 'green' ? 'text-green-600' : 
+                  comparisonColors.paidShipping === 'red' ? 'text-red-600' : 
+                  'text-orange-600'
+                }>
+                  {Math.abs(percentageChanges.paidShipping).toFixed(1)}%
+                </span>
+                <span className="text-muted-foreground">
+                  vs {comparisonStats.paidShipping} ordini
+                </span>
+              </div>
+            )}
             <div className="text-lg font-semibold text-blue-700">
-              {formatPrice(filteredOrders.filter(order => order.shippingPrice > 0).reduce((sum, order) => sum + order.shippingPrice, 0))}
+              {formatPrice(mainStats.shippingRevenue)}
             </div>
             <div className="text-xs text-muted-foreground">totale incassato spedizioni</div>
+            {showComparison && (
+              <div className="flex items-center gap-1 text-xs mt-1">
+                {comparisonColors.shippingRevenue === 'green' ? (
+                  <ArrowUpRight className="h-3 w-3 text-green-600" />
+                ) : comparisonColors.shippingRevenue === 'red' ? (
+                  <ArrowDownRight className="h-3 w-3 text-red-600" />
+                ) : (
+                  <ArrowRight className="h-3 w-3 text-orange-600" />
+                )}
+                <span className={
+                  comparisonColors.shippingRevenue === 'green' ? 'text-green-600' : 
+                  comparisonColors.shippingRevenue === 'red' ? 'text-red-600' : 
+                  'text-orange-600'
+                }>
+                  {Math.abs(percentageChanges.shippingRevenue).toFixed(1)}%
+                </span>
+                <span className="text-muted-foreground">
+                  vs {formatPrice(comparisonStats.shippingRevenue)}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -886,6 +934,99 @@ const DashboardPage = () => {
               <div className="text-lg font-bold text-green-600">{supplierStats.received}</div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Statistiche Dettagliate Spedizioni */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TruckIcon className="h-5 w-5" />
+            Statistiche Spedizioni
+          </CardTitle>
+          <CardDescription>
+            Analisi dettagliata delle spedizioni e dei costi associati
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs text-gray-500">Ordini con spedizione</div>
+              <div className="text-lg font-bold text-blue-700">{mainStats.paidShipping}</div>
+              <div className="text-xs text-gray-500">
+                {mainStats.orders > 0 ? ((mainStats.paidShipping / mainStats.orders) * 100).toFixed(1) : 0}% del totale
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Ordini spedizione gratuita</div>
+              <div className="text-lg font-bold text-green-700">{mainStats.orders - mainStats.paidShipping}</div>
+              <div className="text-xs text-gray-500">
+                {mainStats.orders > 0 ? (((mainStats.orders - mainStats.paidShipping) / mainStats.orders) * 100).toFixed(1) : 0}% del totale
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Incasso spedizioni</div>
+              <div className="text-lg font-bold text-blue-700">{formatPrice(mainStats.shippingRevenue)}</div>
+              <div className="text-xs text-gray-500">
+                {mainStats.revenue > 0 ? ((mainStats.shippingRevenue / mainStats.revenue) * 100).toFixed(1) : 0}% del fatturato
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Media costo spedizione</div>
+              <div className="text-lg font-bold text-orange-700">
+                {mainStats.paidShipping > 0 ? formatPrice(mainStats.shippingRevenue / mainStats.paidShipping) : formatPrice(0)}
+              </div>
+              <div className="text-xs text-gray-500">per ordine con spedizione</div>
+            </div>
+          </div>
+          
+          {/* Riepilogo rapido */}
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+            <div className="text-sm font-medium text-blue-800 mb-1">💡 Insight Spedizioni:</div>
+            <div className="text-xs text-blue-700">
+              {mainStats.orders > 0 && (
+                <>
+                  {mainStats.paidShipping > 0 ? (
+                    <>
+                      <span className="font-medium">{((mainStats.paidShipping / mainStats.orders) * 100).toFixed(1)}%</span> degli ordini ha una spedizione a pagamento, 
+                      generando <span className="font-medium">{formatPrice(mainStats.shippingRevenue)}</span> di ricavi aggiuntivi 
+                      ({mainStats.revenue > 0 ? ((mainStats.shippingRevenue / mainStats.revenue) * 100).toFixed(1) : 0}% del fatturato totale).
+                    </>
+                  ) : (
+                    <>
+                      Tutti gli ordini hanno spedizione gratuita. Considera di implementare costi di spedizione per aumentare i ricavi.
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          
+          {showComparison && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="text-sm font-medium text-gray-700 mb-2">Confronto con periodo precedente:</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <div className="text-gray-500">Ordini con spedizione</div>
+                  <div className={`font-medium ${
+                    comparisonColors.paidShipping === 'green' ? 'text-green-600' : 
+                    comparisonColors.paidShipping === 'red' ? 'text-red-600' : 'text-orange-600'
+                  }`}>
+                    {mainStats.paidShipping} vs {comparisonStats.paidShipping} ({percentageChanges.paidShipping > 0 ? '+' : ''}{percentageChanges.paidShipping.toFixed(1)}%)
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500">Incasso spedizioni</div>
+                  <div className={`font-medium ${
+                    comparisonColors.shippingRevenue === 'green' ? 'text-green-600' : 
+                    comparisonColors.shippingRevenue === 'red' ? 'text-red-600' : 'text-orange-600'
+                  }`}>
+                    {formatPrice(mainStats.shippingRevenue)} vs {formatPrice(comparisonStats.shippingRevenue)} ({percentageChanges.shippingRevenue > 0 ? '+' : ''}{percentageChanges.shippingRevenue.toFixed(1)}%)
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

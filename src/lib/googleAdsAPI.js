@@ -7,10 +7,18 @@ class GoogleAdsAPI {
     this.customerId = null;
     this.clientId = process.env.REACT_APP_GOOGLE_ADS_CLIENT_ID;
     this.clientSecret = process.env.REACT_APP_GOOGLE_ADS_CLIENT_SECRET;
+    this.testMode = true; // Modalità test per simulare i dati
   }
 
-  // Autenticazione OAuth 2.0
+  // Autenticazione OAuth 2.0 (simulata in test mode)
   async authenticate() {
+    if (this.testMode) {
+      // Simula autenticazione di successo
+      this.accessToken = 'test_google_token_' + Date.now();
+      localStorage.setItem('googleAdsAccessToken', this.accessToken);
+      return true;
+    }
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
       `client_id=${this.clientId}&` +
       `redirect_uri=${encodeURIComponent(window.location.origin + '/auth/google-ads/callback')}&` +
@@ -23,6 +31,10 @@ class GoogleAdsAPI {
 
   // Gestisce il callback OAuth
   async handleCallback(code) {
+    if (this.testMode) {
+      return true;
+    }
+
     try {
       const response = await fetch('/api/google-ads/auth', {
         method: 'POST',
@@ -48,6 +60,60 @@ class GoogleAdsAPI {
 
   // Carica i dati delle campagne
   async getCampaigns(dateRange = 'LAST_30_DAYS') {
+    if (this.testMode) {
+      // Simula dati delle campagne Google Ads
+      return [
+        {
+          id: 'camp_google_001',
+          name: 'Google Campagna 1',
+          platform: 'Google Ads',
+          status: 'active',
+          budget: 400.00,
+          spent: 198.75,
+          impressions: 15800,
+          clicks: 1120,
+          conversions: 52,
+          revenue: 1450.00,
+          cpa: 3.82,
+          roas: 7.30,
+          ctr: 7.09,
+          cpc: 0.18
+        },
+        {
+          id: 'camp_google_002',
+          name: 'Google Campagna 2',
+          platform: 'Google Ads',
+          status: 'active',
+          budget: 250.00,
+          spent: 156.40,
+          impressions: 9800,
+          clicks: 745,
+          conversions: 38,
+          revenue: 890.00,
+          cpa: 4.12,
+          roas: 5.69,
+          ctr: 7.60,
+          cpc: 0.21
+        },
+        {
+          id: 'camp_google_003',
+          name: 'Google Campagna 3',
+          platform: 'Google Ads',
+          status: 'paused',
+          budget: 150.00,
+          spent: 67.25,
+          impressions: 5200,
+          clicks: 398,
+          conversions: 22,
+          revenue: 320.00,
+          cpa: 3.06,
+          roas: 4.76,
+          ctr: 7.65,
+          cpc: 0.17
+        }
+      ];
+    }
+
     if (!this.accessToken) {
       throw new Error('Non autenticato. Esegui prima authenticate()');
     }
@@ -99,6 +165,28 @@ class GoogleAdsAPI {
 
   // Carica dati giornalieri
   async getDailyData(dateRange = 'LAST_30_DAYS') {
+    if (this.testMode) {
+      // Simula dati giornalieri degli ultimi 7 giorni
+      const dailyData = [];
+      const today = new Date();
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        
+        dailyData.push({
+          date: date.toISOString().split('T')[0],
+          spend: Math.random() * 40 + 15,
+          conversions: Math.floor(Math.random() * 12) + 3,
+          revenue: Math.random() * 250 + 120,
+          impressions: Math.floor(Math.random() * 2500) + 1200,
+          clicks: Math.floor(Math.random() * 180) + 60
+        });
+      }
+      
+      return dailyData;
+    }
+
     if (!this.accessToken) {
       throw new Error('Non autenticato');
     }

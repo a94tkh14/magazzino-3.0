@@ -1,9 +1,40 @@
 const express = require('express');
 const cors = require('cors');
+const { URLSearchParams } = require('url');
+const fs = require('fs');
+const path = require('path');
+
+// Importazione di node-fetch
 const fetch = require('node-fetch');
 
 const app = express();
 const PORT = 3002;
+
+// Funzioni per salvare e caricare le credenziali Shopify
+const CREDENTIALS_FILE = path.join(__dirname, 'shopify_credentials.json');
+
+const saveCredentials = (credentials) => {
+  try {
+    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2));
+    console.log('Credenziali Shopify salvate');
+  } catch (error) {
+    console.error('Errore nel salvataggio credenziali:', error);
+  }
+};
+
+const loadCredentials = () => {
+  try {
+    if (fs.existsSync(CREDENTIALS_FILE)) {
+      const data = fs.readFileSync(CREDENTIALS_FILE, 'utf8');
+      const credentials = JSON.parse(data);
+      console.log('Credenziali Shopify caricate da file');
+      return credentials;
+    }
+  } catch (error) {
+    console.error('Errore nel caricamento credenziali:', error);
+  }
+  return null;
+};
 
 app.use(cors());
 app.use((req, res, next) => {
@@ -12,19 +43,69 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
-// Endpoint di test per verificare la connessione base
-app.get('/api/shopify/test', async (req, res) => {
+// Endpoint per salvare le credenziali Shopify
+app.post('/api/shopify/save-credentials', (req, res) => {
   try {
-    const { shop, apiKey, apiPassword, apiVersion } = req.query;
-    
-    console.log('=== TEST CONNECTION ===');
-    console.log('Shop:', shop);
-    console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
-    console.log('API Version:', apiVersion);
+    const { shop, apiKey, apiPassword, apiVersion } = req.body;
     
     if (!shop || !apiKey || !apiPassword || !apiVersion) {
       return res.status(400).json({ error: 'Parametri mancanti' });
     }
+    
+    const credentials = { shop, apiKey, apiPassword, apiVersion };
+    saveCredentials(credentials);
+    
+    res.json({ success: true, message: 'Credenziali salvate' });
+  } catch (error) {
+    console.error('Errore nel salvataggio credenziali:', error);
+    res.status(500).json({ error: 'Errore nel salvataggio credenziali' });
+  }
+});
+
+// Endpoint per caricare le credenziali Shopify
+app.get('/api/shopify/load-credentials', (req, res) => {
+  try {
+    const credentials = loadCredentials();
+    if (credentials) {
+      res.json({ success: true, credentials });
+    } else {
+      res.json({ success: false, message: 'Nessuna credenziale salvata' });
+    }
+  } catch (error) {
+    console.error('Errore nel caricamento credenziali:', error);
+    res.status(500).json({ error: 'Errore nel caricamento credenziali' });
+  }
+});
+
+// Endpoint di test per verificare la connessione base
+app.get('/api/shopify/test', async (req, res) => {
+  try {
+
+    let { shop, apiKey, apiPassword, apiVersion } = req.query;
+    
+    // Se non ci sono parametri, prova a caricare le credenziali salvate
+    if (!shop || !apiKey || !apiPassword || !apiVersion) {
+      const savedCredentials = loadCredentials();
+      if (savedCredentials) {
+        shop = savedCredentials.shop;
+        apiKey = savedCredentials.apiKey;
+        apiPassword = savedCredentials.apiPassword;
+        apiVersion = savedCredentials.apiVersion;
+        console.log('=== TEST CONNECTION (credenziali salvate) ===');
+      } else {
+        console.log('=== TEST CONNECTION ===');
+        console.log('Shop:', shop);
+        console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
+        console.log('API Version:', apiVersion);
+        return res.status(400).json({ error: 'Parametri mancanti' });
+      }
+    } else {
+      console.log('=== TEST CONNECTION ===');
+    }
+    
+    console.log('Shop:', shop);
+    console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
+    console.log('API Version:', apiVersion);
 
     const baseURL = `https://${shop}/admin/api/${apiVersion}`;
     const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
@@ -78,6 +159,10 @@ app.get('/api/shopify/test', async (req, res) => {
     const ordersData = await ordersResponse.json();
     console.log('Orders access OK, count:', ordersData.orders?.length || 0);
 
+    // Salva le credenziali se il test ha successo
+    const testCredentials = { shop, apiKey, apiPassword, apiVersion };
+    saveCredentials(testCredentials);
+    
     res.json({ 
       success: true,
       message: 'Connessione e permessi OK',
@@ -97,18 +182,46 @@ app.get('/api/shopify/test', async (req, res) => {
 // Proxy per le API Shopify
 app.get('/api/shopify/orders', async (req, res) => {
   try {
-    const { shop, apiKey, apiPassword, apiVersion, page_info } = req.query;
+    // Aspetta che fetch sia caricato
+    if (!fetch) {
+      try {
+        const { default: fetchModule } = await import('node-fetch');
+        fetch = fetchModule;
+      } catch (error) {
+        console.error('Errore nel caricamento di node-fetch:', error);
+        return res.status(500).json({ error: 'Errore nel caricamento di node-fetch' });
+      }
+    }
+
+    let { shop, apiKey, apiPassword, apiVersion, page_info } = req.query;
     
-    console.log('=== DEBUG SHOPIFY API ===');
+    // Se non ci sono parametri, prova a caricare le credenziali salvate
+    if (!shop || !apiKey || !apiPassword || !apiVersion) {
+      const savedCredentials = loadCredentials();
+      if (savedCredentials) {
+        shop = savedCredentials.shop;
+        apiKey = savedCredentials.apiKey;
+        apiPassword = savedCredentials.apiPassword;
+        apiVersion = savedCredentials.apiVersion;
+        console.log('=== DEBUG SHOPIFY API (credenziali salvate) ===');
+      } else {
+        console.log('=== DEBUG SHOPIFY API ===');
+        console.log('Shop:', shop);
+        console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
+        console.log('API Password:', apiPassword ? `${apiPassword.substring(0, 10)}...` : 'MISSING');
+        console.log('API Version:', apiVersion);
+        if (page_info) console.log('Page Info:', page_info);
+        return res.status(400).json({ error: 'Parametri mancanti' });
+      }
+    } else {
+      console.log('=== DEBUG SHOPIFY API ===');
+    }
+    
     console.log('Shop:', shop);
     console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
     console.log('API Password:', apiPassword ? `${apiPassword.substring(0, 10)}...` : 'MISSING');
     console.log('API Version:', apiVersion);
     if (page_info) console.log('Page Info:', page_info);
-    
-    if (!shop || !apiKey || !apiPassword || !apiVersion) {
-      return res.status(400).json({ error: 'Parametri mancanti' });
-    }
 
     // Validazione formato shop
     if (!shop.includes('.myshopify.com')) {
@@ -249,195 +362,149 @@ app.get('/api/shopify/orders', async (req, res) => {
   }
 });
 
-// Google Ads API endpoints
-app.post('/api/google-ads/auth', async (req, res) => {
-  try {
-    const { code } = req.body;
-    
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        code,
-        client_id: process.env.GOOGLE_ADS_CLIENT_ID,
-        client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-        redirect_uri: `${req.protocol}://${req.get('host')}/auth/google-ads/callback`,
-        grant_type: 'authorization_code',
-      }),
-    });
+// === GOOGLE ADS API ENDPOINTS ===
+const GOOGLE_ADS_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_ADS_API_BASE = 'https://googleads.googleapis.com/v14';
 
-    const tokenData = await tokenResponse.json();
-    res.json(tokenData);
+app.post('/api/google-ads/auth', async (req, res) => {
+  const { code } = req.body;
+  try {
+    const params = new URLSearchParams();
+    params.append('client_id', process.env.REACT_APP_GOOGLE_ADS_CLIENT_ID);
+    params.append('client_secret', process.env.REACT_APP_GOOGLE_ADS_CLIENT_SECRET);
+    params.append('code', code);
+    params.append('grant_type', 'authorization_code');
+    params.append('redirect_uri', `${req.protocol}://${req.get('host')}/auth/google-ads/callback`);
+
+    const response = await fetch(GOOGLE_ADS_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const data = await response.json();
+    res.json(data);
   } catch (error) {
-    console.error('Errore autenticazione Google Ads:', error);
-    res.status(500).json({ error: 'Errore autenticazione' });
+    res.status(500).json({ error: 'Errore autenticazione Google Ads', details: error.message });
   }
 });
 
 app.post('/api/google-ads/campaigns', async (req, res) => {
+  const { customerId, dateRange } = req.body;
+  const accessToken = req.headers['authorization']?.replace('Bearer ', '');
   try {
-    const { customerId, dateRange } = req.body;
-    const accessToken = req.headers.authorization?.split(' ')[1];
-
-    // Query Google Ads API per le campagne
-    const query = `
-      SELECT 
-        campaign.id,
-        campaign.name,
-        campaign.status,
-        campaign.budget_amount_micros,
-        metrics.cost_micros,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.conversions,
-        metrics.conversions_value
-      FROM campaign
-      WHERE segments.date DURING ${dateRange}
-    `;
-
-    const response = await fetch(`https://googleads.googleapis.com/v14/customers/${customerId}/googleAds:search`, {
+    // Esempio: recupera campagne
+    const response = await fetch(`${GOOGLE_ADS_API_BASE}/customers/${customerId}/googleAds:search`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({
+        query: `SELECT campaign.id, campaign.name, campaign.status, campaign.budget_amount_micros, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value FROM campaign WHERE segments.date DURING ${dateRange || 'LAST_30_DAYS'}`
+      })
     });
-
     const data = await response.json();
     res.json(data.results || []);
   } catch (error) {
-    console.error('Errore caricamento campagne Google Ads:', error);
-    res.status(500).json({ error: 'Errore caricamento campagne' });
+    res.status(500).json({ error: 'Errore caricamento campagne Google Ads', details: error.message });
   }
 });
 
 app.post('/api/google-ads/daily', async (req, res) => {
+  const { customerId, dateRange } = req.body;
+  const accessToken = req.headers['authorization']?.replace('Bearer ', '');
   try {
-    const { customerId, dateRange } = req.body;
-    const accessToken = req.headers.authorization?.split(' ')[1];
-
-    // Query per dati giornalieri
-    const query = `
-      SELECT 
-        segments.date,
-        metrics.cost_micros,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.conversions,
-        metrics.conversions_value
-      FROM campaign
-      WHERE segments.date DURING ${dateRange}
-    `;
-
-    const response = await fetch(`https://googleads.googleapis.com/v14/customers/${customerId}/googleAds:search`, {
+    // Esempio: recupera dati giornalieri
+    const response = await fetch(`${GOOGLE_ADS_API_BASE}/customers/${customerId}/googleAds:search`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({
+        query: `SELECT segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value FROM campaign WHERE segments.date DURING ${dateRange || 'LAST_30_DAYS'}`
+      })
     });
-
     const data = await response.json();
     res.json(data.results || []);
   } catch (error) {
-    console.error('Errore caricamento dati giornalieri Google Ads:', error);
-    res.status(500).json({ error: 'Errore caricamento dati giornalieri' });
+    res.status(500).json({ error: 'Errore caricamento dati giornalieri Google Ads', details: error.message });
   }
 });
 
-// Meta API endpoints
-app.post('/api/meta/auth', async (req, res) => {
-  try {
-    const { code } = req.body;
-    
-    const tokenResponse = await fetch('https://graph.facebook.com/v18.0/oauth/access_token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        code,
-        client_id: process.env.META_CLIENT_ID,
-        client_secret: process.env.META_CLIENT_SECRET,
-        redirect_uri: `${req.protocol}://${req.get('host')}/auth/meta/callback`,
-      }),
-    });
+// === META API ENDPOINTS ===
+const META_TOKEN_URL = 'https://graph.facebook.com/v18.0/oauth/access_token';
+const META_API_BASE = 'https://graph.facebook.com/v18.0';
 
-    const tokenData = await tokenResponse.json();
-    res.json(tokenData);
+app.post('/api/meta/auth', async (req, res) => {
+  const { code } = req.body;
+  try {
+    const params = new URLSearchParams();
+    params.append('client_id', process.env.REACT_APP_META_CLIENT_ID);
+    params.append('client_secret', process.env.REACT_APP_META_CLIENT_SECRET);
+    params.append('code', code);
+    params.append('redirect_uri', `${req.protocol}://${req.get('host')}/auth/meta/callback`);
+
+    const response = await fetch(META_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    const data = await response.json();
+    res.json(data);
   } catch (error) {
-    console.error('Errore autenticazione Meta:', error);
-    res.status(500).json({ error: 'Errore autenticazione' });
+    res.status(500).json({ error: 'Errore autenticazione Meta', details: error.message });
   }
 });
 
 app.get('/api/meta/ad-accounts', async (req, res) => {
+  const accessToken = req.headers['authorization']?.replace('Bearer ', '');
   try {
-    const accessToken = req.headers.authorization?.split(' ')[1];
-    
-    const response = await fetch(`https://graph.facebook.com/v18.0/me/adaccounts?access_token=${accessToken}`);
+    const response = await fetch(`${META_API_BASE}/me/adaccounts?fields=id,name&access_token=${accessToken}`);
     const data = await response.json();
-    
     res.json({ adAccounts: data.data || [] });
   } catch (error) {
-    console.error('Errore caricamento ad accounts Meta:', error);
-    res.status(500).json({ error: 'Errore caricamento ad accounts' });
+    res.status(500).json({ error: 'Errore caricamento ad accounts Meta', details: error.message });
   }
 });
 
 app.post('/api/meta/campaigns', async (req, res) => {
+  const { adAccountId, dateRange } = req.body;
+  const accessToken = req.headers['authorization']?.replace('Bearer ', '');
   try {
-    const { adAccountId, dateRange } = req.body;
-    const accessToken = req.headers.authorization?.split(' ')[1];
-
-    const fields = [
-      'id', 'name', 'status', 'lifetime_budget', 'daily_budget',
-      'spend', 'impressions', 'clicks', 'actions', 'value'
-    ].join(',');
-
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?` +
-      `fields=${fields}&` +
-      `date_preset=${dateRange}&` +
-      `access_token=${accessToken}`
-    );
-
+    const response = await fetch(`${META_API_BASE}/act_${adAccountId}/campaigns?fields=id,name,status,lifetime_budget,daily_budget,spend,impressions,clicks,actions,value&date_preset=${dateRange || 'last_30d'}&access_token=${accessToken}`);
     const data = await response.json();
     res.json(data.data || []);
   } catch (error) {
-    console.error('Errore caricamento campagne Meta:', error);
-    res.status(500).json({ error: 'Errore caricamento campagne' });
+    res.status(500).json({ error: 'Errore caricamento campagne Meta', details: error.message });
   }
 });
 
 app.post('/api/meta/daily', async (req, res) => {
+  const { adAccountId, dateRange } = req.body;
+  const accessToken = req.headers['authorization']?.replace('Bearer ', '');
   try {
-    const { adAccountId, dateRange } = req.body;
-    const accessToken = req.headers.authorization?.split(' ')[1];
-
-    const fields = [
-      'date_start', 'spend', 'impressions', 'clicks', 'actions', 'value'
-    ].join(',');
-
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/insights?` +
-      `fields=${fields}&` +
-      `date_preset=${dateRange}&` +
-      `access_token=${accessToken}`
-    );
-
+    const response = await fetch(`${META_API_BASE}/act_${adAccountId}/insights?fields=date_start,spend,impressions,clicks,actions,value&date_preset=${dateRange || 'last_30d'}&access_token=${accessToken}`);
     const data = await response.json();
     res.json(data.data || []);
   } catch (error) {
-    console.error('Errore caricamento dati giornalieri Meta:', error);
-    res.status(500).json({ error: 'Errore caricamento dati giornalieri' });
+    res.status(500).json({ error: 'Errore caricamento dati giornalieri Meta', details: error.message });
   }
+});
+
+
+
+// Endpoint di health check per il deploy
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 }); 

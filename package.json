@@ -3,11 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@google-cloud/vision": "^5.3.0",
     "@supabase/supabase-js": "^2.50.5",
     "@tailwindcss/postcss": "^4.1.11",
     "clsx": "^2.1.1",
+    "cors": "^2.8.5",
     "date-fns": "^2.30.0",
+    "decimal.js-light": "^2.5.1",
+    "express": "^5.1.0",
     "lucide-react": "^0.525.0",
+    "multer": "^2.0.1",
+    "node-fetch": "^2.7.0",
     "react": "^18.2.0",
     "react-date-range": "^1.4.0",
     "react-datepicker": "^4.25.0",
@@ -21,7 +27,13 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "dev": "concurrently \"npm run start\" \"npm run server\"",
+    "server": "node server.js",
+    "deploy:vercel": "vercel --prod",
+    "deploy:railway": "railway up",
+    "backup:db": "node -e \"const bm = require('./src/lib/backupManager'); bm.createDatabaseBackup();\"",
+    "backup:full": "node -e \"const bm = require('./src/lib/backupManager'); bm.createFullBackup();\""
   },
   "eslintConfig": {
     "extends": [
@@ -44,6 +56,7 @@
   "devDependencies": {
     "autoprefixer": "^10.4.14",
     "postcss": "^8.4.24",
-    "tailwindcss": "^3.3.0"
+    "tailwindcss": "^3.3.0",
+    "concurrently": "^8.2.2"
   }
 }
