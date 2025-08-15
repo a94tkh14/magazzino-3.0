@@ -8,7 +8,10 @@
 
 ## 🔧 Passo 1: Creare Repository GitHub
 
-1. **Vai su [GitHub.com](https://github.com)**
+1. **Vai su [GitHub.com](git add .
+git commit -m "Switch to Vercel deploy - disable ESLint completely"
+git push origin main
+https://github.com)**
 2. **Clicca "New repository"**
 3. **Configura il repository:**
    - Repository name: `magazzino-3.0`
@@ -51,12 +54,19 @@ Build command: npm run build
 Publish directory: build
 ```
 
-### 3.4 Configura Variabili d'Ambiente
+### 3.4 Configura Variabili d'Ambiente Firebase
 Nel pannello Netlify, vai su **Site settings > Environment variables** e aggiungi:
 
 ```env
-REACT_APP_SUPABASE_URL=https://fljxahdybqllfwzlkeum.supabase.co
-REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsanhhaGR5YnFsbGZ3emxrZXVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI0MTEzNzQsImV4cCI6MjA2Nzk4NzM3NH0.soXqjjJF42FbgSGCTgx8na1vmt2rAepnY6pP0JO44wY
+# Firebase Configuration
+REACT_APP_FIREBASE_API_KEY=your-api-key
+REACT_APP_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=your-project-id
+REACT_APP_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+REACT_APP_FIREBASE_APP_ID=your-app-id
+
+# Meta API (per marketing)
 REACT_APP_META_CLIENT_ID=4210262035874020
 REACT_APP_META_CLIENT_SECRET=ea0866b64ada2f0984b7d7c8c54f9f1b
 ```
@@ -100,9 +110,9 @@ REACT_APP_META_CLIENT_SECRET=ea0866b64ada2f0984b7d7c8c54f9f1b
 - Controlla le variabili d'ambiente
 
 ### App Non Funziona
-- Verifica che le variabili d'ambiente siano corrette
+- Verifica che le variabili d'ambiente Firebase siano corrette
 - Controlla la console del browser per errori
-- Verifica che Supabase sia accessibile
+- Verifica che Firebase sia accessibile e configurato
 
 ### Problemi di Routing
 - Verifica che `netlify.toml` sia presente

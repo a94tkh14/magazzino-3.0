@@ -38,8 +38,8 @@ function DebugInfo() {
       </div>
       <div className="space-y-1">
         <div>NODE_ENV: {process.env.NODE_ENV}</div>
-        <div>REACT_APP_SUPABASE_URL: {process.env.REACT_APP_SUPABASE_URL ? 'Set' : 'Not set'}</div>
-        <div>REACT_APP_SUPABASE_ANON_KEY: {process.env.REACT_APP_SUPABASE_ANON_KEY ? 'Set' : 'Not set'}</div>
+        <div>REACT_APP_FIREBASE_PROJECT_ID: {process.env.REACT_APP_FIREBASE_PROJECT_ID ? 'Set' : 'Not set'}</div>
+        <div>REACT_APP_FIREBASE_API_KEY: {process.env.REACT_APP_FIREBASE_API_KEY ? 'Set' : 'Not set'}</div>
         <div>User Agent: {navigator.userAgent.substring(0, 50)}...</div>
       </div>
     </div>
