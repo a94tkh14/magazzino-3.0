@@ -19,7 +19,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [logo, setLogo] = useState(null);
-  const [appName, setAppName] = useState('Magazzino App');
+  const [appName, setAppName] = useState('MVL');
   // Carica il logo e il nome dal localStorage all'avvio
   useEffect(() => {
     const savedLogo = localStorage.getItem('appLogo');
@@ -132,21 +132,35 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           {logo ? (
             <img
               src={logo}
-              alt="Logo"
-              className="h-10 w-10 object-contain"
+              alt="Logo MVL"
+              className={cn(
+                "object-contain transition-all duration-300",
+                isCollapsed ? "h-8 w-8" : "h-12 w-12"
+              )}
             />
           ) : (
-            <div className="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-xl">M</span>
+            <div className={cn(
+              "bg-purple-700 rounded-lg flex items-center justify-center transition-all duration-300",
+              isCollapsed ? "h-8 w-8" : "h-12 w-12"
+            )}>
+              {isCollapsed ? (
+                <span className="text-white font-bold text-lg">M</span>
+              ) : (
+                <div className="flex flex-col items-center text-white">
+                  <span className="font-bold text-lg">MVL</span>
+                  <span className="text-xs">LOGISTICA</span>
+                </div>
+              )}
             </div>
           )}
+          
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="text-lg font-bold text-gray-900">
-                {appName}
+                MVL
               </span>
               <span className="text-xs text-gray-500">
-                magazzino-app.netlify.app
+                Il tuo partner di logistica
               </span>
             </div>
           )}
