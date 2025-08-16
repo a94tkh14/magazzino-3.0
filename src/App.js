@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import SimpleFirebaseTest from './components/SimpleFirebaseTest';
 import DashboardPage from './pages/DashboardPage';
 import StockPage from './pages/StockPage';
 import MagazzinoPage from './pages/MagazzinoPage';
@@ -123,7 +124,7 @@ function App() {
             <main className="flex-1 overflow-auto p-6">
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/dashboard" element={<div><DashboardPage /><SimpleFirebaseTest /></div>} />
                 <Route path="/stock" element={<StockPage />} />
                 <Route path="/magazzino" element={<MagazzinoPage />} />
                 <Route path="/ordini" element={<OrdiniPage />} />
