@@ -77,7 +77,16 @@ exports.handler = async (event, context) => {
         break;
       case 'orders':
         // Estrai tutti i parametri dal body già parsato
-        const { limit = 25, status = 'open', pageInfo, daysBack } = body;
+        const { limit = 50, status = 'open', pageInfo, daysBack } = body;
+        
+        // Validazione rigorosa dei parametri
+        if (limit && (limit < 1 || limit > 250)) {
+          throw new Error('Il limite deve essere tra 1 e 250');
+        }
+        
+        if (status && !['open', 'closed', 'cancelled', 'pending', 'any'].includes(status)) {
+          throw new Error('Status non valido. Usa: open, closed, cancelled, pending, any');
+        }
         
         // Costruisci URL base con solo i parametri essenziali
         let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;

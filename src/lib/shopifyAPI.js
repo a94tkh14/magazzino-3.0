@@ -8,7 +8,7 @@ export const getShopifyCredentials = () => {
 };
 
 // Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
-export const fetchShopifyOrders = async (limit = 25, status = 'open', onProgress, daysBack = null) => {
+export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress, daysBack = null) => {
   try {
     const credentials = getShopifyCredentials();
     let allOrders = [];
@@ -55,7 +55,7 @@ export const fetchShopifyOrders = async (limit = 25, status = 'open', onProgress
       }
 
       const data = await response.json();
-
+      
       if (data.success && data.data.orders && data.data.orders.length > 0) {
         const existingIds = new Set(allOrders.map(o => o.id));
         const newOrders = data.data.orders.filter(order => !existingIds.has(order.id));
@@ -63,28 +63,23 @@ export const fetchShopifyOrders = async (limit = 25, status = 'open', onProgress
         
         if (onProgress) onProgress(allOrders.length, page);
         console.log(`[SYNC] Scaricati ${allOrders.length} ordini totali dopo pagina ${page}`);
-        
-        // Controlla se ci sono più pagine
+        console.log(`📊 Ordini in questa pagina: ${data.data.orders.length}/${limit}`);
+        console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
+
         if (data.data.orders.length < limit) {
           console.log(`✅ Ultima pagina raggiunta (${data.data.orders.length} ordini < ${limit})`);
           keepGoing = false;
         } else {
-          // Prova a ottenere la prossima pagina dal link header
           const linkHeader = data.data.linkHeader;
           console.log(`🔗 Link header ricevuto: ${linkHeader}`);
-          console.log(`📊 Ordini in questa pagina: ${data.data.orders.length}/${limit}`);
-          console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
-          
           if (linkHeader && linkHeader.includes('rel="next"')) {
-            // Estrai il page_info dal link header
             const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>;\s*rel="next"/);
             if (nextMatch) {
               pageInfo = nextMatch[1];
               console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
               page++;
             } else {
-              // Prova un pattern alternativo per il link header
-              const altMatch = linkHeader.match(/<[^>]*>;\s*rel="next"/);
+              const altMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
               if (altMatch) {
                 const url = altMatch[0].match(/<([^>]+)>/)[1];
                 console.log(`🔗 URL estratto: ${url}`);
@@ -126,12 +121,13 @@ export const fetchShopifyOrders = async (limit = 25, status = 'open', onProgress
         keepGoing = false;
       }
       
-      // Pausa breve per evitare rate limit
+      // Pausa intelligente per evitare rate limit
       if (keepGoing) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        const pauseTime = page === 1 ? 500 : 1000; // Prima pagina: 500ms, altre: 1000ms
+        console.log(`⏳ Pausa di ${pauseTime}ms prima della prossima richiesta...`);
+        await new Promise(resolve => setTimeout(resolve, pauseTime));
       }
     }
-
     console.log(`🎉 Scaricamento completato! Totale ordini: ${allOrders.length}`);
     return allOrders;
   } catch (error) {
