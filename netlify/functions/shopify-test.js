@@ -80,11 +80,15 @@ exports.handler = async (event, context) => {
         break;
       case 'orders':
         try {
+          console.log(`🔍 DEBUG - Inizio gestione orders...`);
+          
           // Estrai tutti i parametri dal body già parsato
           const { limit = 50, status = 'open', pageInfo, daysBack } = body;
           
           console.log(`🔍 DEBUG - Body ricevuto:`, JSON.stringify(body, null, 2));
           console.log(`🔍 DEBUG - Parametri estratti:`, { limit, status, pageInfo, daysBack });
+          console.log(`🔍 DEBUG - Tipo di pageInfo:`, typeof pageInfo);
+          console.log(`🔍 DEBUG - Lunghezza pageInfo:`, pageInfo ? pageInfo.length : 'null');
           
           // Validazione rigorosa dei parametri
           if (limit && (limit < 1 || limit > 250)) {
@@ -95,22 +99,29 @@ exports.handler = async (event, context) => {
             throw new Error('Status non valido. Usa: open, closed, cancelled, pending, any');
           }
           
+          console.log(`🔍 DEBUG - Validazione parametri completata`);
+          
           // Costruisci URL base SEMPLIFICATO - solo parametri essenziali
           let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
+          console.log(`🔍 DEBUG - URL base: ${ordersUrl}`);
           
           // Aggiungi SOLO il limite per ora - rimuoviamo altri parametri che potrebbero causare problemi
           if (limit && limit > 0) {
             ordersUrl += `?limit=${limit}`;
+            console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
           // Aggiungi status solo se specificato e valido
           if (status && status !== 'any' && ['open', 'closed', 'cancelled', 'pending'].includes(status)) {
             ordersUrl += ordersUrl.includes('?') ? `&status=${status}` : `?status=${status}`;
+            console.log(`🔍 DEBUG - Dopo aggiunta status: ${ordersUrl}`);
           }
 
           // Aggiungi page_info se presente
           if (pageInfo) {
+            console.log(`🔍 DEBUG - Aggiungendo pageInfo: ${pageInfo}`);
             ordersUrl += ordersUrl.includes('?') ? `&page_info=${pageInfo}` : `?page_info=${pageInfo}`;
+            console.log(`🔍 DEBUG - Dopo aggiunta pageInfo: ${ordersUrl}`);
           }
           
           // Rimuoviamo temporaneamente daysBack per test
@@ -120,11 +131,15 @@ exports.handler = async (event, context) => {
           //   ordersUrl += ordersUrl.includes('?') ? `&created_at_min=${cutoffDate.toISOString()}` : `?created_at_min=${cutoffDate.toISOString()}`;
           // }
           
-          console.log(`🔍 DEBUG - URL costruito: ${ordersUrl}`);
+          console.log(`🔍 DEBUG - URL costruito finale: ${ordersUrl}`);
           console.log(`🔍 DEBUG - Parametri finali:`, { limit, status, pageInfo, daysBack });
+          
           apiUrl = ordersUrl;
+          console.log(`🔍 DEBUG - apiUrl assegnato: ${apiUrl}`);
+          
         } catch (ordersError) {
           console.error('❌ Errore nella costruzione URL orders:', ordersError);
+          console.error('❌ Stack trace:', ordersError.stack);
           return {
             statusCode: 400,
             headers,
@@ -143,6 +158,7 @@ exports.handler = async (event, context) => {
     console.log(`🔄 Chiamata API Shopify: ${apiUrl}`);
 
     // Fai la richiesta a Shopify
+    console.log(`🔍 DEBUG - Prima della chiamata fetch...`);
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
@@ -150,6 +166,7 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json'
       }
     });
+    console.log(`🔍 DEBUG - Dopo la chiamata fetch, status: ${response.status}`);
 
     if (!response.ok) {
       console.log(`❌ Errore Shopify API: ${response.status} ${response.statusText}`);
