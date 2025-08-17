@@ -197,6 +197,182 @@ export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress
   }
 };
 
+// Funzione per recuperare ordini archiviati da Shopify
+export const fetchShopifyArchivedOrders = async (limit = 250, onProgress, daysBack = null) => {
+  try {
+    const credentials = getShopifyCredentials();
+    let allOrders = [];
+    let pageInfo = null;
+    let keepGoing = true;
+    let page = 1;
+    
+    console.log(`🔄 Inizio scaricamento ordini ARCHIVIATI Shopify (limite: ${limit})`);
+
+    while (keepGoing) {
+      console.log(`📄 Scaricamento pagina ${page} ordini archiviati...`);
+      
+      // Prepara il body della richiesta per ordini archiviati
+      const requestBody = {
+        shopDomain: credentials.shopDomain,
+        accessToken: credentials.accessToken,
+        apiVersion: credentials.apiVersion,
+        testType: 'archived_orders',
+        limit: limit
+      };
+      
+      if (pageInfo) {
+        requestBody.pageInfo = pageInfo;
+      }
+      // Fallback: aggiungi lastOrderId per paginazione alternativa
+      if (allOrders.length > 0) {
+        const lastOrder = allOrders[allOrders.length - 1];
+        if (lastOrder && lastOrder.id) {
+          requestBody.lastOrderId = lastOrder.id;
+          console.log(`🔍 DEBUG - Aggiunto lastOrderId come fallback: ${lastOrder.id}`);
+        }
+      }
+      
+      console.log(`🔍 DEBUG - Request body per ordini archiviati:`, JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch('/.netlify/functions/shopify-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Errore API Shopify ordini archiviati: ${errorData.error || response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.data.orders && data.data.orders.length > 0) {
+        const existingIds = new Set(allOrders.map(o => o.id));
+        const newOrders = data.data.orders.filter(order => !existingIds.has(order.id));
+        allOrders = allOrders.concat(newOrders);
+        
+        if (onProgress) onProgress(allOrders.length, page);
+        console.log(`[SYNC ARCHIVIATI] Scaricati ${allOrders.length} ordini archiviati totali dopo pagina ${page}`);
+        console.log(`📊 Ordini archiviati in questa pagina: ${data.data.orders.length}/${limit}`);
+        console.log(`📈 Totale ordini archiviati scaricati finora: ${allOrders.length}`);
+        console.log(`🔍 Pagination info:`, data.data.paginationInfo);
+
+        if (data.data.orders.length < limit) {
+          console.log(`✅ Ultima pagina raggiunta (${data.data.orders.length} ordini < ${limit})`);
+          keepGoing = false;
+        } else {
+          const linkHeader = data.data.linkHeader;
+          console.log(`🔗 Link header ricevuto: ${linkHeader}`);
+          if (linkHeader && linkHeader.includes('rel="next"')) {
+            const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+            if (nextMatch) {
+              pageInfo = nextMatch[1];
+              console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
+              page++;
+            } else {
+              const altMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+              if (altMatch) {
+                const url = altMatch[0].match(/<([^>]+)>/)[1];
+                console.log(`🔗 URL estratto: ${url}`);
+                try {
+                  const urlObj = new URL(url);
+                  pageInfo = urlObj.searchParams.get('page_info');
+                  if (pageInfo) {
+                    console.log(`📄 PageInfo estratto dall'URL: ${pageInfo}`);
+                    page++;
+                  } else {
+                    console.log('⚠️ Nessun pageInfo trovato nell\'URL, uso fallback since_id');
+                    // Fallback: usa since_id per la prossima pagina
+                    if (data.data.orders.length > 0) {
+                      const lastOrder = data.data.orders[lastOrder.length - 1];
+                      pageInfo = `fallback_${lastOrder.id}`;
+                      console.log(`🔧 Fallback pageInfo creato: ${pageInfo}`);
+                      page++;
+                    } else {
+                      keepGoing = false;
+                    }
+                  }
+                } catch (urlError) {
+                  console.error('❌ Errore nel parsing URL:', urlError);
+                  // Fallback: usa since_id per la prossima pagina
+                  if (data.data.orders.length > 0) {
+                    const lastOrder = data.data.orders[lastOrder.length - 1];
+                    pageInfo = `fallback_${lastOrder.id}`;
+                    console.log(`🔧 Fallback pageInfo creato dopo errore URL: ${pageInfo}`);
+                    page++;
+                  } else {
+                    keepGoing = false;
+                  }
+                }
+              } else {
+                console.log('⚠️ Nessun pattern di link trovato, uso fallback since_id');
+                // Fallback: usa since_id per la prossima pagina
+                if (data.data.orders.length > 0) {
+                  const lastOrder = data.data.orders[lastOrder.length - 1];
+                  pageInfo = `fallback_${lastOrder.id}`;
+                  console.log(`🔧 Fallback pageInfo creato dopo pattern non trovato: ${pageInfo}`);
+                  page++;
+                } else {
+                  keepGoing = false;
+                }
+              }
+            }
+          } else {
+            console.log('⚠️ Nessun link header o link "next" trovato');
+            // Fallback: prova a continuare con since_id
+            if (data.data.orders.length > 0 && data.data.orders.length === limit) {
+              console.log('🔧 Tentativo di continuare con fallback since_id...');
+              const lastOrder = data.data.orders[lastOrder.length - 1];
+              pageInfo = `fallback_${lastOrder.id}`;
+              console.log(`🔧 Fallback pageInfo creato: ${pageInfo}`);
+              page++;
+            } else {
+              console.log('✅ Nessuna prossima pagina disponibile');
+              console.log(`📊 Motivo: ordini in questa pagina (${data.data.orders.length}) < limite richiesto (${limit})`);
+              console.log(`🔍 Questo potrebbe significare che abbiamo raggiunto tutti gli ordini archiviati disponibili`);
+              keepGoing = false;
+            }
+          }
+        }
+      } else {
+        console.log(`⚠️ Pagina ${page} non ha ordini archiviati o errore`);
+        if (data.error) {
+          console.error('❌ Errore dalla funzione:', data.error);
+        }
+        keepGoing = false;
+      }
+      
+      // Limite di sicurezza per evitare loop infiniti
+      if (page > 200) {
+        console.log('⚠️ Raggiunto limite massimo di pagine (200) - potrebbe esserci un problema di paginazione');
+        console.log(`🔍 Ordini archiviati totali scaricati: ${allOrders.length}`);
+        console.log(`🔍 Limite richiesto: ${limit}`);
+        keepGoing = false;
+      }
+      
+      // Pausa intelligente per evitare rate limit
+      if (keepGoing) {
+        const pauseTime = page === 1 ? 300 : 500;
+        console.log(`⏳ Pausa di ${pauseTime}ms prima della prossima richiesta...`);
+        await new Promise(resolve => setTimeout(resolve, pauseTime));
+      }
+    }
+    console.log(`🎉 Scaricamento ordini archiviati completato! Totale ordini: ${allOrders.length}`);
+    console.log(`📊 Limite richiesto: ${limit}`);
+    console.log(`📈 Pagine processate: ${page}`);
+    
+    return allOrders;
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Errore di connessione alle Netlify Functions. Verifica la connessione internet.');
+    }
+    throw error;
+  }
+};
+
 // Funzione per convertire un ordine Shopify nel formato dell'app
 export const convertShopifyOrder = (shopifyOrder) => {
   // Calcola il costo di spedizione dai shipping_lines

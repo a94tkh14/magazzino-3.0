@@ -81,12 +81,13 @@ exports.handler = async (event, context) => {
       case 'products':
         apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=10`;
         break;
-      case 'orders':
-        try {
-          console.log(`🔍 DEBUG - Inizio gestione orders...`);
-          
-          // Estrai tutti i parametri dal body già parsato
-          ({ limit = 50, status = 'open', pageInfo, daysBack } = body);
+              case 'orders':
+        case 'archived_orders':
+          try {
+            console.log(`🔍 DEBUG - Inizio gestione ${testType}...`);
+            
+            // Estrai tutti i parametri dal body già parsato
+            ({ limit = 50, status = 'open', pageInfo, daysBack } = body);
           
           console.log(`🔍 DEBUG - Body ricevuto:`, JSON.stringify(body, null, 2));
           console.log(`🔍 DEBUG - Parametri estratti:`, { limit, status, pageInfo, daysBack });
@@ -109,8 +110,16 @@ exports.handler = async (event, context) => {
           console.log(`🔍 DEBUG - Validazione parametri completata`);
           
           // Costruisci URL base SEMPLIFICATO - solo parametri essenziali
-          let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
-          console.log(`🔍 DEBUG - URL base: ${ordersUrl}`);
+          let ordersUrl;
+          
+          if (testType === 'archived_orders') {
+            // Per ordini archiviati, usa un approccio diverso
+            ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
+            console.log(`🔍 DEBUG - URL base per ordini archiviati: ${ordersUrl}`);
+          } else {
+            ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
+            console.log(`🔍 DEBUG - URL base per ordini normali: ${ordersUrl}`);
+          }
           
           // Aggiungi SOLO il limite per ora - rimuoviamo altri parametri che potrebbero causare problemi
           if (limit && limit > 0) {
@@ -129,6 +138,13 @@ exports.handler = async (event, context) => {
             // Includi tutti gli stati possibili per ottenere anche ordini archiviati
             ordersUrl += ordersUrl.includes('?') ? '&status=any' : '?status=any';
             console.log(`🔍 DEBUG - Aggiunto status=any per includere ordini archiviati`);
+          }
+          
+          // Per ordini archiviati, aggiungi parametri specifici
+          if (testType === 'archived_orders') {
+            // Prova a includere ordini archiviati con parametri specifici
+            ordersUrl += ordersUrl.includes('?') ? '&status=closed&fulfillment_status=shipped' : '?status=closed&fulfillment_status=shipped';
+            console.log(`🔍 DEBUG - Aggiunto parametri specifici per ordini archiviati`);
           }
 
           // Aggiungi page_info se presente
@@ -197,7 +213,7 @@ exports.handler = async (event, context) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ success: false, error: 'Tipo di test non valido. Usa: shop, products, orders' })
+          body: JSON.stringify({ success: false, error: 'Tipo di test non valido. Usa: shop, products, orders, archived_orders' })
         };
     }
 
