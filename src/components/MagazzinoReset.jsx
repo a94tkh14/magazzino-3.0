@@ -20,7 +20,8 @@ const MagazzinoReset = () => {
       return;
     }
 
-    if (password !== 'cancella') {
+    // Verifica password
+    if (password.toLowerCase() !== 'cancella') {
       alert('Password errata! Devi scrivere "cancella" per confermare.');
       setPassword('');
       return;
@@ -70,11 +71,12 @@ const MagazzinoReset = () => {
             <p className="font-medium">⚠️ Attenzione!</p>
             <p>Questa azione cancellerà <strong>TUTTI</strong> i prodotti dal magazzino in modo permanente.</p>
             <p className="mt-2">I dati verranno rimossi sia da Firebase che dal localStorage.</p>
+            <p className="mt-2 font-semibold">Questa operazione richiede una doppia conferma per sicurezza.</p>
           </div>
         </div>
       </div>
 
-      {!showConfirm && !showPassword && !result && (
+      {!showConfirm && !result && (
         <button
           onClick={handleReset}
           className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
@@ -88,7 +90,7 @@ const MagazzinoReset = () => {
         <div className="space-y-3">
           <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
             <p className="text-sm text-yellow-800 font-medium">
-              <strong>Prima Conferma:</strong> Sei sicuro di voler cancellare TUTTI i prodotti? Questa azione non può essere annullata.
+              Prima conferma: Sei sicuro di voler cancellare TUTTI i prodotti? Questa azione non può essere annullata.
             </p>
           </div>
           
@@ -115,52 +117,49 @@ const MagazzinoReset = () => {
       {showPassword && (
         <div className="space-y-3">
           <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-            <p className="text-sm text-orange-800 font-medium">
-              <strong>Seconda Conferma:</strong> Scrivi "cancella" per confermare definitivamente il reset.
-            </p>
+            <div className="flex items-center space-x-2 mb-3">
+              <Lock className="h-5 w-5 text-orange-600" />
+              <p className="text-sm text-orange-800 font-medium">
+                Seconda conferma: Scrivi "cancella" per confermare definitivamente
+              </p>
+            </div>
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Scrivi 'cancella'"
+              className="w-full px-3 py-2 border border-orange-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              autoFocus
+            />
           </div>
           
-          <div className="space-y-3">
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Scrivi 'cancella' per confermare"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                autoFocus
-              />
-            </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={handleReset}
+              disabled={isResetting}
+              className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+            >
+              {isResetting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Resettando...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  <span>Conferma Definitiva</span>
+                </>
+              )}
+            </button>
             
-            <div className="flex space-x-3">
-              <button
-                onClick={handleReset}
-                disabled={isResetting}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
-              >
-                {isResetting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Resettando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4" />
-                    <span>Conferma Definitiva</span>
-                  </>
-                )}
-              </button>
-              
-              <button
-                onClick={cancelReset}
-                disabled={isResetting}
-                className="flex-1 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
-              >
-                <X className="h-4 w-4" />
-                <span>Annulla</span>
-              </button>
-            </div>
+            <button
+              onClick={cancelReset}
+              disabled={isResetting}
+              className="flex-1 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+            >
+              <X className="h-4 w-4" />
+              <span>Annulla</span>
+            </button>
           </div>
         </div>
       )}
