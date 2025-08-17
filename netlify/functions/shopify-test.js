@@ -127,24 +127,12 @@ exports.handler = async (event, context) => {
             console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
-          // Aggiungi status solo se specificato e valido E NON per ordini archiviati
-          if (status && status !== 'any' && ['open', 'closed', 'cancelled', 'pending'].includes(status) && testType !== 'archived_orders') {
-            ordersUrl += ordersUrl.includes('?') ? `&status=${status}` : `?status=${status}`;
-            console.log(`🔍 DEBUG - Dopo aggiunta status: ${status}`);
-          }
+          // RIMUOVIAMO TUTTI I FILTRI DI STATUS per ottenere TUTTI gli ordini
+          console.log(`🔍 DEBUG - Nessun filtro di status applicato - endpoint base per massima compatibilità`);
           
-          // Per status='any', aggiungi parametri per includere ordini archiviati (solo se NON archived_orders)
-          if (status === 'any' && testType !== 'archived_orders') {
-            // Includi tutti gli stati possibili per ottenere anche ordini archiviati
-            ordersUrl += ordersUrl.includes('?') ? '&status=any' : '?status=any';
-            console.log(`🔍 DEBUG - Aggiunto status=any per includere ordini archiviati`);
-          }
-          
-          // Per ordini archiviati, aggiungi parametri specifici per includere ordini archiviati
+          // Per ordini archiviati, NON aggiungere NESSUN filtro
           if (testType === 'archived_orders') {
-            // Prova parametri specifici per ordini archiviati
-            ordersUrl += ordersUrl.includes('?') ? '&archived=true' : '?archived=true';
-            console.log(`🔍 DEBUG - Aggiunto archived=true per ordini archiviati`);
+            console.log(`🔍 DEBUG - Ordini archiviati: endpoint base senza filtri per includere TUTTI gli ordini`);
           }
 
           // Aggiungi page_info se presente

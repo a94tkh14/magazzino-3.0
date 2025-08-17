@@ -8,7 +8,7 @@ export const getShopifyCredentials = () => {
 };
 
 // Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
-export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress, daysBack = null) => {
+export const fetchShopifyOrders = async (limit = 250, onProgress, daysBack = null) => {
   try {
     const credentials = getShopifyCredentials();
     let allOrders = [];
@@ -16,7 +16,7 @@ export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress
     let keepGoing = true;
     let page = 1;
     
-    console.log(`🔄 Inizio scaricamento ordini Shopify (limite: ${limit}, status: ${status}, daysBack: ${daysBack})`);
+    console.log(`🔄 Inizio scaricamento TUTTI gli ordini Shopify (limite: ${limit}, daysBack: ${daysBack})`);
 
     while (keepGoing) {
       console.log(`📄 Scaricamento pagina ${page}...`);
@@ -30,10 +30,7 @@ export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress
         limit: limit
       };
       
-      // Aggiungi parametri opzionali solo se definiti
-      if (status && status !== 'any') {
-        requestBody.status = status;
-      }
+      // RIMUOVIAMO TUTTI I FILTRI DI STATUS per ottenere TUTTI gli ordini
       if (pageInfo) {
         requestBody.pageInfo = pageInfo;
       }
