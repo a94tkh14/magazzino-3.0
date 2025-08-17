@@ -3,6 +3,7 @@ import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
+import { getOrdersLimit } from '../config/shopify';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -107,7 +108,10 @@ const OrdiniPage = () => {
       // Se è la prima volta o forziamo tutto, scarica tutto. Altrimenti solo ultimi 7 giorni
       const daysBack = (isFirstSync || forceAll) ? null : 7;
       
-      const shopifyOrders = await fetchShopifyOrders(50, 'open', (count, page) => {
+      // Usa il limite appropriato in base al tipo di sincronizzazione
+      const ordersLimit = forceAll ? getOrdersLimit('max') : getOrdersLimit('incremental');
+      
+      const shopifyOrders = await fetchShopifyOrders(ordersLimit, 'open', (count, page) => {
         setProgress({ count, page, active: true });
       }, daysBack);
       

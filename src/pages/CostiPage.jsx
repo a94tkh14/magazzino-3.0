@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, Truck, TrendingUp, Upload, FileText, Calendar, Tag } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { loadMagazzino, saveMagazzino } from '../lib/firebase';
+import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
+import { safeToLowerCase, safeIncludes } from '../lib/utils';
+import { getOrdersLimit } from '../config/shopify';
+import { Download, Upload, Trash2, Edit, Plus, Search, Filter, TrendingUp, Calendar, DollarSign, FileText, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
-import { safeToLowerCase, safeIncludes } from '../lib/utils';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -194,14 +197,14 @@ const CostiPage = () => {
     const savedOrders = localStorage.getItem('shopify_orders');
     if (savedOrders) {
       const orders = JSON.parse(savedOrders);
-      setShopifyOrders(orders.slice(0, 50)); // Primi 50 ordini per performance
+      setShopifyOrders(orders.slice(0, getOrdersLimit('display'))); // Usa configurazione
     }
 
     // Carica ordini fornitori
     const savedSupplierOrders = localStorage.getItem('supplier_orders');
     if (savedSupplierOrders) {
       const orders = JSON.parse(savedSupplierOrders);
-      setSupplierOrders(orders.slice(0, 50));
+      setSupplierOrders(orders.slice(0, getOrdersLimit('display'))); // Usa configurazione
     }
   }, []);
 
