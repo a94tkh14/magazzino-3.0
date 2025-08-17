@@ -77,27 +77,40 @@ exports.handler = async (event, context) => {
         break;
       case 'orders':
         // Estrai tutti i parametri dal body già parsato
-        const { limit = 50, status = 'open', pageInfo, daysBack } = body;
+        const { limit = 25, status = 'open', pageInfo, daysBack } = body;
         
-        // Shopify accetta solo questi status: open, closed, cancelled, pending, any
-        // 'any' significa tutti gli status, ma dobbiamo gestirlo diversamente
-        let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=${limit}`;
+        // Costruisci URL base con solo i parametri essenziali
+        let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
         
-        // Aggiungi status solo se non è 'any'
-        if (status && status !== 'any') {
-          ordersUrl += `&status=${status}`;
+        // Aggiungi parametri uno alla volta per evitare conflitti
+        const params = new URLSearchParams();
+        
+        if (limit && limit > 0) {
+          params.append('limit', limit.toString());
+        }
+        
+        // Aggiungi status solo se specificato e valido
+        if (status && status !== 'any' && ['open', 'closed', 'cancelled', 'pending'].includes(status)) {
+          params.append('status', status);
         }
 
-        if (daysBack) {
+        if (daysBack && daysBack > 0) {
           const cutoffDate = new Date();
           cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-          ordersUrl += `&created_at_min=${cutoffDate.toISOString()}`;
+          params.append('created_at_min', cutoffDate.toISOString());
         }
 
         if (pageInfo) {
-          ordersUrl += `&page_info=${pageInfo}`;
+          params.append('page_info', pageInfo);
         }
         
+        // Costruisci URL finale
+        if (params.toString()) {
+          ordersUrl += `?${params.toString()}`;
+        }
+        
+        console.log(`🔄 Parametri ricevuti:`, { limit, status, pageInfo, daysBack });
+        console.log(`🔄 Parametri URL:`, params.toString());
         console.log(`🔄 Chiamata API Shopify: ${ordersUrl}`);
         apiUrl = ordersUrl;
         break;
@@ -116,10 +129,23 @@ exports.handler = async (event, context) => {
     });
 
     if (!response.ok) {
+      console.log(`❌ Errore Shopify API: ${response.status} ${response.statusText}`);
+      console.log(`🔗 URL chiamato: ${apiUrl}`);
+      console.log(`📊 Headers risposta:`, Object.fromEntries(response.headers.entries()));
+      
       if (response.status === 401) {
         throw new Error('Access token non valido o scaduto');
       } else if (response.status === 404) {
         throw new Error('Dominio shop non trovato');
+      } else if (response.status === 400) {
+        // Per errori 400, prova a leggere il body per capire il problema
+        try {
+          const errorBody = await response.text();
+          console.log(`📄 Body errore: ${errorBody}`);
+          throw new Error(`Errore API Shopify 400: ${errorBody}`);
+        } catch (readError) {
+          throw new Error(`Errore API Shopify: ${response.status} ${response.statusText}`);
+        }
       } else {
         throw new Error(`Errore API Shopify: ${response.status} ${response.statusText}`);
       }
