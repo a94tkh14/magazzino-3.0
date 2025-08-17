@@ -64,7 +64,7 @@ const OrdiniPage = () => {
       
       const newOrders = await fetchShopifyOrders(
         limit, 
-        'any', 
+        'open', // Usa 'open' invece di 'any' per ottenere tutti gli ordini
         (count, page) => {
           setProgress({ active: true, count, page });
         },

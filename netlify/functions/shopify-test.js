@@ -77,8 +77,16 @@ exports.handler = async (event, context) => {
         break;
       case 'orders':
         // Estrai tutti i parametri dal body già parsato
-        const { limit = 250, status = 'any', pageInfo, daysBack } = body;
-        let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=${limit}&status=${status}`;
+        const { limit = 250, status = 'open', pageInfo, daysBack } = body;
+        
+        // Shopify accetta solo questi status: open, closed, cancelled, pending, any
+        // 'any' significa tutti gli status, ma dobbiamo gestirlo diversamente
+        let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=${limit}`;
+        
+        // Aggiungi status solo se non è 'any'
+        if (status && status !== 'any') {
+          ordersUrl += `&status=${status}`;
+        }
 
         if (daysBack) {
           const cutoffDate = new Date();
