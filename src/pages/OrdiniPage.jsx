@@ -111,7 +111,7 @@ const OrdiniPage = () => {
       // Usa il limite appropriato in base al tipo di sincronizzazione
       const ordersLimit = forceAll ? getOrdersLimit('max') : getOrdersLimit('incremental');
       
-      const shopifyOrders = await fetchShopifyOrders(1000, 'any', (count, page) => {
+      const shopifyOrders = await fetchShopifyOrders(1000, (count, page) => {
         setProgress({ count, page, active: true });
       }, daysBack);
       
