@@ -87,10 +87,38 @@ const MagazzinoPage = () => {
     return 'text-green-600 font-semibold';
   };
 
-  const handleSaveEdit = async (sku) => {
+  const handleEditField = (sku, field, currentValue) => {
+    setEditingSku(sku);
+    setEditingField(field);
+    setEditingValue(currentValue || '');
+  };
+
+  const handleSaveEdit = async (sku, field, value) => {
     let updated;
-    if (editingField === 'quantita') {
-      const newQty = parseInt(editingValue);
+    if (field === 'nome') {
+      if (!value.trim()) return;
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
+        if (item.sku === sku) {
+          return { ...item, nome: value.trim() };
+        }
+        return item;
+      });
+    } else if (field === 'sku') {
+      if (!value.trim()) return;
+      // Verifica che il nuovo SKU non esista già
+      const existingSku = (Array.isArray(magazzinoData) ? magazzinoData : []).find(item => item.sku === value.trim() && item.sku !== sku);
+      if (existingSku) {
+        alert('SKU già esistente!');
+        return;
+      }
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
+        if (item.sku === sku) {
+          return { ...item, sku: value.trim() };
+        }
+        return item;
+      });
+    } else if (field === 'quantita') {
+      const newQty = parseInt(value);
       if (isNaN(newQty) || newQty < 0) return;
       updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
         if (item.sku === sku) {
@@ -98,8 +126,8 @@ const MagazzinoPage = () => {
         }
         return item;
       });
-    } else if (editingField === 'prezzo') {
-      let newPrezzo = editingValue.replace(',', '.');
+    } else if (field === 'prezzo') {
+      let newPrezzo = value.replace(',', '.');
       const parsed = parseFloat(newPrezzo);
       if (isNaN(parsed) || parsed < 0) return;
       updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
@@ -108,7 +136,30 @@ const MagazzinoPage = () => {
         }
         return item;
       });
+    } else if (field === 'anagrafica') {
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
+        if (item.sku === sku) {
+          return { ...item, anagrafica: value };
+        }
+        return item;
+      });
+    } else if (field === 'tipologia') {
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
+        if (item.sku === sku) {
+          return { ...item, tipologia: value };
+        }
+        return item;
+      });
+    } else if (field === 'marca') {
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
+        if (item.sku === sku) {
+          return { ...item, marca: value };
+        }
+        return item;
+      });
     }
+    
+    if (!updated) return;
     
     try {
       // Trova il prodotto modificato
@@ -127,6 +178,7 @@ const MagazzinoPage = () => {
           // Esci dalla modalità di modifica
           setEditingSku(null);
           setEditingField(null);
+          setEditingValue(''); // Clear value after saving
           
           // Mostra messaggio di successo temporaneo
           const successMessage = document.createElement('div');
@@ -512,10 +564,40 @@ const MagazzinoPage = () => {
                 <tbody>
                   {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="p-3 font-mono text-sm">{item.sku}</td>
-                      <td className="p-3 cursor-pointer hover:underline text-blue-600" onClick={() => navigate(`/magazzino/${item.sku}`)}>
-                        {item.nome}
-                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {editingSku === item.sku && editingField === 'nome' ? (
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onBlur={() => handleSaveEdit(item.sku, 'nome', editingValue)}
+                              onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'nome', editingValue)}
+                              className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <span onClick={() => handleEditField(item.sku, 'nome', item.nome)} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                              {item.nome}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {editingSku === item.sku && editingField === 'sku' ? (
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onBlur={() => handleSaveEdit(item.sku, 'sku', editingValue)}
+                              onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'sku', editingValue)}
+                              className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <span className="font-mono bg-gray-100 px-2 py-1 rounded text-xs">
+                              {item.sku}
+                            </span>
+                          )}
+                        </td>
                       <td className="p-3">
                         {editingSku === item.sku && editingField === 'quantita' ? (
                           <input
@@ -524,21 +606,14 @@ const MagazzinoPage = () => {
                             value={editingValue}
                             autoFocus
                             onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => { setEditingSku(null); setEditingField(null); }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') handleSaveEdit(item.sku);
-                              if (e.key === 'Escape') { setEditingSku(null); setEditingField(null); }
-                            }}
+                            onBlur={() => handleSaveEdit(item.sku, 'quantita', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'quantita', editingValue)}
                             className="w-20 border rounded px-2 py-1"
                           />
                         ) : (
                           <span
                             className="cursor-pointer flex items-center gap-2"
-                            onClick={() => {
-                              setEditingSku(item.sku);
-                              setEditingValue(item.quantita.toString());
-                              setEditingField('quantita');
-                            }}
+                            onClick={() => handleEditField(item.sku, 'quantita', item.quantita.toString())}
                           >
                             <span className={getQuantityColor(item.quantita)}>
                               {item.quantita}
@@ -556,21 +631,14 @@ const MagazzinoPage = () => {
                             value={editingValue}
                             autoFocus
                             onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => { setEditingSku(null); setEditingField(null); }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') handleSaveEdit(item.sku);
-                              if (e.key === 'Escape') { setEditingSku(null); setEditingField(null); }
-                            }}
+                            onBlur={() => handleSaveEdit(item.sku, 'prezzo', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'prezzo', editingValue)}
                             className="w-24 border rounded px-2 py-1"
                           />
                         ) : (
                           <span
                             className="cursor-pointer flex items-center gap-2"
-                            onClick={() => {
-                              setEditingSku(item.sku);
-                              setEditingValue(safeToFixed(item.prezzo, 2).replace('.', ','));
-                              setEditingField('prezzo');
-                            }}
+                            onClick={() => handleEditField(item.sku, 'prezzo', safeToFixed(item.prezzo, 2).replace('.', ','))}
                           >
                             {formatPrice(item.prezzo)}
                             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
