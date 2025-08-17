@@ -2,10 +2,14 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import Button from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Label } from '../components/ui/label';
 import MagazzinoReset from '../components/MagazzinoReset';
 import { 
   Settings, 
   Database, 
+  Cloud, 
+  Key, 
   Globe, 
   ShoppingCart,
   BarChart3,
@@ -42,8 +46,6 @@ export default function SettingsPage() {
     backupInterval: '24'
   });
 
-  const [activeTab, setActiveTab] = useState('integrations');
-
   const handleShopifySave = () => {
     localStorage.setItem('shopify_config', JSON.stringify(shopifyConfig));
     alert('Configurazione Shopify salvata!');
@@ -79,57 +81,27 @@ export default function SettingsPage() {
         <p className="text-gray-600">Gestisci le configurazioni dell'applicazione</p>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
-        <button
-          onClick={() => setActiveTab('integrations')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'integrations' 
-              ? 'bg-white text-gray-900 shadow-sm' 
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <Globe className="h-4 w-4 inline mr-2" />
-          Integrazioni
-        </button>
-        <button
-          onClick={() => setActiveTab('database')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'database' 
-              ? 'bg-white text-gray-900 shadow-sm' 
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <Database className="h-4 w-4 inline mr-2" />
-          Database
-        </button>
-        <button
-          onClick={() => setActiveTab('backup')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'backup' 
-              ? 'bg-white text-gray-900 shadow-sm' 
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <FileText className="h-4 w-4 inline mr-2" />
-          Backup
-        </button>
-        <button
-          onClick={() => setActiveTab('advanced')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'advanced' 
-              ? 'bg-white text-gray-900 shadow-sm' 
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <Settings className="h-4 w-4 inline mr-2" />
-          Avanzate
-        </button>
-      </div>
+      <Tabs defaultValue="integrations" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="integrations" className="flex items-center space-x-2">
+            <Globe className="h-4 w-4" />
+            <span>Integrazioni</span>
+          </TabsTrigger>
+          <TabsTrigger value="database" className="flex items-center space-x-2">
+            <Database className="h-4 w-4" />
+            <span>Database</span>
+          </TabsTrigger>
+          <TabsTrigger value="backup" className="flex items-center space-x-2">
+            <FileText className="h-4 w-4" />
+            <span>Backup</span>
+          </TabsTrigger>
+          <TabsTrigger value="advanced" className="flex items-center space-x-2">
+            <Settings className="h-4 w-4" />
+            <span>Avanzate</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Tab Content */}
-      {activeTab === 'integrations' && (
-        <div className="space-y-6">
+        <TabsContent value="integrations" className="space-y-6">
           {/* Configurazione Shopify */}
           <Card>
             <CardHeader>
@@ -144,9 +116,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="shopDomain" className="block text-sm font-medium text-gray-700 mb-1">
-                    Dominio Shop
-                  </label>
+                  <Label htmlFor="shopDomain">Dominio Shop</Label>
                   <Input
                     id="shopDomain"
                     placeholder="mio-shop.myshopify.com"
@@ -155,9 +125,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="accessToken" className="block text-sm font-medium text-gray-700 mb-1">
-                    Access Token
-                  </label>
+                  <Label htmlFor="accessToken">Access Token</Label>
                   <Input
                     id="accessToken"
                     type="password"
@@ -168,9 +136,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div>
-                <label htmlFor="apiVersion" className="block text-sm font-medium text-gray-700 mb-1">
-                  Versione API
-                </label>
+                <Label htmlFor="apiVersion">Versione API</Label>
                 <Input
                   id="apiVersion"
                   placeholder="2023-10"
@@ -199,9 +165,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">
-                    Client ID
-                  </label>
+                  <Label htmlFor="clientId">Client ID</Label>
                   <Input
                     id="clientId"
                     placeholder="123456789-..."
@@ -210,9 +174,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700 mb-1">
-                    Client Secret
-                  </label>
+                  <Label htmlFor="clientSecret">Client Secret</Label>
                   <Input
                     id="clientSecret"
                     type="password"
@@ -224,9 +186,7 @@ export default function SettingsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="refreshToken" className="block text-sm font-medium text-gray-700 mb-1">
-                    Refresh Token
-                  </label>
+                  <Label htmlFor="refreshToken">Refresh Token</Label>
                   <Input
                     id="refreshToken"
                     type="password"
@@ -236,9 +196,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="customerId" className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer ID
-                  </label>
+                  <Label htmlFor="customerId">Customer ID</Label>
                   <Input
                     id="customerId"
                     placeholder="123-456-7890"
@@ -268,9 +226,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="metaAccessToken" className="block text-sm font-medium text-gray-700 mb-1">
-                    Access Token
-                  </label>
+                  <Label htmlFor="metaAccessToken">Access Token</Label>
                   <Input
                     id="metaAccessToken"
                     type="password"
@@ -280,9 +236,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="pixelId" className="block text-sm font-medium text-gray-700 mb-1">
-                    Pixel ID
-                  </label>
+                  <Label htmlFor="pixelId">Pixel ID</Label>
                   <Input
                     id="pixelId"
                     placeholder="123456789"
@@ -297,11 +251,9 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
-        </div>
-      )}
+        </TabsContent>
 
-      {activeTab === 'database' && (
-        <div className="space-y-6">
+        <TabsContent value="database" className="space-y-6">
           {/* Configurazione Database */}
           <Card>
             <CardHeader>
@@ -322,9 +274,7 @@ export default function SettingsPage() {
                     checked={databaseConfig.backupEnabled}
                     onChange={(e) => setDatabaseConfig({...databaseConfig, backupEnabled: e.target.checked})}
                   />
-                  <label htmlFor="backupEnabled" className="text-sm font-medium text-gray-700">
-                    Abilita backup automatici
-                  </label>
+                  <Label htmlFor="backupEnabled">Abilita backup automatici</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
@@ -333,14 +283,10 @@ export default function SettingsPage() {
                     checked={databaseConfig.autoBackup}
                     onChange={(e) => setDatabaseConfig({...databaseConfig, autoBackup: e.target.checked})}
                   />
-                  <label htmlFor="autoBackup" className="text-sm font-medium text-gray-700">
-                    Backup automatico
-                  </label>
+                  <Label htmlFor="autoBackup">Backup automatico</Label>
                 </div>
                 <div>
-                  <label htmlFor="backupInterval" className="block text-sm font-medium text-gray-700 mb-1">
-                    Intervallo backup (ore)
-                  </label>
+                  <Label htmlFor="backupInterval">Intervallo backup (ore)</Label>
                   <Input
                     id="backupInterval"
                     type="number"
@@ -357,11 +303,9 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
-        </div>
-      )}
+        </TabsContent>
 
-      {activeTab === 'backup' && (
-        <div className="space-y-6">
+        <TabsContent value="backup" className="space-y-6">
           {/* Operazioni di Backup */}
           <Card>
             <CardHeader>
@@ -391,11 +335,9 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        </TabsContent>
 
-      {activeTab === 'advanced' && (
-        <div className="space-y-6">
+        <TabsContent value="advanced" className="space-y-6">
           {/* Impostazioni Avanzate */}
           <Card>
             <CardHeader>
@@ -428,8 +370,8 @@ export default function SettingsPage() {
 
           {/* Reset Completo Magazzino */}
           <MagazzinoReset />
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 } 
