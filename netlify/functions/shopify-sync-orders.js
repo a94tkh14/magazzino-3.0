@@ -311,6 +311,19 @@ exports.handler = async (event, context) => {
         }
       } else {
         console.log('⚠️ Nessun link header ricevuto da Shopify');
+        // Se non c'è link header, prova a creare una paginazione manuale
+        if (data.orders && data.orders.length === optimizedLimit) {
+          console.log('🔧 Tentativo di creare paginazione manuale...');
+          // Shopify potrebbe non inviare link header se non ci sono più pagine
+          // Ma se abbiamo esattamente optimizedLimit ordini, probabilmente ce ne sono altri
+          result.pagination = {
+            hasMore: true,
+            next: {
+              pageInfo: 'manual_pagination_suggested',
+              message: 'Link header non trovato, ma ordini = limit. Prova a chiamare di nuovo.'
+            }
+          };
+        }
       }
 
       // Aggiungi metadati utili
@@ -326,7 +339,10 @@ exports.handler = async (event, context) => {
         timestamp: new Date().toISOString(),
         functionTimeout: 30,
         functionMemory: 1024,
-        method: 'standard_pagination'
+        method: 'standard_pagination',
+        hasLinkHeader: !!linkHeader,
+        ordersCount: data.orders ? data.orders.length : 0,
+        isFullPage: data.orders && data.orders.length === optimizedLimit
       };
 
       console.log('🎉 Invio risposta finale');

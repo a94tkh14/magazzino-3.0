@@ -35,6 +35,7 @@ functions = "netlify/functions"
 [functions]
 
 [functions."*"]
+external_node_modules = ["node-fetch"]
 
 [[redirects]]
 from = "/*"

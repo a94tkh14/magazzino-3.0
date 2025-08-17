@@ -19,7 +19,9 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
     // Ottimizzazione: usa un limit più alto per ridurre il numero di chiamate
     const optimizedLimit = Math.min(limit, 250); // Shopify supporta fino a 250 per pagina
     
-    console.log(`🔄 Inizio scaricamento ordini Shopify (limite ottimizzato: ${optimizedLimit}, status: ${status}, daysBack: ${daysBack})`);
+    console.log(`🔄 Inizio scaricamento ordini Shopify`);
+    console.log(`📊 Parametri: limit=${limit}, optimizedLimit=${optimizedLimit}, status=${status}, daysBack=${daysBack}`);
+    console.log(`🔧 fulfillmentStatus=${fulfillmentStatus}, financialStatus=${financialStatus}`);
 
     // Se il limite è molto alto, prova prima il metodo di chunking
     if (limit > 1000) {
@@ -66,7 +68,11 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
     console.log('📄 Utilizzo metodo standard con paginazione...');
     
     while (keepGoing) {
-      console.log(`📄 Scaricamento pagina ${page}...`);
+      console.log(`\n📄 === PAGINA ${page} ===`);
+      console.log(`📄 pageInfo: ${pageInfo || 'null'}`);
+      console.log(`📄 keepGoing: ${keepGoing}`);
+      console.log(`📄 allOrders.length: ${allOrders.length}`);
+      console.log(`📄 limit richiesto: ${limit}`);
       
       // Chiamata tramite Netlify Functions - usa la nuova funzione dedicata
       const response = await fetch('/.netlify/functions/shopify-sync-orders', {
@@ -94,6 +100,12 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
       }
 
       const data = await response.json();
+      console.log(`📡 Risposta ricevuta:`, {
+        success: data.success,
+        ordersLength: data.orders?.length || 0,
+        pagination: data.pagination,
+        linkHeader: data.linkHeader
+      });
       
       if (data.success && data.orders && data.orders.length > 0) {
         const existingIds = new Set(allOrders.map(o => o.id));
@@ -117,10 +129,11 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
           // Usa la nuova struttura di paginazione
           if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
             pageInfo = data.pagination.next.pageInfo;
-            console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
+            console.log(`📄 Prossima pagina trovata: ${pageInfo.substring(0, 50)}...`);
             page++;
           } else {
-            console.log('✅ Nessuna prossima pagina trovata');
+            console.log('⚠️ Nessuna prossima pagina trovata - controlla pagination:', data.pagination);
+            console.log('⚠️ Link header:', data.linkHeader);
             keepGoing = false;
           }
         }
