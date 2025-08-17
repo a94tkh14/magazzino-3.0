@@ -119,9 +119,33 @@ exports.handler = async (event, context) => {
 
           // Aggiungi page_info se presente
           if (pageInfo) {
-            console.log(`🔍 DEBUG - Aggiungendo pageInfo: ${pageInfo}`);
-            ordersUrl += ordersUrl.includes('?') ? `&page_info=${pageInfo}` : `?page_info=${pageInfo}`;
-            console.log(`🔍 DEBUG - Dopo aggiunta pageInfo: ${ordersUrl}`);
+            try {
+              console.log(`🔍 DEBUG - Aggiungendo pageInfo: ${pageInfo}`);
+              
+              // Validazione del pageInfo
+              if (pageInfo.length > 1000) {
+                console.log(`⚠️ WARNING: pageInfo molto lungo (${pageInfo.length} caratteri), potrebbe causare problemi`);
+              }
+              
+              // Encoding sicuro del pageInfo
+              const encodedPageInfo = encodeURIComponent(pageInfo);
+              console.log(`🔍 DEBUG - pageInfo codificato: ${encodedPageInfo}`);
+              
+              ordersUrl += ordersUrl.includes('?') ? `&page_info=${encodedPageInfo}` : `?page_info=${encodedPageInfo}`;
+              console.log(`🔍 DEBUG - Dopo aggiunta pageInfo: ${ordersUrl}`);
+              
+            } catch (pageInfoError) {
+              console.error('❌ Errore nell\'aggiunta del pageInfo:', pageInfoError);
+              console.log(`⚠️ WARNING: pageInfo rimosso per evitare crash`);
+              // Continua senza pageInfo per evitare il crash
+            }
+          }
+          
+          // Fallback: se non abbiamo pageInfo, prova a usare since_id per la paginazione
+          if (!pageInfo && body.lastOrderId) {
+            console.log(`🔍 DEBUG - Usando fallback since_id: ${body.lastOrderId}`);
+            ordersUrl += ordersUrl.includes('?') ? `&since_id=${body.lastOrderId}` : `?since_id=${body.lastOrderId}`;
+            console.log(`🔍 DEBUG - Dopo aggiunta since_id: ${ordersUrl}`);
           }
           
           // Rimuoviamo temporaneamente daysBack per test

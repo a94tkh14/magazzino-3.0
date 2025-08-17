@@ -37,6 +37,14 @@ export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress
       if (pageInfo) {
         requestBody.pageInfo = pageInfo;
       }
+      // Fallback: aggiungi lastOrderId per paginazione alternativa
+      if (allOrders.length > 0) {
+        const lastOrder = allOrders[allOrders.length - 1];
+        if (lastOrder && lastOrder.id) {
+          requestBody.lastOrderId = lastOrder.id;
+          console.log(`🔍 DEBUG - Aggiunto lastOrderId come fallback: ${lastOrder.id}`);
+        }
+      }
       // Rimuoviamo temporaneamente daysBack per test
       // if (daysBack) {
       //   requestBody.daysBack = daysBack;
