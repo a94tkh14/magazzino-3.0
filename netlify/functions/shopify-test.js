@@ -90,9 +90,13 @@ exports.handler = async (event, context) => {
           console.log(`🔍 DEBUG - Tipo di pageInfo:`, typeof pageInfo);
           console.log(`🔍 DEBUG - Lunghezza pageInfo:`, pageInfo ? pageInfo.length : 'null');
           
-          // Validazione rigorosa dei parametri
-          if (limit && (limit < 1 || limit > 250)) {
-            throw new Error('Il limite deve essere tra 1 e 250');
+          // Validazione del limite - permette limiti più alti per gestire la paginazione
+          let actualLimit = limit;
+          if (limit && limit > 250) {
+            console.log(`🔍 DEBUG - Limite richiesto ${limit} > 250, uso 250 per pagina e gestisco paginazione`);
+            actualLimit = 250; // Shopify supporta max 250 per pagina
+          } else if (limit && (limit < 1 || limit > 250)) {
+            throw new Error('Il limite deve essere tra 1 e 250 per singola pagina');
           }
           
           if (status && !['open', 'closed', 'cancelled', 'pending', 'any'].includes(status)) {
@@ -107,7 +111,7 @@ exports.handler = async (event, context) => {
           
           // Aggiungi SOLO il limite per ora - rimuoviamo altri parametri che potrebbero causare problemi
           if (limit && limit > 0) {
-            ordersUrl += `?limit=${limit}`;
+            ordersUrl += `?limit=${actualLimit}`;
             console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
@@ -245,6 +249,18 @@ exports.handler = async (event, context) => {
       } else {
         console.log(`⚠️ Nessun link header ricevuto - potrebbe essere l'ultima pagina`);
       }
+      
+      // Aggiungi informazioni sulla paginazione
+      responseData.paginationInfo = {
+        requestedLimit: limit,
+        actualLimit: actualLimit,
+        hasMorePages: linkHeader ? linkHeader.includes('rel="next"') : false,
+        currentPageSize: responseData.orders ? responseData.orders.length : 0,
+        needsPagination: limit > 250,
+        message: limit > 250 ? 
+          `Richiesti ${limit} ordini, caricati ${actualLimit} per pagina. Usa paginazione per ottenere tutti gli ordini.` :
+          `Caricati ${actualLimit} ordini come richiesto.`
+      };
     }
 
     // Restituisci la risposta
