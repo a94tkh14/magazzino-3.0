@@ -4,6 +4,7 @@ import GoogleAdsAPI from '../lib/googleAdsAPI';
 import MetaAPI from '../lib/metaAPI';
 import FirebaseMagazzinoTest from '../components/FirebaseMagazzinoTest';
 import SafeNumberTest from '../components/SafeNumberTest';
+import SafeStringTest from '../components/SafeStringTest';
 
 export default function SettingsPage() {
   const [shop, setShop] = useState('');
@@ -633,6 +634,12 @@ export default function SettingsPage() {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold text-gray-900">Test Funzioni Sicure per Numeri</h2>
           <SafeNumberTest />
+        </div>
+
+        {/* Test Funzioni Sicure per Stringhe */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-gray-900">Test Funzioni Sicure per Stringhe</h2>
+          <SafeStringTest />
         </div>
       </div>
     </div>
