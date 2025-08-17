@@ -8,7 +8,7 @@ export const getShopifyCredentials = () => {
 };
 
 // Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
-export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress, daysBack = null) => {
+export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress, daysBack = null, fulfillmentStatus = null, financialStatus = null) => {
   try {
     const credentials = getShopifyCredentials();
     let allOrders = [];
@@ -21,108 +21,61 @@ export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress
     while (keepGoing) {
       console.log(`📄 Scaricamento pagina ${page}...`);
       
-      // Prepara il body della richiesta SEMPLIFICATO
-      const requestBody = {
-        shopDomain: credentials.shopDomain,
-        accessToken: credentials.accessToken,
-        apiVersion: credentials.apiVersion,
-        testType: 'orders',
-        limit: limit
-      };
-      
-      // Aggiungi parametri opzionali solo se definiti
-      if (status && status !== 'any') {
-        requestBody.status = status;
-      }
-      if (pageInfo) {
-        requestBody.pageInfo = pageInfo;
-      }
-      // Fallback: aggiungi lastOrderId per paginazione alternativa
-      if (allOrders.length > 0) {
-        const lastOrder = allOrders[allOrders.length - 1];
-        if (lastOrder && lastOrder.id) {
-          requestBody.lastOrderId = lastOrder.id;
-          console.log(`🔍 DEBUG - Aggiunto lastOrderId come fallback: ${lastOrder.id}`);
-        }
-      }
-      // Rimuoviamo temporaneamente daysBack per test
-      // if (daysBack) {
-      //   requestBody.daysBack = daysBack;
-      // }
-      
-      console.log(`🔍 DEBUG - Request body inviato:`, JSON.stringify(requestBody, null, 2));
-
-      const response = await fetch('/.netlify/functions/shopify-test', {
+      // Chiamata tramite Netlify Functions - usa la nuova funzione dedicata
+      const response = await fetch('/.netlify/functions/shopify-sync-orders', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({
+          shopDomain: credentials.shopDomain,
+          accessToken: credentials.accessToken,
+          apiVersion: credentials.apiVersion || '2024-01',
+          limit: limit,
+          status: status,
+          pageInfo: pageInfo,
+          daysBack: daysBack,
+          fulfillmentStatus: fulfillmentStatus,
+          financialStatus: financialStatus
+        })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Errore API Shopify: ${errorData.error || response.statusText}`);
+        const errorData = await response.text();
+        throw new Error(`Errore API Shopify: ${errorData || response.statusText}`);
       }
 
       const data = await response.json();
       
-      if (data.success && data.data.orders && data.data.orders.length > 0) {
+      if (data.success && data.orders && data.orders.length > 0) {
         const existingIds = new Set(allOrders.map(o => o.id));
-        const newOrders = data.data.orders.filter(order => !existingIds.has(order.id));
+        const newOrders = data.orders.filter(order => !existingIds.has(order.id));
         allOrders = allOrders.concat(newOrders);
         
         if (onProgress) onProgress(allOrders.length, page);
         console.log(`[SYNC] Scaricati ${allOrders.length} ordini totali dopo pagina ${page}`);
-        console.log(`📊 Ordini in questa pagina: ${data.data.orders.length}/${limit}`);
+        console.log(`📊 Ordini in questa pagina: ${data.orders.length}/${limit}`);
         console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
 
-        if (data.data.orders.length < limit) {
-          console.log(`✅ Ultima pagina raggiunta (${data.data.orders.length} ordini < ${limit})`);
+        if (data.orders.length < limit) {
+          console.log(`✅ Ultima pagina raggiunta (${data.orders.length} ordini < ${limit})`);
           keepGoing = false;
         } else {
-          const linkHeader = data.data.linkHeader;
-          console.log(`🔗 Link header ricevuto: ${linkHeader}`);
-          if (linkHeader && linkHeader.includes('rel="next"')) {
-            const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>;\s*rel="next"/);
-            if (nextMatch) {
-              pageInfo = nextMatch[1];
-              console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
-              page++;
-            } else {
-              const altMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-              if (altMatch) {
-                const url = altMatch[0].match(/<([^>]+)>/)[1];
-                console.log(`🔗 URL estratto: ${url}`);
-                try {
-                  const urlObj = new URL(url);
-                  pageInfo = urlObj.searchParams.get('page_info');
-                  if (pageInfo) {
-                    console.log(`📄 Prossima pagina estratta da URL: ${pageInfo}`);
-                    page++;
-                  } else {
-                    console.log('⚠️ Link header trovato ma page_info non estraibile');
-                    console.log('🔍 Parametri URL:', Array.from(urlObj.searchParams.entries()));
-                    keepGoing = false;
-                  }
-                } catch (urlError) {
-                  console.log('❌ Errore nel parsing URL:', urlError);
-                  keepGoing = false;
-                }
-              } else {
-                console.log('⚠️ Link header trovato ma formato non riconosciuto');
-                console.log('🔍 Pattern non trovato in:', linkHeader);
-                keepGoing = false;
-              }
-            }
+          // Usa la nuova struttura di paginazione
+          if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
+            pageInfo = data.pagination.next.pageInfo;
+            console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
+            page++;
           } else {
-            console.log('✅ Nessun link per la prossima pagina trovato');
-            console.log('🔍 Link header completo:', linkHeader);
+            console.log('✅ Nessuna prossima pagina disponibile');
             keepGoing = false;
           }
         }
       } else {
         console.log(`⚠️ Pagina ${page} non ha ordini o errore`);
+        if (data.error) {
+          console.error('❌ Errore dalla funzione:', data.error);
+        }
         keepGoing = false;
       }
       
@@ -143,7 +96,7 @@ export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress
     return allOrders;
   } catch (error) {
     if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      throw new Error('Errore di connessione alle Netlify Functions. Verifica la connessione internet.');
+      throw new Error('Errore di connessione a Shopify. Verifica la connessione internet e le credenziali.');
     }
     throw error;
   }

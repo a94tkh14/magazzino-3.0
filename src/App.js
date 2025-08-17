@@ -16,6 +16,7 @@ import ContoEconomicoPage from './pages/ContoEconomicoPage';
 import MagazzinoDetailPage from './pages/MagazzinoDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import MarketingPage from './pages/MarketingPage';
+import ShopifyOrdersPage from './pages/ShopifyOrdersPage';
 import './index.css';
 
 // Debug Component
@@ -129,6 +130,7 @@ function App() {
                 <Route path="/magazzino" element={<MagazzinoPage />} />
                 <Route path="/ordini" element={<OrdiniPage />} />
                 <Route path="/ordini/:orderId" element={<OrderDetailPage />} />
+                <Route path="/shopify-orders" element={<ShopifyOrdersPage />} />
                 <Route path="/ordini-fornitori" element={<SupplierOrdersListPage />} />
                 <Route path="/ordini-fornitori/nuovo" element={<SupplierOrdersPage />} />
                 <Route path="/ordini-fornitori/:orderId" element={<SupplierOrderDetailPage />} />

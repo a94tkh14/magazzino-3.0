@@ -5,14 +5,12 @@ import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Label } from '../components/ui/label';
 import MagazzinoReset from '../components/MagazzinoReset';
-import ShopifyTest from '../components/ShopifyTest';
+import ShopifyConfig from '../components/ShopifyConfig';
+import ShopifyDebug from '../components/ShopifyDebug';
 import { 
   Settings, 
   Database, 
-  Cloud, 
-  Key, 
   Globe, 
-  ShoppingCart,
   BarChart3,
   FileText,
   Upload,
@@ -23,11 +21,6 @@ import {
 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const [shopifyConfig, setShopifyConfig] = useState({
-    shopDomain: '',
-    accessToken: '',
-    apiVersion: '2023-10'
-  });
 
   const [googleAdsConfig, setGoogleAdsConfig] = useState({
     clientId: '',
@@ -47,35 +40,11 @@ export default function SettingsPage() {
     backupInterval: '24'
   });
 
-  // Stato per tracciare le modifiche non salvate
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState({
-    shopify: false,
-    googleAds: false,
-    meta: false,
-    database: false
-  });
 
-  // Funzione per aggiornare lo stato delle modifiche
-  const updateChangeStatus = (configType, hasChanges) => {
-    setHasUnsavedChanges(prev => ({
-      ...prev,
-      [configType]: hasChanges
-    }));
-  };
 
   // Carica le configurazioni salvate quando la pagina si apre
   useEffect(() => {
-    // Carica configurazione Shopify
-    const savedShopify = localStorage.getItem('shopify_config');
-    if (savedShopify) {
-      try {
-        const parsed = JSON.parse(savedShopify);
-        setShopifyConfig(parsed);
-        console.log('✅ Configurazione Shopify caricata:', parsed);
-      } catch (error) {
-        console.error('❌ Errore nel caricare configurazione Shopify:', error);
-      }
-    }
+
 
     // Carica configurazione Google Ads
     const savedGoogleAds = localStorage.getItem('google_ads_config');
@@ -114,47 +83,29 @@ export default function SettingsPage() {
     }
   }, []);
 
-  const handleShopifySave = () => {
-    localStorage.setItem('shopify_config', JSON.stringify(shopifyConfig));
-    updateChangeStatus('shopify', false);
-    console.log('💾 Configurazione Shopify salvata:', shopifyConfig);
-    alert('✅ Configurazione Shopify salvata con successo!');
-  };
+  
 
   const handleGoogleAdsSave = () => {
     localStorage.setItem('google_ads_config', JSON.stringify(googleAdsConfig));
-    updateChangeStatus('googleAds', false);
     console.log('💾 Configurazione Google Ads salvata:', googleAdsConfig);
-    alert('✅ Configurazione Google Ads salvata con successo!');
+    window.alert('✅ Configurazione Google Ads salvata con successo!');
   };
 
   const handleMetaSave = () => {
     localStorage.setItem('meta_config', JSON.stringify(metaConfig));
-    updateChangeStatus('meta', false);
     console.log('💾 Configurazione Meta salvata:', metaConfig);
-    alert('✅ Configurazione Meta salvata con successo!');
+    window.alert('✅ Configurazione Meta salvata con successo!');
   };
 
   const handleDatabaseSave = () => {
     localStorage.setItem('database_config', JSON.stringify(databaseConfig));
-    updateChangeStatus('database', false);
     console.log('💾 Configurazione Database salvata:', databaseConfig);
-    alert('✅ Configurazione Database salvata con successo!');
+    window.alert('✅ Configurazione Database salvata con successo!');
   };
 
   // Ricarica manualmente tutte le configurazioni
   const handleReloadConfigs = () => {
-    // Ricarica configurazione Shopify
-    const savedShopify = localStorage.getItem('shopify_config');
-    if (savedShopify) {
-      try {
-        const parsed = JSON.parse(savedShopify);
-        setShopifyConfig(parsed);
-        console.log('🔄 Configurazione Shopify ricaricata:', parsed);
-      } catch (error) {
-        console.error('❌ Errore nel ricaricare configurazione Shopify:', error);
-      }
-    }
+
 
     // Ricarica configurazione Google Ads
     const savedGoogleAds = localStorage.getItem('google_ads_config');
@@ -192,26 +143,21 @@ export default function SettingsPage() {
       }
     }
 
-    alert('🔄 Tutte le configurazioni sono state ricaricate!');
+    window.alert('🔄 Tutte le configurazioni sono state ricaricate!');
   };
 
   const handleBackup = () => {
-    alert('Backup avviato...');
+    window.alert('Backup avviato...');
   };
 
   const handleRestore = () => {
-    alert('Restore avviato...');
+    window.alert('Restore avviato...');
   };
 
   // Reset tutte le impostazioni ai valori predefiniti
   const handleResetSettings = () => {
-    if (confirm('⚠️ Sei sicuro di voler resettare tutte le impostazioni? Questa azione non può essere annullata.')) {
+    if (window.confirm('⚠️ Sei sicuro di voler resettare tutte le impostazioni? Questa azione non può essere annullata.')) {
       // Reset configurazione Shopify
-      setShopifyConfig({
-        shopDomain: '',
-        accessToken: '',
-        apiVersion: '2023-10'
-      });
       localStorage.removeItem('shopify_config');
 
       // Reset configurazione Google Ads
@@ -239,7 +185,7 @@ export default function SettingsPage() {
       localStorage.removeItem('database_config');
 
       console.log('🗑️ Tutte le impostazioni sono state resettate');
-      alert('🗑️ Tutte le impostazioni sono state resettate ai valori predefiniti!');
+      window.alert('🗑️ Tutte le impostazioni sono state resettate ai valori predefiniti!');
     }
   };
 
@@ -271,70 +217,10 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="integrations" className="space-y-6">
-          {/* Test Integrazione Shopify */}
-          <ShopifyTest />
+          <ShopifyConfig />
+          <ShopifyDebug />
 
-          {/* Configurazione Shopify */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <ShoppingCart className="h-5 w-5" />
-                <span>Configurazione Shopify</span>
-              </CardTitle>
-              <CardDescription>
-                Configura l'integrazione con Shopify per sincronizzare ordini e prodotti
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="shopDomain">Dominio Shop</Label>
-                  <Input
-                    id="shopDomain"
-                    placeholder="mio-shop.myshopify.com"
-                    value={shopifyConfig.shopDomain}
-                    onChange={(e) => {
-                      setShopifyConfig({...shopifyConfig, shopDomain: e.target.value});
-                      updateChangeStatus('shopify', true);
-                    }}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="accessToken">Access Token</Label>
-                  <Input
-                    id="accessToken"
-                    type="password"
-                    placeholder="shpat_..."
-                    value={shopifyConfig.accessToken}
-                    onChange={(e) => {
-                      setShopifyConfig({...shopifyConfig, accessToken: e.target.value});
-                      updateChangeStatus('shopify', true);
-                    }}
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="apiVersion">Versione API</Label>
-                <Input
-                  id="apiVersion"
-                  placeholder="2023-10"
-                  value={shopifyConfig.apiVersion}
-                  onChange={(e) => {
-                    setShopifyConfig({...shopifyConfig, apiVersion: e.target.value});
-                    updateChangeStatus('shopify', true);
-                  }}
-                />
-              </div>
-              <Button 
-                onClick={handleShopifySave} 
-                className={`w-full ${hasUnsavedChanges.shopify ? 'bg-orange-600 hover:bg-orange-700' : ''}`}
-                disabled={!hasUnsavedChanges.shopify}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {hasUnsavedChanges.shopify ? '⚠️ Salva Modifiche Shopify' : '✅ Configurazione Salvata'}
-              </Button>
-            </CardContent>
-          </Card>
+
 
           {/* Configurazione Google Ads */}
           <Card>

@@ -87,6 +87,12 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
       path: '/ordini'
     },
     { 
+      key: 'shopify-orders',
+      icon: ShoppingCart, 
+      label: 'Ordini Shopify',
+      path: '/shopify-orders'
+    },
+    { 
       key: 'ordini-fornitori',
       icon: Truck, 
       label: 'Ordini Fornitori',
