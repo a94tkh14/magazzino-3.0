@@ -79,6 +79,9 @@ exports.handler = async (event, context) => {
         // Estrai tutti i parametri dal body già parsato
         const { limit = 50, status = 'open', pageInfo, daysBack } = body;
         
+        console.log(`🔍 DEBUG - Body ricevuto:`, JSON.stringify(body, null, 2));
+        console.log(`🔍 DEBUG - Parametri estratti:`, { limit, status, pageInfo, daysBack });
+        
         // Validazione rigorosa dei parametri
         if (limit && (limit < 1 || limit > 250)) {
           throw new Error('Il limite deve essere tra 1 e 250');
@@ -88,39 +91,33 @@ exports.handler = async (event, context) => {
           throw new Error('Status non valido. Usa: open, closed, cancelled, pending, any');
         }
         
-        // Costruisci URL base con solo i parametri essenziali
+        // Costruisci URL base SEMPLIFICATO - solo parametri essenziali
         let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
         
-        // Aggiungi parametri uno alla volta per evitare conflitti
-        const params = new URLSearchParams();
-        
+        // Aggiungi SOLO il limite per ora - rimuoviamo altri parametri che potrebbero causare problemi
         if (limit && limit > 0) {
-          params.append('limit', limit.toString());
+          ordersUrl += `?limit=${limit}`;
         }
         
         // Aggiungi status solo se specificato e valido
         if (status && status !== 'any' && ['open', 'closed', 'cancelled', 'pending'].includes(status)) {
-          params.append('status', status);
+          ordersUrl += ordersUrl.includes('?') ? `&status=${status}` : `?status=${status}`;
         }
 
-        if (daysBack && daysBack > 0) {
-          const cutoffDate = new Date();
-          cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-          params.append('created_at_min', cutoffDate.toISOString());
-        }
-
+        // Aggiungi page_info se presente
         if (pageInfo) {
-          params.append('page_info', pageInfo);
+          ordersUrl += ordersUrl.includes('?') ? `&page_info=${pageInfo}` : `?page_info=${pageInfo}`;
         }
         
-        // Costruisci URL finale
-        if (params.toString()) {
-          ordersUrl += `?${params.toString()}`;
-        }
+        // Rimuoviamo temporaneamente daysBack per test
+        // if (daysBack && daysBack > 0) {
+        //   const cutoffDate = new Date();
+        //   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+        //   ordersUrl += ordersUrl.includes('?') ? `&created_at_min=${cutoffDate.toISOString()}` : `?created_at_min=${cutoffDate.toISOString()}`;
+        // }
         
-        console.log(`🔄 Parametri ricevuti:`, { limit, status, pageInfo, daysBack });
-        console.log(`🔄 Parametri URL:`, params.toString());
-        console.log(`🔄 Chiamata API Shopify: ${ordersUrl}`);
+        console.log(`🔍 DEBUG - URL costruito: ${ordersUrl}`);
+        console.log(`🔍 DEBUG - Parametri finali:`, { limit, status, pageInfo, daysBack });
         apiUrl = ordersUrl;
         break;
       default:
@@ -150,8 +147,20 @@ exports.handler = async (event, context) => {
         // Per errori 400, prova a leggere il body per capire il problema
         try {
           const errorBody = await response.text();
-          console.log(`📄 Body errore: ${errorBody}`);
-          throw new Error(`Errore API Shopify 400: ${errorBody}`);
+          console.log(`📄 Body errore 400: ${errorBody}`);
+          
+          // Prova a parsare come JSON per errori più dettagliati
+          try {
+            const errorJson = JSON.parse(errorBody);
+            console.log(`🔍 Errore JSON:`, errorJson);
+            if (errorJson.errors) {
+              throw new Error(`Errore API Shopify 400: ${JSON.stringify(errorJson.errors)}`);
+            } else {
+              throw new Error(`Errore API Shopify 400: ${errorBody}`);
+            }
+          } catch (parseError) {
+            throw new Error(`Errore API Shopify 400: ${errorBody}`);
+          }
         } catch (readError) {
           throw new Error(`Errore API Shopify: ${response.status} ${response.statusText}`);
         }
