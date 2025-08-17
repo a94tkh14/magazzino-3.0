@@ -132,17 +132,17 @@ exports.handler = async (event, context) => {
             console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
-          // Gestiamo i filtri di status in base al tipo di ordini
-          if (testType === 'open_orders') {
-            // Per ordini aperti, aggiungi status=open
-            ordersUrl += ordersUrl.includes('?') ? '&status=open' : '?status=open';
-            console.log(`🔍 DEBUG - Aggiunto status=open per ordini aperti`);
-          } else if (testType === 'archived_orders') {
-            // Per ordini archiviati, NON aggiungere NESSUN filtro
-            console.log(`🔍 DEBUG - Ordini archiviati: endpoint base senza filtri per includere TUTTI gli ordini`);
-          } else {
-            // Per ordini normali, nessun filtro
-            console.log(`🔍 DEBUG - Ordini normali: endpoint base senza filtri`);
+          // Aggiungi status solo se specificato e valido
+          if (status && status !== 'any' && ['open', 'closed', 'cancelled', 'pending'].includes(status)) {
+            ordersUrl += ordersUrl.includes('?') ? `&status=${status}` : `?status=${status}`;
+            console.log(`🔍 DEBUG - Dopo aggiunta status: ${status}`);
+          }
+          
+          // Per status='any', aggiungi parametri per includere ordini archiviati
+          if (status === 'any') {
+            // Includi tutti gli stati possibili per ottenere anche ordini archiviati
+            ordersUrl += ordersUrl.includes('?') ? '&status=any' : '?status=any';
+            console.log(`🔍 DEBUG - Aggiunto status=any per includere ordini archiviati`);
           }
 
           // Aggiungi page_info se presente
