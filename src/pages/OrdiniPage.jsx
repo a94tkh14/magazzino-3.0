@@ -95,67 +95,61 @@ const OrdiniPage = () => {
     window.dispatchEvent(new CustomEvent('dashboard-update'));
   };
 
-  const handleSyncOrders = async (forceAll = false) => {
-    setIsLoading(true);
-    setError('');
-    setMessage('');
-    setProgress({ count: 0, page: 1, active: true });
+  const handleSyncOrders = async (fullSync = false) => {
     try {
-      // Determina se è la prima sincronizzazione o se forziamo tutto
-      const isFirstSync = orders.length === 0;
+      setIsLoading(true);
+      setError('');
+      setMessage('');
+      setProgress({ active: true, count: 0, page: 1 });
+
+      console.log(`🔄 Avvio sincronizzazione ${fullSync ? 'completa' : 'incrementale'}...`);
       
-      // Se è la prima volta o forziamo tutto, scarica tutto. Altrimenti solo ultimi 7 giorni
-      const daysBack = (isFirstSync || forceAll) ? null : 7;
+      // Per sincronizzazione completa, non usare limiti
+      // Per sincronizzazione incrementale, usa solo ultimi 7 giorni
+      const daysBack = fullSync ? null : 7;
+      const limit = fullSync ? 250 : 50; // Aumento il limite per sincronizzazioni complete
       
-      const shopifyOrders = await fetchShopifyOrders(50, 'any', (count, page) => {
-        setProgress({ count, page, active: true });
-      }, daysBack);
-      
-      const convertedOrders = (Array.isArray(shopifyOrders) ? shopifyOrders : []).map(convertShopifyOrder);
-      const existingOrders = orders;
-      
-      // Trova ordini nuovi (che non esistono già)
-      const newOrders = convertedOrders.filter(newOrder => 
-        !existingOrders.some(existing => existing.id === newOrder.id)
+      const newOrders = await fetchShopifyOrders(
+        limit, 
+        'any', 
+        (count, page) => {
+          setProgress({ active: true, count, page });
+        },
+        daysBack
       );
-      
-      // Trova ordini aggiornati (stesso ID ma dati diversi)
-      const updatedOrders = convertedOrders.filter(newOrder => {
-        const existing = existingOrders.find(existing => existing.id === newOrder.id);
-        return existing && JSON.stringify(existing) !== JSON.stringify(newOrder);
-      });
-      
-      // Combina ordini esistenti + nuovi + aggiornati
-      const allOrders = [
-        ...existingOrders.filter(existing => 
-          !convertedOrders.some(newOrder => newOrder.id === existing.id)
-        ), // Ordini esistenti non presenti nei nuovi
-        ...convertedOrders // Tutti i nuovi/aggiornati
-      ];
-      
-      saveOrders(allOrders);
-      
-      let message = '';
-      if (forceAll) {
-        message = `Sincronizzazione completa completata! Scaricati ${convertedOrders.length} ordini totali.`;
-      } else if (isFirstSync) {
-        message = `Prima sincronizzazione completata! Scaricati ${convertedOrders.length} ordini totali.`;
-      } else if (newOrders.length > 0 && updatedOrders.length > 0) {
-        message = `Sincronizzati ${newOrders.length} nuovi ordini e aggiornati ${updatedOrders.length} ordini esistenti!`;
-      } else if (newOrders.length > 0) {
-        message = `Sincronizzati ${newOrders.length} nuovi ordini da Shopify!`;
-      } else if (updatedOrders.length > 0) {
-        message = `Aggiornati ${updatedOrders.length} ordini esistenti!`;
+
+      if (newOrders && newOrders.length > 0) {
+        // Se è sincronizzazione completa, sostituisci tutti gli ordini
+        if (fullSync) {
+          await saveLargeData('shopify_orders', newOrders);
+          setOrders(newOrders);
+          setMessage(`✅ Sincronizzazione completa completata! Scaricati ${newOrders.length} ordini totali.`);
+        } else {
+          // Se è incrementale, unisci con quelli esistenti
+          const existingOrders = await loadLargeData('shopify_orders') || [];
+          const existingIds = new Set(existingOrders.map(o => o.id));
+          const uniqueNewOrders = newOrders.filter(order => !existingIds.has(order.id));
+          
+          if (uniqueNewOrders.length > 0) {
+            const allOrders = [...existingOrders, ...uniqueNewOrders];
+            await saveLargeData('shopify_orders', allOrders);
+            setOrders(allOrders);
+            setMessage(`✅ Sincronizzazione incrementale completata! Aggiunti ${uniqueNewOrders.length} nuovi ordini. Totale: ${allOrders.length}`);
+          } else {
+            setMessage('✅ Nessun nuovo ordine trovato. Tutto aggiornato!');
+          }
+        }
+        
+        console.log(`✅ Sincronizzazione completata: ${newOrders.length} ordini scaricati`);
       } else {
-        message = 'Nessun nuovo ordine trovato negli ultimi 7 giorni.';
+        setMessage('ℹ️ Nessun ordine trovato da Shopify');
       }
-      
-      setMessage(message);
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      console.error('❌ Errore durante la sincronizzazione:', error);
+      setError(`Errore durante la sincronizzazione: ${error.message}`);
     } finally {
       setIsLoading(false);
-      setProgress({ count: 0, page: 1, active: false });
+      setProgress({ active: false, count: 0, page: 1 });
     }
   };
 

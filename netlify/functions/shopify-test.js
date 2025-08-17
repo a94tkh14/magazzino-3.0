@@ -75,21 +75,20 @@ exports.handler = async (event, context) => {
         apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=5`;
         break;
       case 'orders':
-        const { limit = 50, status = 'any', pageInfo, daysBack } = JSON.parse(event.body);
+        const { limit = 250, status = 'any', pageInfo, daysBack } = JSON.parse(event.body);
         let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=${limit}&status=${status}`;
-        
-        // Aggiungi filtro per data se specificato
+
         if (daysBack) {
           const cutoffDate = new Date();
           cutoffDate.setDate(cutoffDate.getDate() - daysBack);
           ordersUrl += `&created_at_min=${cutoffDate.toISOString()}`;
         }
-        
-        // Aggiungi page_info per paginazione
+
         if (pageInfo) {
           ordersUrl += `&page_info=${pageInfo}`;
         }
         
+        console.log(`🔄 Chiamata API Shopify: ${ordersUrl}`);
         apiUrl = ordersUrl;
         break;
       default:
@@ -117,6 +116,16 @@ exports.handler = async (event, context) => {
     }
 
     const responseData = await response.json();
+    
+    // Per gli ordini, aggiungi il link header per la paginazione
+    if (testType === 'orders') {
+      const linkHeader = response.headers.get('link');
+      if (linkHeader) {
+        responseData.linkHeader = linkHeader;
+        console.log(`📄 Link header per paginazione: ${linkHeader}`);
+      }
+    }
+    
     console.log(`✅ Test Shopify riuscito per: ${testType}`);
 
     return {
@@ -140,4 +149,4 @@ exports.handler = async (event, context) => {
       })
     };
   }
-}; 
+};
