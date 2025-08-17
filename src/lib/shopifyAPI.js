@@ -7,7 +7,7 @@ export const getShopifyCredentials = () => {
   return JSON.parse(saved);
 };
 
-// Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
+// Funzione SEMPLICE per scaricare TUTTI gli ordini Shopify senza limiti
 export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress, daysBack = null) => {
   try {
     const credentials = getShopifyCredentials();
@@ -30,20 +30,11 @@ export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress
         limit: limit
       };
       
-      // Aggiungi parametri opzionali solo se definiti
-      if (status && status !== 'any') {
-        requestBody.status = status;
-      }
+      // NESSUN FILTRO - scarica TUTTO
+      console.log(`🚀 NESSUN FILTRO APPLICATO - scaricamento TUTTI gli ordini`);
+      
       if (pageInfo) {
         requestBody.pageInfo = pageInfo;
-      }
-      // Fallback: aggiungi lastOrderId per paginazione alternativa
-      if (allOrders.length > 0) {
-        const lastOrder = allOrders[allOrders.length - 1];
-        if (lastOrder && lastOrder.id) {
-          requestBody.lastOrderId = lastOrder.id;
-          console.log(`🔍 DEBUG - Aggiunto lastOrderId come fallback: ${lastOrder.id}`);
-        }
       }
       // Rimuoviamo temporaneamente daysBack per test
       // if (daysBack) {
@@ -163,12 +154,12 @@ export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress
         keepGoing = false;
       }
       
-      // Limite di sicurezza per evitare loop infiniti
-      if (page > 200) { // Aumentato a 200 per permettere più ordini
-        console.log('⚠️ Raggiunto limite massimo di pagine (200) - potrebbe esserci un problema di paginazione');
+      // NESSUN LIMITE DI PAGINE - scarica tutto
+      if (page > 1000) {
+        console.log('⚠️ Raggiunto limite massimo di pagine (1000) - continua a scaricare...');
         console.log(`🔍 Ordini totali scaricati: ${allOrders.length}`);
         console.log(`🔍 Limite richiesto: ${limit}`);
-        keepGoing = false;
+        // NON fermare - continua a scaricare
       }
       
       // Pausa intelligente per evitare rate limit

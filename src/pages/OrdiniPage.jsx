@@ -409,10 +409,10 @@ const OrdiniPage = () => {
           <Button 
             onClick={() => handleSyncOrders(true)} 
             disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-red-600 hover:bg-red-700 text-white"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'Sincronizzazione...' : 'Risincronizza Tutti'}
+            {isLoading ? 'SCARICAMENTO...' : '🚀 SCARICA TUTTO'}
           </Button>
           <Button 
             onClick={() => handleSyncOrders(false)} 

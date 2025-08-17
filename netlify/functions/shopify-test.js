@@ -132,18 +132,8 @@ exports.handler = async (event, context) => {
             console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
-          // Aggiungi status solo se specificato e valido
-          if (status && status !== 'any' && ['open', 'closed', 'cancelled', 'pending'].includes(status)) {
-            ordersUrl += ordersUrl.includes('?') ? `&status=${status}` : `?status=${status}`;
-            console.log(`🔍 DEBUG - Dopo aggiunta status: ${status}`);
-          }
-          
-          // Per status='any', aggiungi parametri per includere ordini archiviati
-          if (status === 'any') {
-            // Includi tutti gli stati possibili per ottenere anche ordini archiviati
-            ordersUrl += ordersUrl.includes('?') ? '&status=any' : '?status=any';
-            console.log(`🔍 DEBUG - Aggiunto status=any per includere ordini archiviati`);
-          }
+          // NESSUN FILTRO - scarica TUTTO
+          console.log(`🚀 NESSUN FILTRO APPLICATO - endpoint base per massima compatibilità`);
 
           // Aggiungi page_info se presente
           if (pageInfo) {
