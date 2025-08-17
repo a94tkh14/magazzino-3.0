@@ -4,7 +4,7 @@ import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
-import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, CheckCircle } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
@@ -37,14 +37,34 @@ const OrdiniPage = () => {
   useEffect(() => {
     const loadOrders = async () => {
       try {
+        // Prima carica da localStorage per mostrare subito qualcosa
         const parsedOrders = await loadLargeData('shopify_orders');
         setOrders(parsedOrders);
         console.log(`✅ Caricati ${parsedOrders.length} ordini da localStorage`);
+        
+        // Poi sincronizza automaticamente con Shopify per avere i dati più recenti
+        if (parsedOrders.length === 0) {
+          console.log('🔄 Nessun ordine in locale, avvio sincronizzazione automatica...');
+          await handleSyncOrders(true); // Forza sincronizzazione completa
+        } else {
+          console.log('🔄 Ordini presenti in locale, sincronizzazione incrementale...');
+          await handleSyncOrders(false); // Sincronizzazione incrementale (ultimi 7 giorni)
+        }
+        
         // Pulisci dati vecchi (più di 30 giorni)
         await cleanupOldData('shopify_orders', 30);
       } catch (error) {
         console.error('Errore nel caricare ordini:', error);
         setOrders([]);
+        
+        // Se c'è un errore, prova comunque a sincronizzare
+        try {
+          console.log('🔄 Tentativo di sincronizzazione dopo errore...');
+          await handleSyncOrders(true);
+        } catch (syncError) {
+          console.error('Errore anche nella sincronizzazione:', syncError);
+          setError('Errore nel caricamento ordini. Verifica la configurazione Shopify.');
+        }
       }
     };
     loadOrders();
@@ -373,29 +393,35 @@ const OrdiniPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Ordini</h1>
-          <p className="text-muted-foreground">
-            Gestisci e visualizza tutti gli ordini da Shopify
+          <h1 className="text-3xl font-bold text-gray-900">Ordini</h1>
+          <p className="text-gray-600">
+            {orders.length > 0 
+              ? `${orders.length} ordini caricati` 
+              : 'Nessun ordine trovato'
+            }
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            onClick={() => handleSyncOrders(true)} 
-            disabled={isLoading}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'Sincronizzazione...' : 'Risincronizza Tutti'}
-          </Button>
-          <Button 
-            onClick={() => handleSyncOrders(false)} 
+        
+        <div className="flex space-x-3">
+          <Button
+            onClick={() => handleSyncOrders(false)}
             disabled={isLoading}
             variant="outline"
+            className="flex items-center space-x-2"
           >
-            <Download className="w-4 h-4 mr-2" />
-            {isLoading ? 'Sincronizzazione...' : 'Sincronizza Ultimi 7 giorni'}
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Sincronizza Incrementale</span>
+          </Button>
+          
+          <Button
+            onClick={() => handleSyncOrders(true)}
+            disabled={isLoading}
+            className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700"
+          >
+            <Download className="h-4 w-4" />
+            <span>Sincronizza Completa</span>
           </Button>
         </div>
       </div>
@@ -408,45 +434,38 @@ const OrdiniPage = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleSyncOrders(false)}
-              disabled={isLoading}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded font-semibold disabled:opacity-50"
-            >
-              {isLoading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              {isLoading ? 'Sincronizzazione...' : 'Sincronizza Recenti'}
-            </button>
-            
-            <button
-              onClick={() => {
-                if (window.confirm('Sicuro di voler scaricare tutti gli ordini? Questo può richiedere molto tempo.')) {
-                  handleSyncOrders(true);
-                }
-              }}
-              disabled={isLoading}
-              className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded font-semibold disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              Sincronizza Tutto
-            </button>
-          </div>
-          {progress.active && (
-            <div className="mt-2 text-blue-600 font-medium">
-              Scaricati {progress.count} ordini... (pagina {progress.page})
+          {/* Indicatori di stato */}
+          {isLoading && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center space-x-3">
+                <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+                <div>
+                  <p className="text-blue-800 font-medium">Sincronizzazione in corso...</p>
+                  {progress.active && (
+                    <p className="text-blue-600 text-sm">
+                      Pagina {progress.page} - {progress.count} ordini scaricati
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
+
           {message && (
-            <div className="mt-2 text-green-600 font-medium">{message}</div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center space-x-3">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <p className="text-green-800">{message}</p>
+              </div>
+            </div>
           )}
+
           {error && (
-            <div className="mt-2 flex items-center gap-2 text-red-600">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center space-x-3">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <p className="text-red-800">{error}</p>
+              </div>
             </div>
           )}
         </CardContent>
