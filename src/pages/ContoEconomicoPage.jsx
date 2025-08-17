@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calculator } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
+import { safeToLowerCase } from '../lib/utils';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -145,7 +146,7 @@ const ContoEconomicoPage = () => {
         }, 0);
 
         const shippingCosts = periodOrders.reduce((sum, order) => {
-          const shippingType = (order.shippingType || '').toLowerCase();
+          const shippingType = safeToLowerCase(order.shippingType, '');
           if (shippingType.includes('express a domicilio')) {
             return sum + COSTO_EXPRESS;
           } else if (shippingType.includes('punto di ritiro')) {
@@ -257,7 +258,7 @@ const ContoEconomicoPage = () => {
 
       // Calcola costi spedizione
       const shippingCosts = periodOrders.reduce((sum, order) => {
-        const shippingType = (order.shippingType || '').toLowerCase();
+        const shippingType = safeToLowerCase(order.shippingType, '');
         if (shippingType.includes('express a domicilio')) {
           return sum + COSTO_EXPRESS;
         } else if (shippingType.includes('punto di ritiro')) {

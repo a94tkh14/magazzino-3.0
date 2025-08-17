@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Input } from '../components/ui/input';
 import { Search, Clock, Package, Tag, Settings, Trash2, Plus, Edit } from 'lucide-react';
 import { dataManager } from '../lib/dataManager';
+import { safeIncludes } from '../lib/utils';
 
 const StoricoPage = () => {
   const [storico, setStorico] = useState([]);
@@ -51,9 +52,9 @@ const StoricoPage = () => {
     // Filtra per ricerca
     if (searchTerm) {
       filtered = filtered.filter(item => 
-        item.descrizione.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        safeIncludes(item.descrizione, searchTerm) ||
         (item.dati_azione && item.dati_azione.sku && 
-         item.dati_azione.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+         safeIncludes(item.dati_azione.sku, searchTerm))
       );
     }
 

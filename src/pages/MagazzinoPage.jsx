@@ -7,7 +7,7 @@ import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorag
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
 import Button from '../components/ui/button';
-import { safeToFixed, formatPrice } from '../lib/utils';
+import { safeToFixed, formatPrice, safeIncludes } from '../lib/utils';
 
 const MagazzinoPage = () => {
   const [magazzinoData, setMagazzinoData] = useState([]);
@@ -71,8 +71,8 @@ const MagazzinoPage = () => {
 
   useEffect(() => {
     let filtered = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => {
-      const matchesSearch = item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           item.nome.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = safeIncludes(item.sku, searchTerm) ||
+                           safeIncludes(item.nome, searchTerm);
       return matchesSearch;
     });
     

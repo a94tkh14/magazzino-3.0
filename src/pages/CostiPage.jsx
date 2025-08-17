@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Truck, TrendingUp, Upload, FileText, Calendar, Tag } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
+import { safeToLowerCase, safeIncludes } from '../lib/utils';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -156,7 +157,7 @@ const CostiPage = () => {
     
     filteredOrders.forEach(order => {
       const shippingPaid = order.shippingPrice || 0;
-      const shippingType = (order.shippingType || '').toLowerCase();
+      const shippingType = safeToLowerCase(order.shippingType, '');
       
       // Calcola costo spedizione per TUTTI gli ordini
       if (shippingType.includes('express a domicilio')) {
@@ -216,7 +217,7 @@ const CostiPage = () => {
       const base64Data = e.target.result.split(',')[1];
       
       // Simula estrazione dati
-      const fileName = file.name.toLowerCase();
+      const fileName = safeToLowerCase(file.name, '');
       const fileSize = file.size;
       
       // Estrai data dal nome file o usa oggi
@@ -359,7 +360,7 @@ const CostiPage = () => {
       const categoryMatch = !filterCategory || cost.category === filterCategory;
       const methodMatch = !filterMethod || cost.method === filterMethod;
       const nominativoMatch = !filterNominativo || 
-        cost.nominativo.toLowerCase().includes(filterNominativo.toLowerCase());
+        safeIncludes(cost.nominativo, filterNominativo);
       const amountMatch = !filterMinAmount || cost.amount >= parseFloat(filterMinAmount);
       
       return dateInRange && categoryMatch && methodMatch && nominativoMatch && amountMatch;

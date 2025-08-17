@@ -87,4 +87,70 @@ export const safeParseInt = (value, fallback = 0) => {
   }
   
   return parseInt(value);
+};
+
+/**
+ * Gestisce in modo sicuro le stringhe per evitare errori toLowerCase
+ * @param {string|undefined|null} value - Il valore da gestire
+ * @param {string} fallback - Valore di fallback se il valore non è valido (default: '')
+ * @returns {string} Il valore sicuro o il fallback
+ */
+export const safeString = (value, fallback = '') => {
+  if (value === null || value === undefined || typeof value !== 'string') {
+    return fallback;
+  }
+  
+  return value;
+};
+
+/**
+ * Converte una stringa in minuscolo in modo sicuro
+ * @param {string|undefined|null} value - Il valore da convertire
+ * @param {string} fallback - Valore di fallback se il valore non è valido (default: '')
+ * @returns {string} La stringa in minuscolo o il fallback
+ */
+export const safeToLowerCase = (value, fallback = '') => {
+  const safeValue = safeString(value, fallback);
+  return safeValue.toLowerCase();
+};
+
+/**
+ * Verifica se una stringa contiene un termine di ricerca in modo sicuro
+ * @param {string|undefined|null} value - Il valore da verificare
+ * @param {string} searchTerm - Il termine di ricerca
+ * @param {boolean} caseSensitive - Se la ricerca deve essere case-sensitive (default: false)
+ * @returns {boolean} True se la stringa contiene il termine di ricerca
+ */
+export const safeIncludes = (value, searchTerm, caseSensitive = false) => {
+  if (!searchTerm) return true;
+  
+  const safeValue = safeString(value, '');
+  const safeSearchTerm = safeString(searchTerm, '');
+  
+  if (caseSensitive) {
+    return safeValue.includes(safeSearchTerm);
+  } else {
+    return safeValue.toLowerCase().includes(safeSearchTerm.toLowerCase());
+  }
+};
+
+/**
+ * Normalizza una stringa per la ricerca (rimuove accenti e converte in minuscolo)
+ * @param {string|undefined|null} value - Il valore da normalizzare
+ * @param {string} fallback - Valore di fallback se il valore non è valido (default: '')
+ * @returns {string} La stringa normalizzata o il fallback
+ */
+export const normalizeString = (value, fallback = '') => {
+  const safeValue = safeString(value, fallback);
+  if (!safeValue) return fallback;
+  
+  return safeValue
+    .toLowerCase()
+    .replace(/[àáâãäå]/g, 'a')
+    .replace(/[èéêë]/g, 'e')
+    .replace(/[ìíîï]/g, 'i')
+    .replace(/[òóôõö]/g, 'o')
+    .replace(/[ùúûü]/g, 'u')
+    .replace(/[ñ]/g, 'n')
+    .replace(/[ç]/g, 'c');
 }; 

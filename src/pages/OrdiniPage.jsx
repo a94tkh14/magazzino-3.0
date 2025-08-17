@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
+import { safeIncludes } from '../lib/utils';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -186,12 +187,12 @@ const OrdiniPage = () => {
     if (searchTerm) {
       filtered = filtered.filter(order => {
         // Cerca nel numero ordine
-        if (order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase())) {
+        if (safeIncludes(order.orderNumber?.toString(), searchTerm)) {
           return true;
         }
         // Cerca negli SKU dei prodotti
         return order.items.some(item => 
-          item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase())
+          item.sku && safeIncludes(item.sku, searchTerm)
         );
       });
     }
@@ -217,7 +218,7 @@ const OrdiniPage = () => {
     if (filterPerfume !== 'all') {
       filtered = filtered.filter(order => 
         order.items.some(item => 
-          item.name.toLowerCase().includes(filterPerfume.toLowerCase())
+          safeIncludes(item.name, filterPerfume)
         )
       );
     }
@@ -307,11 +308,11 @@ const OrdiniPage = () => {
     const matchingItems = (Array.isArray(filteredOrders) ? filteredOrders : []).flatMap(order => 
       order.items.filter(item => {
         // Cerca nel numero ordine
-        if (order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase())) {
+        if (safeIncludes(order.orderNumber?.toString(), searchTerm)) {
           return true;
         }
         // Cerca negli SKU dei prodotti
-        return item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+        return item.sku && safeIncludes(item.sku, searchTerm);
       }).map(item => ({
         ...item,
         orderNumber: order.orderNumber,
@@ -350,8 +351,8 @@ const OrdiniPage = () => {
     
     // Calcola statistiche spedizione per ricerca
     const matchingOrders = (Array.isArray(filteredOrders) ? filteredOrders : []).filter(order => 
-      order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.items.some(item => item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+      safeIncludes(order.orderNumber?.toString(), searchTerm) ||
+      order.items.some(item => item.sku && safeIncludes(item.sku, searchTerm))
     );
     const paidShippingOrders = matchingOrders.filter(order => order.shippingPrice > 0);
     const shippingRevenue = paidShippingOrders.reduce((sum, order) => sum + order.shippingPrice, 0);
@@ -768,11 +769,11 @@ const OrdiniPage = () => {
                 (Array.isArray(filteredOrders) ? filteredOrders : []).flatMap(order => 
                   order.items.filter(item => {
                     // Cerca nel numero ordine
-                    if (order.orderNumber.toString().toLowerCase().includes(searchTerm.toLowerCase())) {
+                    if (safeIncludes(order.orderNumber?.toString(), searchTerm)) {
                       return true;
                     }
                     // Cerca negli SKU dei prodotti
-                    return item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+                    return item.sku && safeIncludes(item.sku, searchTerm);
                   }).map(item => ({
                     ...item,
                     orderNumber: order.orderNumber,

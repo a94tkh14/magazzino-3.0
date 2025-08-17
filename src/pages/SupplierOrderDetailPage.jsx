@@ -14,6 +14,7 @@ import { getTrackingInfo, formatTrackingDate, getStatusColor } from '../lib/trac
 import { loadMagazzinoData, saveMagazzinoData, saveStoricoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { Plus } from 'lucide-react';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
+import { safeToLowerCase } from '../lib/utils';
 
 const SupplierOrderDetailPage = () => {
   const { orderId } = useParams();
@@ -89,12 +90,12 @@ const SupplierOrderDetailPage = () => {
 
   // Trova prodotto per SKU
   const findProductBySku = (sku) => {
-    return order.products.find(p => p.sku.toLowerCase() === sku.toLowerCase());
+    return order.products.find(p => safeToLowerCase(p.sku, '') === safeToLowerCase(sku, ''));
   };
 
   // Trova prodotto ricevuto per SKU
   const findReceivedProduct = (sku) => {
-    return order.receivedItems.find(item => item.sku.toLowerCase() === sku.toLowerCase());
+    return order.receivedItems.find(item => safeToLowerCase(item.sku, '') === safeToLowerCase(sku, ''));
   };
 
   // Gestisce scansione codice a barre

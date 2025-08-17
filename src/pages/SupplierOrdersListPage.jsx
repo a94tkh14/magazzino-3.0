@@ -11,6 +11,7 @@ import {
   deleteSupplierOrder
 } from '../lib/supplierOrders';
 import { getTrackingInfo, formatTrackingDate, getStatusColor } from '../lib/trackingAPI';
+import { safeIncludes, safeToLowerCase } from '../lib/utils';
 // Rimuovi o commenta tutti i riferimenti a getMagazzino e magazzino inutilizzati.
 
 const SupplierOrdersListPage = () => {
@@ -101,9 +102,9 @@ const SupplierOrdersListPage = () => {
     // Filtro per ricerca
     if (searchTerm) {
       filtered = filtered.filter(order => 
-        order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.products.some(p => p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+        safeIncludes(order.orderNumber, searchTerm) ||
+        safeIncludes(order.supplier, searchTerm) ||
+        order.products.some(p => safeIncludes(p.sku, searchTerm))
       );
     }
 
@@ -319,8 +320,8 @@ const SupplierOrdersListPage = () => {
         break;
       case 'supplier':
         sorted.sort((a, b) => {
-          aValue = a.supplier.toLowerCase();
-          bValue = b.supplier.toLowerCase();
+          aValue = safeToLowerCase(a.supplier, '');
+          bValue = safeToLowerCase(b.supplier, '');
           return sortOrder === 'crescente' 
             ? aValue.localeCompare(bValue)
             : bValue.localeCompare(aValue);

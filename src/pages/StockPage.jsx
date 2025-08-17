@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
-import { formatPrice } from '../lib/utils';
+import { formatPrice, normalizeString } from '../lib/utils';
 
 const StockPage = () => {
   const [csvData, setCsvData] = useState([]);
@@ -80,7 +80,7 @@ const StockPage = () => {
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(separator).map(h => h.trim());
 
-      const normalize = s => s.toLowerCase().replace('à', 'a').replace('è', 'e').replace('é', 'e');
+      const normalize = s => normalizeString(s);
       const requiredHeaders = ['sku', 'quantita', 'prezzo'];
       const normalizedHeaders = headers.map(normalize);
       const hasValidHeaders = requiredHeaders.every(header =>
@@ -130,7 +130,7 @@ const StockPage = () => {
       const lines = text.split('\n').filter(line => line.trim());
       const headers = lines[0].split(separator).map(h => h.trim());
 
-      const normalize = s => s.toLowerCase().replace('à', 'a').replace('è', 'e').replace('é', 'e');
+      const normalize = s => normalizeString(s);
       const requiredHeaders = ['sku', 'nome'];
       const optionalHeaders = ['anagrafica', 'tipologia', 'marca'];
       const normalizedHeaders = headers.map(normalize);
