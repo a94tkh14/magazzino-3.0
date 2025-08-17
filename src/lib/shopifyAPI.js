@@ -69,16 +69,35 @@ export const fetchShopifyOrders = async (limit = 250, status = 'open', onProgres
           console.log(`✅ Ultima pagina raggiunta (${data.data.orders.length} ordini < ${limit})`);
           keepGoing = false;
         } else {
-          // Prova a ottenere la prossima pagina
+          // Prova a ottenere la prossima pagina dal link header
           const linkHeader = data.data.linkHeader;
+          console.log(`🔗 Link header ricevuto: ${linkHeader}`);
+          
           if (linkHeader && linkHeader.includes('rel="next"')) {
-            const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+            // Estrai il page_info dal link header
+            const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>;\s*rel="next"/);
             if (nextMatch) {
               pageInfo = nextMatch[1];
+              console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
               page++;
             } else {
-              console.log('⚠️ Link header trovato ma formato non riconosciuto');
-              keepGoing = false;
+              // Prova un pattern alternativo per il link header
+              const altMatch = linkHeader.match(/<[^>]*>;\s*rel="next"/);
+              if (altMatch) {
+                const url = altMatch[0].match(/<([^>]+)>/)[1];
+                const urlObj = new URL(url);
+                pageInfo = urlObj.searchParams.get('page_info');
+                if (pageInfo) {
+                  console.log(`📄 Prossima pagina estratta da URL: ${pageInfo}`);
+                  page++;
+                } else {
+                  console.log('⚠️ Link header trovato ma page_info non estraibile');
+                  keepGoing = false;
+                }
+              } else {
+                console.log('⚠️ Link header trovato ma formato non riconosciuto');
+                keepGoing = false;
+              }
             }
           } else {
             console.log('✅ Nessun link per la prossima pagina trovato');
@@ -91,9 +110,14 @@ export const fetchShopifyOrders = async (limit = 250, status = 'open', onProgres
       }
       
       // Limite di sicurezza per evitare loop infiniti
-      if (page > 100) {
-        console.log('⚠️ Raggiunto limite massimo di pagine (100)');
+      if (page > 200) {
+        console.log('⚠️ Raggiunto limite massimo di pagine (200) - potrebbe esserci un problema di paginazione');
         keepGoing = false;
+      }
+      
+      // Pausa breve per evitare rate limit
+      if (keepGoing) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 

@@ -133,6 +133,15 @@ exports.handler = async (event, context) => {
       if (linkHeader) {
         responseData.linkHeader = linkHeader;
         console.log(`📄 Link header per paginazione: ${linkHeader}`);
+        
+        // Verifica se ci sono più pagine
+        if (linkHeader.includes('rel="next"')) {
+          console.log(`✅ Link "next" trovato - ci sono più pagine disponibili`);
+        } else {
+          console.log(`ℹ️ Nessun link "next" - questa è l'ultima pagina`);
+        }
+      } else {
+        console.log(`⚠️ Nessun link header ricevuto - potrebbe essere l'ultima pagina`);
       }
     }
     
