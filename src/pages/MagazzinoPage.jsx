@@ -390,27 +390,6 @@ const MagazzinoPage = () => {
     };
   };
 
-  const clearAllData = async () => {
-    if (!window.confirm('Sei sicuro di voler cancellare TUTTI i dati? Questa azione non può essere annullata.')) return;
-    
-    try {
-      // Pulisci localStorage
-      localStorage.removeItem('magazzino_data');
-      console.log('✅ LocalStorage pulito');
-      
-      // Pulisci lo stato locale
-      setMagazzinoData([]);
-      setFilteredData([]);
-      
-      // Mostra messaggio di successo
-      alert('Tutti i dati sono stati cancellati!');
-      
-    } catch (error) {
-      console.error('❌ Errore nella pulizia:', error);
-      alert(`Errore nella pulizia: ${error.message}`);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -551,14 +530,6 @@ const MagazzinoPage = () => {
           </div>
           
           <div className="flex space-x-3">
-            <button
-              onClick={clearAllData}
-              className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center space-x-2"
-              title="Cancella tutti i dati dal localStorage e dall'interfaccia"
-            >
-              🗑️ Pulisci Tutto
-            </button>
-            
             {!isEditMode ? (
               <button
                 onClick={startEditMode}
