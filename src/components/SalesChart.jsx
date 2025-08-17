@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import Button from './ui/button';
-import { formatPrice } from '../lib/utils';
+import { formatPrice, safeToFixed } from '../lib/utils';
 import { format, eachDayOfInterval, eachHourOfInterval, startOfDay, endOfDay, subDays, isSameDay, isSameHour } from 'date-fns';
 import { it } from 'date-fns/locale';
 
@@ -403,7 +403,7 @@ const SalesChart = ({
             <p key={index} style={{ color: entry.color }}>
               {entry.name}: {entry.dataKey === 'revenue' || entry.dataKey === 'comparisonRevenue' 
                 ? formatPrice(entry.value) 
-                : entry.value.toFixed(entry.dataKey === 'avgProductsPerOrder' || entry.dataKey === 'comparisonAvgProductsPerOrder' ? 1 : 0)
+                : safeToFixed(entry.value, entry.dataKey === 'avgProductsPerOrder' || entry.dataKey === 'comparisonAvgProductsPerOrder' ? 1 : 0)
               }
             </p>
           ))}
@@ -526,12 +526,12 @@ const SalesChart = ({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
           <div className="text-center">
             <div className="text-2xl font-bold text-blue-600">
-              {stats.totalProducts.toFixed(0)}
+              {safeToFixed(stats.totalProducts, 0, '0')}
             </div>
             <div className="text-sm text-gray-600">Prodotti Totali</div>
             {comparisonStats && (
               <div className="text-xs text-gray-500">
-                vs {comparisonStats.totalProducts.toFixed(0)} ({calculateChange(stats.totalProducts, comparisonStats.totalProducts).toFixed(1)}%)
+                vs {safeToFixed(comparisonStats.totalProducts, 0, '0')} ({safeToFixed(calculateChange(stats.totalProducts, comparisonStats.totalProducts), 1, '0.0')}%)
               </div>
             )}
           </div>
@@ -543,7 +543,7 @@ const SalesChart = ({
             <div className="text-sm text-gray-600">Fatturato Totale</div>
             {comparisonStats && (
               <div className="text-xs text-gray-500">
-                vs {formatPrice(comparisonStats.totalRevenue)} ({calculateChange(stats.totalRevenue, comparisonStats.totalRevenue).toFixed(1)}%)
+                vs {formatPrice(comparisonStats.totalRevenue)} ({safeToFixed(calculateChange(stats.totalRevenue, comparisonStats.totalRevenue), 1, '0.0')}%)
               </div>
             )}
           </div>
@@ -555,19 +555,19 @@ const SalesChart = ({
             <div className="text-sm text-gray-600">Ordini Totali</div>
             {comparisonStats && (
               <div className="text-xs text-gray-500">
-                vs {comparisonStats.totalOrders} ({calculateChange(stats.totalOrders, comparisonStats.totalOrders).toFixed(1)}%)
+                vs {comparisonStats.totalOrders} ({safeToFixed(calculateChange(stats.totalOrders, comparisonStats.totalOrders), 1, '0.0')}%)
               </div>
             )}
           </div>
           
           <div className="text-center">
             <div className="text-2xl font-bold text-orange-600">
-              {stats.avgProductsPerOrder.toFixed(1)}
+              {safeToFixed(stats.avgProductsPerOrder, 1, '0.0')}
             </div>
             <div className="text-sm text-gray-600">Media Articoli/Ordine</div>
             {comparisonStats && (
               <div className="text-xs text-gray-500">
-                vs {comparisonStats.avgProductsPerOrder.toFixed(1)} ({calculateChange(stats.avgProductsPerOrder, comparisonStats.avgProductsPerOrder).toFixed(1)}%)
+                vs {safeToFixed(comparisonStats.avgProductsPerOrder, 1, '0.0')} ({safeToFixed(calculateChange(stats.avgProductsPerOrder, comparisonStats.avgProductsPerOrder), 1, '0.0')}%)
               </div>
             )}
           </div>

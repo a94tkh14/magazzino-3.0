@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
+import { formatPrice } from '../lib/utils';
 
 const StockPage = () => {
   const [csvData, setCsvData] = useState([]);
@@ -560,7 +561,7 @@ const StockPage = () => {
                     <tr key={index} className="hover:bg-muted/30">
                       <td className="border border-border px-4 py-2">{item.sku}</td>
                       <td className="border border-border px-4 py-2">{item.quantita}</td>
-                      <td className="border border-border px-4 py-2">€{item.prezzo.toFixed(2)}</td>
+                      <td className="border border-border px-4 py-2">{formatPrice(item.prezzo)}</td>
                     </tr>
                   ))}
                 </tbody>

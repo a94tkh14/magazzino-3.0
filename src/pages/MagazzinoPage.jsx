@@ -7,6 +7,7 @@ import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorag
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
 import Button from '../components/ui/button';
+import { safeToFixed, formatPrice } from '../lib/utils';
 
 const MagazzinoPage = () => {
   const [magazzinoData, setMagazzinoData] = useState([]);
@@ -469,11 +470,11 @@ const MagazzinoPage = () => {
                             className="cursor-pointer flex items-center gap-2"
                             onClick={() => {
                               setEditingSku(item.sku);
-                              setEditingValue(item.prezzo.toFixed(2).replace('.', ','));
+                              setEditingValue(safeToFixed(item.prezzo, 2).replace('.', ','));
                               setEditingField('prezzo');
                             }}
                           >
-                            €{item.prezzo.toFixed(2)}
+                            {formatPrice(item.prezzo)}
                             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13h3l8-8a2.828 2.828 0 10-4-4l-8 8v3z" />
                             </svg>

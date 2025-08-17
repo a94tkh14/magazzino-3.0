@@ -1,11 +1,12 @@
 import React from 'react';
 import Button from './ui/button';
+import { safeToFixed, formatPrice } from '../lib/utils';
 
 export default function PriceSuggestionModal({ open, sku, oldPrice, newPrice, onDecision, nome }) {
   if (!open) return null;
 
   const diff = newPrice - oldPrice;
-  const percent = ((diff / oldPrice) * 100).toFixed(1);
+  const percent = safeToFixed((diff / oldPrice) * 100, 1, '0.0');
 
   let suggestion = '';
   if (diff > 0) {
@@ -23,8 +24,8 @@ export default function PriceSuggestionModal({ open, sku, oldPrice, newPrice, on
         <div className="mb-2 text-center">
           <div className="mb-1">SKU: <b>{sku}</b></div>
           {nome && <div className="mb-1">Prodotto: <b>{nome}</b></div>}
-          <div>Prezzo attuale: <b>€{oldPrice.toFixed(2)}</b></div>
-          <div>Nuovo prezzo: <b>€{newPrice.toFixed(2)}</b></div>
+          <div>Prezzo attuale: <b>{formatPrice(oldPrice)}</b></div>
+          <div>Nuovo prezzo: <b>{formatPrice(newPrice)}</b></div>
         </div>
         <p className="mb-4 text-center text-sm text-muted-foreground">{suggestion}</p>
         <div className="border-t pt-4 mt-4 flex flex-col sm:flex-row gap-2 w-full justify-center items-center">

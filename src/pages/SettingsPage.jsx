@@ -3,6 +3,7 @@ import LogoUpload from '../components/LogoUpload';
 import GoogleAdsAPI from '../lib/googleAdsAPI';
 import MetaAPI from '../lib/metaAPI';
 import FirebaseMagazzinoTest from '../components/FirebaseMagazzinoTest';
+import SafeNumberTest from '../components/SafeNumberTest';
 
 export default function SettingsPage() {
   const [shop, setShop] = useState('');
@@ -626,6 +627,12 @@ export default function SettingsPage() {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold text-gray-900">Test Firebase Database</h2>
           <FirebaseMagazzinoTest />
+        </div>
+
+        {/* Test Funzioni Sicure per Numeri */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-gray-900">Test Funzioni Sicure per Numeri</h2>
+          <SafeNumberTest />
         </div>
       </div>
     </div>
