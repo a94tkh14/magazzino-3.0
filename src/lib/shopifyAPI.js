@@ -76,6 +76,7 @@ export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress
         console.log(`[SYNC] Scaricati ${allOrders.length} ordini totali dopo pagina ${page}`);
         console.log(`📊 Ordini in questa pagina: ${data.data.orders.length}/${limit}`);
         console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
+        console.log(`🔍 Pagination info:`, data.data.paginationInfo);
 
         if (data.data.orders.length < limit) {
           console.log(`✅ Ultima pagina raggiunta (${data.data.orders.length} ordini < ${limit})`);
@@ -98,27 +99,58 @@ export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress
                   const urlObj = new URL(url);
                   pageInfo = urlObj.searchParams.get('page_info');
                   if (pageInfo) {
-                    console.log(`📄 Prossima pagina estratta da URL: ${pageInfo}`);
+                    console.log(`📄 PageInfo estratto dall'URL: ${pageInfo}`);
                     page++;
                   } else {
-                    console.log('⚠️ Link header trovato ma page_info non estraibile');
-                    console.log('🔍 Parametri URL:', Array.from(urlObj.searchParams.entries()));
-                    keepGoing = false;
+                    console.log('⚠️ Nessun pageInfo trovato nell\'URL, uso fallback since_id');
+                    // Fallback: usa since_id per la prossima pagina
+                    if (data.data.orders.length > 0) {
+                      const lastOrder = data.data.orders[data.data.orders.length - 1];
+                      pageInfo = `fallback_${lastOrder.id}`;
+                      console.log(`🔧 Fallback pageInfo creato: ${pageInfo}`);
+                      page++;
+                    } else {
+                      keepGoing = false;
+                    }
                   }
                 } catch (urlError) {
-                  console.log('❌ Errore nel parsing URL:', urlError);
-                  keepGoing = false;
+                  console.error('❌ Errore nel parsing URL:', urlError);
+                  // Fallback: usa since_id per la prossima pagina
+                  if (data.data.orders.length > 0) {
+                    const lastOrder = data.data.orders[data.data.orders.length - 1];
+                    pageInfo = `fallback_${lastOrder.id}`;
+                    console.log(`🔧 Fallback pageInfo creato dopo errore URL: ${pageInfo}`);
+                    page++;
+                  } else {
+                    keepGoing = false;
+                  }
                 }
               } else {
-                console.log('⚠️ Link header trovato ma formato non riconosciuto');
-                console.log('🔍 Pattern non trovato in:', linkHeader);
-                keepGoing = false;
+                console.log('⚠️ Nessun pattern di link trovato, uso fallback since_id');
+                // Fallback: usa since_id per la prossima pagina
+                if (data.data.orders.length > 0) {
+                  const lastOrder = data.data.orders[data.data.orders.length - 1];
+                  pageInfo = `fallback_${lastOrder.id}`;
+                  console.log(`🔧 Fallback pageInfo creato dopo pattern non trovato: ${pageInfo}`);
+                  page++;
+                } else {
+                  keepGoing = false;
+                }
               }
             }
           } else {
-            console.log('✅ Nessun link per la prossima pagina trovato');
-            console.log('🔍 Link header completo:', linkHeader);
-            keepGoing = false;
+            console.log('⚠️ Nessun link header o link "next" trovato');
+            // Fallback: prova a continuare con since_id
+            if (data.data.orders.length > 0 && data.data.orders.length === limit) {
+              console.log('🔧 Tentativo di continuare con fallback since_id...');
+              const lastOrder = data.data.orders[data.data.orders.length - 1];
+              pageInfo = `fallback_${lastOrder.id}`;
+              console.log(`🔧 Fallback pageInfo creato: ${pageInfo}`);
+              page++;
+            } else {
+              console.log('✅ Nessuna prossima pagina disponibile');
+              keepGoing = false;
+            }
           }
         }
       } else {

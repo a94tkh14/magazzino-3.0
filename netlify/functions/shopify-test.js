@@ -129,17 +129,25 @@ exports.handler = async (event, context) => {
             try {
               console.log(`🔍 DEBUG - Aggiungendo pageInfo: ${pageInfo}`);
               
-              // Validazione del pageInfo
-              if (pageInfo.length > 1000) {
-                console.log(`⚠️ WARNING: pageInfo molto lungo (${pageInfo.length} caratteri), potrebbe causare problemi`);
+              // Gestisci fallback since_id
+              if (pageInfo.startsWith('fallback_')) {
+                const lastOrderId = pageInfo.replace('fallback_', '');
+                console.log(`🔍 DEBUG - Fallback since_id rilevato: ${lastOrderId}`);
+                ordersUrl += ordersUrl.includes('?') ? `&since_id=${lastOrderId}` : `?since_id=${lastOrderId}`;
+                console.log(`🔍 DEBUG - Dopo aggiunta fallback since_id: ${ordersUrl}`);
+              } else {
+                // Validazione del pageInfo standard
+                if (pageInfo.length > 1000) {
+                  console.log(`⚠️ WARNING: pageInfo molto lungo (${pageInfo.length} caratteri), potrebbe causare problemi`);
+                }
+                
+                // Encoding sicuro del pageInfo
+                const encodedPageInfo = encodeURIComponent(pageInfo);
+                console.log(`🔍 DEBUG - pageInfo codificato: ${encodedPageInfo}`);
+                
+                ordersUrl += ordersUrl.includes('?') ? `&page_info=${encodedPageInfo}` : `?page_info=${encodedPageInfo}`;
+                console.log(`🔍 DEBUG - Dopo aggiunta pageInfo: ${ordersUrl}`);
               }
-              
-              // Encoding sicuro del pageInfo
-              const encodedPageInfo = encodeURIComponent(pageInfo);
-              console.log(`🔍 DEBUG - pageInfo codificato: ${encodedPageInfo}`);
-              
-              ordersUrl += ordersUrl.includes('?') ? `&page_info=${encodedPageInfo}` : `?page_info=${encodedPageInfo}`;
-              console.log(`🔍 DEBUG - Dopo aggiunta pageInfo: ${ordersUrl}`);
               
             } catch (pageInfoError) {
               console.error('❌ Errore nell\'aggiunta del pageInfo:', pageInfoError);
