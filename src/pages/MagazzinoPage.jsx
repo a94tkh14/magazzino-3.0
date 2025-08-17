@@ -109,22 +109,27 @@ const MagazzinoPage = () => {
     }
     
     try {
-      // Salva su Firebase
-      for (const item of updated) {
-        await saveMagazzino(item);
+      // Trova il prodotto modificato
+      const modifiedItem = updated.find(item => item.sku === sku);
+      if (modifiedItem) {
+        // Salva solo il prodotto modificato su Firebase
+        const result = await saveMagazzino(modifiedItem);
+        if (result.success) {
+          // Salva anche in localStorage come backup
+          saveToLocalStorage('magazzino_data', updated);
+          setMagazzinoData(updated);
+          setFilteredData(updated);
+          setEditingSku(null);
+          setEditingField(null);
+        } else {
+          console.error('Errore nel salvare su Firebase:', result.error);
+          alert('Errore nel salvataggio: ' + result.error);
+        }
       }
-      // Salva anche in localStorage come backup
-      saveToLocalStorage('magazzino_data', updated);
     } catch (error) {
       console.error('Errore nel salvare su Firebase:', error);
-      // Fallback al localStorage
-      saveToLocalStorage('magazzino_data', updated);
+      alert('Errore nel salvataggio: ' + error.message);
     }
-    
-    setMagazzinoData(updated);
-    setFilteredData(updated);
-    setEditingSku(null);
-    setEditingField(null);
   };
 
   const handleDeleteProduct = async (sku) => {
@@ -132,19 +137,8 @@ const MagazzinoPage = () => {
     
     const updated = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => item.sku !== sku);
     
-    try {
-      // Salva su Firebase
-      for (const item of updated) {
-        await saveMagazzino(item);
-      }
-      // Salva anche in localStorage come backup
-      saveToLocalStorage('magazzino_data', updated);
-    } catch (error) {
-      console.error('Errore nel salvare su Firebase:', error);
-      // Fallback al localStorage
-      saveToLocalStorage('magazzino_data', updated);
-    }
-    
+    // Salva solo in localStorage come backup
+    saveToLocalStorage('magazzino_data', updated);
     setMagazzinoData(updated);
     setFilteredData(updated);
   };
@@ -193,34 +187,44 @@ const MagazzinoPage = () => {
       marca: newProduct.marca
     };
 
-    const updated = [...(Array.isArray(magazzinoData) ? magazzinoData : []), newItem];
-    
     try {
-      // Salva su Firebase
-      for (const item of updated) {
-        await saveMagazzino(item);
+      // Salva solo il nuovo prodotto su Firebase
+      const result = await saveMagazzino(newItem);
+      
+      if (result.success) {
+        // Aggiorna l'ID se è stato creato
+        if (result.id) {
+          newItem.id = result.id;
+        }
+        
+        const updated = [...(Array.isArray(magazzinoData) ? magazzinoData : []), newItem];
+        
+        // Salva anche in localStorage come backup
+        saveToLocalStorage('magazzino_data', updated);
+        
+        setMagazzinoData(updated);
+        setFilteredData(updated);
+        setNewProduct({
+          sku: '',
+          nome: '',
+          quantita: '',
+          prezzo: '',
+          anagrafica: '',
+          tipologia: '',
+          marca: ''
+        });
+        setShowAddModal(false);
+        setAddError('');
+        
+        // Mostra messaggio di successo
+        alert('Prodotto salvato con successo!');
+      } else {
+        setAddError('Errore nel salvataggio: ' + (result.error || 'Errore sconosciuto'));
       }
-      // Salva anche in localStorage come backup
-      saveToLocalStorage('magazzino_data', updated);
     } catch (error) {
       console.error('Errore nel salvare su Firebase:', error);
-      // Fallback al localStorage
-      saveToLocalStorage('magazzino_data', updated);
+      setAddError('Errore nel salvataggio: ' + error.message);
     }
-    
-    setMagazzinoData(updated);
-    setFilteredData(updated);
-    setNewProduct({
-      sku: '',
-      nome: '',
-      quantita: '',
-      prezzo: '',
-      anagrafica: '',
-      tipologia: '',
-      marca: ''
-    });
-    setShowAddModal(false);
-    setAddError('');
   };
 
   const calculateMagazzinoStats = () => {
