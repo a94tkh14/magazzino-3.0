@@ -601,109 +601,147 @@ const MagazzinoPage = () => {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-3 font-medium">SKU</th>
                     <th className="text-left p-3 font-medium">Nome</th>
+                    <th className="text-left p-3 font-medium">SKU</th>
                     <th className="text-left p-3 font-medium">Quantità</th>
                     <th className="text-left p-3 font-medium">Prezzo</th>
+                    <th className="text-left p-3 font-medium">Anagrafica</th>
+                    <th className="text-left p-3 font-medium">Tipologia</th>
+                    <th className="text-left p-3 font-medium">Marca</th>
                     <th className="text-left p-3 font-medium">Azioni</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleDeleteProduct(item.sku)}
-                              className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
-                            >
-                              🗑️ Cancella
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {editingSku === item.sku && editingField === 'sku' ? (
-                            <input
-                              type="text"
-                              value={editingValue}
-                              onChange={(e) => setEditingValue(e.target.value)}
-                              onBlur={() => handleSaveEdit(item.sku, 'sku', editingValue)}
-                              onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'sku', editingValue)}
-                              className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="font-mono bg-gray-100 px-2 py-1 rounded text-xs">
-                              {item.sku}
-                            </span>
-                          )}
-                        </td>
-                      <td className="p-3">
-                        {editingSku === item.sku && editingField === 'quantita' ? (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {editingSku === item.sku && editingField === 'nome' ? (
                           <input
-                            type="number"
-                            min={0}
+                            type="text"
                             value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.sku, 'nome', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'nome', editingValue)}
+                            className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
                             autoFocus
-                            onChange={e => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'quantita', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'quantita', editingValue)}
-                            className="w-20 border rounded px-2 py-1"
                           />
                         ) : (
-                          <span
-                            className="cursor-pointer flex items-center gap-2"
-                            onClick={() => handleEditField(item.sku, 'quantita', item.quantita.toString())}
-                          >
-                            <span className={getQuantityColor(item.quantita)}>
-                              {item.quantita}
-                            </span>
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13h3l8-8a2.828 2.828 0 10-4-4l-8 8v3z" />
-                            </svg>
+                          <span onClick={() => handleEditField(item.sku, 'nome', item.nome)} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            {item.nome}
                           </span>
                         )}
                       </td>
-                      <td className="p-3">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingSku === item.sku && editingField === 'sku' ? (
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.sku, 'sku', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'sku', editingValue)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="font-mono bg-gray-100 px-2 py-1 rounded text-xs">
+                            {item.sku}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingSku === item.sku && editingField === 'quantita' ? (
+                          <input
+                            type="number"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.sku, 'quantita', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'quantita', editingValue)}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span onClick={() => handleEditField(item.sku, 'quantita', item.quantita.toString())} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            {item.quantita}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {editingSku === item.sku && editingField === 'prezzo' ? (
                           <input
                             type="text"
                             value={editingValue}
-                            autoFocus
-                            onChange={e => setEditingValue(e.target.value)}
+                            onChange={(e) => setEditingValue(e.target.value)}
                             onBlur={() => handleSaveEdit(item.sku, 'prezzo', editingValue)}
                             onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'prezzo', editingValue)}
-                            className="w-24 border rounded px-2 py-1"
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                            autoFocus
                           />
                         ) : (
-                          <span
-                            className="cursor-pointer flex items-center gap-2"
-                            onClick={() => handleEditField(item.sku, 'prezzo', safeToFixed(item.prezzo, 2).replace('.', ','))}
-                          >
+                          <span onClick={() => handleEditField(item.sku, 'prezzo', safeToFixed(item.prezzo, 2).replace('.', ','))} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
                             {formatPrice(item.prezzo)}
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13h3l8-8a2.828 2.828 0 10-4-4l-8 8v3z" />
-                            </svg>
                           </span>
                         )}
                       </td>
-                      <td className="p-3">
-                        <button
-                          className="text-blue-600 hover:bg-blue-50 rounded p-1 mr-2"
-                          title="Gestisci anagrafica"
-                          onClick={() => handleOpenAnagrafica(item)}
-                        >
-                          <Settings className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="text-red-600 hover:bg-red-50 rounded p-1"
-                          title="Elimina prodotto"
-                          onClick={() => handleDeleteProduct(item.sku)}
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingSku === item.sku && editingField === 'anagrafica' ? (
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.sku, 'anagrafica', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'anagrafica', editingValue)}
+                            className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span onClick={() => handleEditField(item.sku, 'anagrafica', item.anagrafica || '')} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            {item.anagrafica || '-'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingSku === item.sku && editingField === 'tipologia' ? (
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.sku, 'tipologia', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'tipologia', editingValue)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span onClick={() => handleEditField(item.sku, 'tipologia', item.tipologia || '')} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            {item.tipologia || '-'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {editingSku === item.sku && editingField === 'marca' ? (
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveEdit(item.sku, 'marca', editingValue)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'marca', editingValue)}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span onClick={() => handleEditField(item.sku, 'tipologia', item.marca || '')} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                            {item.marca || '-'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleDeleteProduct(item.sku)}
+                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                          >
+                            🗑️ Cancella
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
