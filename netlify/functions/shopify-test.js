@@ -81,8 +81,9 @@ exports.handler = async (event, context) => {
       case 'products':
         apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=10`;
         break;
-              case 'orders':
-        case 'archived_orders':
+                    case 'orders':
+      case 'open_orders':
+      case 'archived_orders':
           try {
             console.log(`🔍 DEBUG - Inizio gestione ${testType}...`);
             
@@ -112,8 +113,12 @@ exports.handler = async (event, context) => {
           // Costruisci URL base SEMPLIFICATO - solo parametri essenziali
           let ordersUrl;
           
-          if (testType === 'archived_orders') {
-            // Per ordini archiviati, prova endpoint diverso per ordini completati
+          if (testType === 'open_orders') {
+            // Per ordini aperti, usa endpoint con status=open
+            ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
+            console.log(`🔍 DEBUG - URL base per ordini aperti: ${ordersUrl}`);
+          } else if (testType === 'archived_orders') {
+            // Per ordini archiviati, usa endpoint diverso per ordini completati
             ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
             console.log(`🔍 DEBUG - URL base per ordini archiviati: ${ordersUrl}`);
           } else {
@@ -127,12 +132,17 @@ exports.handler = async (event, context) => {
             console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
-          // RIMUOVIAMO TUTTI I FILTRI DI STATUS per ottenere TUTTI gli ordini
-          console.log(`🔍 DEBUG - Nessun filtro di status applicato - endpoint base per massima compatibilità`);
-          
-          // Per ordini archiviati, NON aggiungere NESSUN filtro
-          if (testType === 'archived_orders') {
+          // Gestiamo i filtri di status in base al tipo di ordini
+          if (testType === 'open_orders') {
+            // Per ordini aperti, aggiungi status=open
+            ordersUrl += ordersUrl.includes('?') ? '&status=open' : '?status=open';
+            console.log(`🔍 DEBUG - Aggiunto status=open per ordini aperti`);
+          } else if (testType === 'archived_orders') {
+            // Per ordini archiviati, NON aggiungere NESSUN filtro
             console.log(`🔍 DEBUG - Ordini archiviati: endpoint base senza filtri per includere TUTTI gli ordini`);
+          } else {
+            // Per ordini normali, nessun filtro
+            console.log(`🔍 DEBUG - Ordini normali: endpoint base senza filtri`);
           }
 
           // Aggiungi page_info se presente
@@ -201,7 +211,7 @@ exports.handler = async (event, context) => {
         return {
           statusCode: 400,
           headers,
-          body: JSON.stringify({ success: false, error: 'Tipo di test non valido. Usa: shop, products, orders, archived_orders' })
+          body: JSON.stringify({ success: false, error: 'Tipo di test non valido. Usa: shop, products, orders, open_orders, archived_orders' })
         };
     }
 

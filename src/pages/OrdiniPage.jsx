@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
+import { fetchShopifyOrders, fetchShopifyOpenOrders, fetchShopifyArchivedOrders, convertShopifyOrder } from '../lib/shopifyAPI';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
@@ -96,71 +96,68 @@ const OrdiniPage = () => {
     window.dispatchEvent(new CustomEvent('dashboard-update'));
   };
 
-  const handleSyncOrders = async (forceAll = false) => {
+  // Sincronizza ordini aperti (da evadere)
+  const handleSyncOpenOrders = async () => {
     setIsLoading(true);
     setError('');
     setMessage('');
     setProgress({ count: 0, page: 1, active: true });
     try {
-      // Determina se è la prima sincronizzazione o se forziamo tutto
-      const isFirstSync = orders.length === 0;
+      console.log('🔄 Sincronizzazione ordini APERTI (da evadere)...');
       
-      // Se è la prima volta o forziamo tutto, scarica tutto. Altrimenti solo ultimi 7 giorni
-      const daysBack = (isFirstSync || forceAll) ? null : 7;
-      
-      // Usa il limite appropriato in base al tipo di sincronizzazione
-      const ordersLimit = forceAll ? getOrdersLimit('max') : getOrdersLimit('incremental');
-      
-      const shopifyOrders = await fetchShopifyOrders(1000, (count, page) => {
+      const shopifyOrders = await fetchShopifyOpenOrders(1000, (count, page) => {
         setProgress({ count, page, active: true });
-      }, daysBack);
-      
-      const convertedOrders = (Array.isArray(shopifyOrders) ? shopifyOrders : []).map(convertShopifyOrder);
-      const existingOrders = orders;
-      
-      // Trova ordini nuovi (che non esistono già)
-      const newOrders = convertedOrders.filter(newOrder => 
-        !existingOrders.some(existing => existing.id === newOrder.id)
-      );
-      
-      // Trova ordini aggiornati (stesso ID ma dati diversi)
-      const updatedOrders = convertedOrders.filter(newOrder => {
-        const existing = existingOrders.find(existing => existing.id === newOrder.id);
-        return existing && JSON.stringify(existing) !== JSON.stringify(newOrder);
       });
       
-      // Combina ordini esistenti + nuovi + aggiornati
-      const allOrders = [
-        ...existingOrders.filter(existing => 
-          !convertedOrders.some(newOrder => newOrder.id === existing.id)
-        ), // Ordini esistenti non presenti nei nuovi
-        ...convertedOrders // Tutti i nuovi/aggiornati
-      ];
+      const convertedOrders = (Array.isArray(shopifyOrders) ? shopifyOrders : []).map(convertShopifyOrder);
       
-      saveOrders(allOrders);
+      // Salva nel database e aggiorna lo stato
+      await saveOrders(convertedOrders);
       
-      let message = '';
-      if (forceAll) {
-        message = `Sincronizzazione completa completata! Scaricati ${convertedOrders.length} ordini totali.`;
-      } else if (isFirstSync) {
-        message = `Prima sincronizzazione completata! Scaricati ${convertedOrders.length} ordini totali.`;
-      } else if (newOrders.length > 0 && updatedOrders.length > 0) {
-        message = `Sincronizzati ${newOrders.length} nuovi ordini e aggiornati ${updatedOrders.length} ordini esistenti!`;
-      } else if (newOrders.length > 0) {
-        message = `Sincronizzati ${newOrders.length} nuovi ordini da Shopify!`;
-      } else if (updatedOrders.length > 0) {
-        message = `Aggiornati ${updatedOrders.length} ordini esistenti!`;
-      } else {
-        message = 'Nessun nuovo ordine trovato negli ultimi 7 giorni.';
-      }
+      setMessage(`✅ Sincronizzazione ordini aperti completata! Scaricati ${convertedOrders.length} ordini da evadere.`);
       
-      setMessage(message);
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      console.error('Errore durante la sincronizzazione ordini aperti:', error);
+      setError(`Errore durante la sincronizzazione ordini aperti: ${error.message}`);
     } finally {
       setIsLoading(false);
       setProgress({ count: 0, page: 1, active: false });
     }
+  };
+
+  // Sincronizza ordini archiviati
+  const handleSyncArchivedOrders = async () => {
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    setProgress({ count: 0, page: 1, active: true });
+    try {
+      console.log('🔄 Sincronizzazione ordini ARCHIVIATI...');
+      
+      const shopifyOrders = await fetchShopifyArchivedOrders(1000, (count, page) => {
+        setProgress({ count, page, active: true });
+      });
+      
+      const convertedOrders = (Array.isArray(shopifyOrders) ? shopifyOrders : []).map(convertShopifyOrder);
+      
+      // Salva nel database e aggiorna lo stato
+      await saveOrders(convertedOrders);
+      
+      setMessage(`✅ Sincronizzazione ordini archiviati completata! Scaricati ${convertedOrders.length} ordini archiviati.`);
+      
+    } catch (error) {
+      console.error('Errore durante la sincronizzazione ordini archiviati:', error);
+      setError(`Errore durante la sincronizzazione ordini archiviati: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+      setProgress({ count: 0, page: 1, active: false });
+    }
+  };
+
+  // Funzione legacy per compatibilità
+  const handleSyncOrders = async (forceAll = false) => {
+    // Per default, sincronizza ordini aperti
+    await handleSyncOpenOrders();
   };
 
   const formatDate = (dateString) => {
@@ -407,20 +404,20 @@ const OrdiniPage = () => {
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={() => handleSyncOrders(true)} 
+            onClick={handleSyncOpenOrders} 
+            disabled={isLoading}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'Sincronizzazione...' : 'Ordini da Evadere'}
+          </Button>
+          <Button 
+            onClick={handleSyncArchivedOrders} 
             disabled={isLoading}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'Sincronizzazione...' : 'Risincronizza Tutti'}
-          </Button>
-          <Button 
-            onClick={() => handleSyncOrders(false)} 
-            disabled={isLoading}
-            variant="outline"
-          >
             <Download className="w-4 h-4 mr-2" />
-            {isLoading ? 'Sincronizzazione...' : 'Sincronizza Ultimi 7 giorni'}
+            {isLoading ? 'Sincronizzazione...' : 'Ordini Archiviati'}
           </Button>
         </div>
       </div>
@@ -435,29 +432,25 @@ const OrdiniPage = () => {
         <CardContent>
           <div className="flex gap-2">
             <button
-              onClick={() => handleSyncOrders(false)}
+              onClick={handleSyncOpenOrders}
               disabled={isLoading}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded font-semibold disabled:opacity-50"
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
             >
               {isLoading ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
-                <Download className="h-4 w-4" />
+                <RefreshCw className="h-4 w-4" />
               )}
-              {isLoading ? 'Sincronizzazione...' : 'Sincronizza Recenti'}
+              {isLoading ? 'Sincronizzazione...' : 'Ordini da Evadere'}
             </button>
             
             <button
-              onClick={() => {
-                if (window.confirm('Sicuro di voler scaricare tutti gli ordini? Questo può richiedere molto tempo.')) {
-                  handleSyncOrders(true);
-                }
-              }}
+              onClick={handleSyncArchivedOrders}
               disabled={isLoading}
-              className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded font-semibold disabled:opacity-50"
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
             >
               <Download className="h-4 w-4" />
-              Sincronizza Tutto
+              Ordini Archiviati
             </button>
           </div>
           {progress.active && (
