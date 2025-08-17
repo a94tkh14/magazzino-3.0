@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import Button from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -47,24 +47,152 @@ export default function SettingsPage() {
     backupInterval: '24'
   });
 
+  // Stato per tracciare le modifiche non salvate
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState({
+    shopify: false,
+    googleAds: false,
+    meta: false,
+    database: false
+  });
+
+  // Funzione per aggiornare lo stato delle modifiche
+  const updateChangeStatus = (configType, hasChanges) => {
+    setHasUnsavedChanges(prev => ({
+      ...prev,
+      [configType]: hasChanges
+    }));
+  };
+
+  // Carica le configurazioni salvate quando la pagina si apre
+  useEffect(() => {
+    // Carica configurazione Shopify
+    const savedShopify = localStorage.getItem('shopify_config');
+    if (savedShopify) {
+      try {
+        const parsed = JSON.parse(savedShopify);
+        setShopifyConfig(parsed);
+        console.log('✅ Configurazione Shopify caricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel caricare configurazione Shopify:', error);
+      }
+    }
+
+    // Carica configurazione Google Ads
+    const savedGoogleAds = localStorage.getItem('google_ads_config');
+    if (savedGoogleAds) {
+      try {
+        const parsed = JSON.parse(savedGoogleAds);
+        setGoogleAdsConfig(parsed);
+        console.log('✅ Configurazione Google Ads caricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel caricare configurazione Google Ads:', error);
+      }
+    }
+
+    // Carica configurazione Meta
+    const savedMeta = localStorage.getItem('meta_config');
+    if (savedMeta) {
+      try {
+        const parsed = JSON.parse(savedMeta);
+        setMetaConfig(parsed);
+        console.log('✅ Configurazione Meta caricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel caricare configurazione Meta:', error);
+      }
+    }
+
+    // Carica configurazione Database
+    const savedDatabase = localStorage.getItem('database_config');
+    if (savedDatabase) {
+      try {
+        const parsed = JSON.parse(savedDatabase);
+        setDatabaseConfig(parsed);
+        console.log('✅ Configurazione Database caricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel caricare configurazione Database:', error);
+      }
+    }
+  }, []);
+
   const handleShopifySave = () => {
     localStorage.setItem('shopify_config', JSON.stringify(shopifyConfig));
-    alert('Configurazione Shopify salvata!');
+    updateChangeStatus('shopify', false);
+    console.log('💾 Configurazione Shopify salvata:', shopifyConfig);
+    alert('✅ Configurazione Shopify salvata con successo!');
   };
 
   const handleGoogleAdsSave = () => {
     localStorage.setItem('google_ads_config', JSON.stringify(googleAdsConfig));
-    alert('Configurazione Google Ads salvata!');
+    updateChangeStatus('googleAds', false);
+    console.log('💾 Configurazione Google Ads salvata:', googleAdsConfig);
+    alert('✅ Configurazione Google Ads salvata con successo!');
   };
 
   const handleMetaSave = () => {
     localStorage.setItem('meta_config', JSON.stringify(metaConfig));
-    alert('Configurazione Meta salvata!');
+    updateChangeStatus('meta', false);
+    console.log('💾 Configurazione Meta salvata:', metaConfig);
+    alert('✅ Configurazione Meta salvata con successo!');
   };
 
   const handleDatabaseSave = () => {
     localStorage.setItem('database_config', JSON.stringify(databaseConfig));
-    alert('Configurazione database salvata!');
+    updateChangeStatus('database', false);
+    console.log('💾 Configurazione Database salvata:', databaseConfig);
+    alert('✅ Configurazione Database salvata con successo!');
+  };
+
+  // Ricarica manualmente tutte le configurazioni
+  const handleReloadConfigs = () => {
+    // Ricarica configurazione Shopify
+    const savedShopify = localStorage.getItem('shopify_config');
+    if (savedShopify) {
+      try {
+        const parsed = JSON.parse(savedShopify);
+        setShopifyConfig(parsed);
+        console.log('🔄 Configurazione Shopify ricaricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel ricaricare configurazione Shopify:', error);
+      }
+    }
+
+    // Ricarica configurazione Google Ads
+    const savedGoogleAds = localStorage.getItem('google_ads_config');
+    if (savedGoogleAds) {
+      try {
+        const parsed = JSON.parse(savedGoogleAds);
+        setGoogleAdsConfig(parsed);
+        console.log('🔄 Configurazione Google Ads ricaricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel ricaricare configurazione Google Ads:', error);
+      }
+    }
+
+    // Ricarica configurazione Meta
+    const savedMeta = localStorage.getItem('meta_config');
+    if (savedMeta) {
+      try {
+        const parsed = JSON.parse(savedMeta);
+        setMetaConfig(parsed);
+        console.log('🔄 Configurazione Meta ricaricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel ricaricare configurazione Meta:', error);
+      }
+    }
+
+    // Ricarica configurazione Database
+    const savedDatabase = localStorage.getItem('database_config');
+    if (savedDatabase) {
+      try {
+        const parsed = JSON.parse(savedDatabase);
+        setDatabaseConfig(parsed);
+        console.log('🔄 Configurazione Database ricaricata:', parsed);
+      } catch (error) {
+        console.error('❌ Errore nel ricaricare configurazione Database:', error);
+      }
+    }
+
+    alert('🔄 Tutte le configurazioni sono state ricaricate!');
   };
 
   const handleBackup = () => {
@@ -73,6 +201,46 @@ export default function SettingsPage() {
 
   const handleRestore = () => {
     alert('Restore avviato...');
+  };
+
+  // Reset tutte le impostazioni ai valori predefiniti
+  const handleResetSettings = () => {
+    if (confirm('⚠️ Sei sicuro di voler resettare tutte le impostazioni? Questa azione non può essere annullata.')) {
+      // Reset configurazione Shopify
+      setShopifyConfig({
+        shopDomain: '',
+        accessToken: '',
+        apiVersion: '2023-10'
+      });
+      localStorage.removeItem('shopify_config');
+
+      // Reset configurazione Google Ads
+      setGoogleAdsConfig({
+        clientId: '',
+        clientSecret: '',
+        refreshToken: '',
+        customerId: ''
+      });
+      localStorage.removeItem('google_ads_config');
+
+      // Reset configurazione Meta
+      setMetaConfig({
+        accessToken: '',
+        pixelId: ''
+      });
+      localStorage.removeItem('meta_config');
+
+      // Reset configurazione Database
+      setDatabaseConfig({
+        backupEnabled: true,
+        autoBackup: true,
+        backupInterval: '24'
+      });
+      localStorage.removeItem('database_config');
+
+      console.log('🗑️ Tutte le impostazioni sono state resettate');
+      alert('🗑️ Tutte le impostazioni sono state resettate ai valori predefiniti!');
+    }
   };
 
   return (
@@ -125,7 +293,10 @@ export default function SettingsPage() {
                     id="shopDomain"
                     placeholder="mio-shop.myshopify.com"
                     value={shopifyConfig.shopDomain}
-                    onChange={(e) => setShopifyConfig({...shopifyConfig, shopDomain: e.target.value})}
+                    onChange={(e) => {
+                      setShopifyConfig({...shopifyConfig, shopDomain: e.target.value});
+                      updateChangeStatus('shopify', true);
+                    }}
                   />
                 </div>
                 <div>
@@ -135,7 +306,10 @@ export default function SettingsPage() {
                     type="password"
                     placeholder="shpat_..."
                     value={shopifyConfig.accessToken}
-                    onChange={(e) => setShopifyConfig({...shopifyConfig, accessToken: e.target.value})}
+                    onChange={(e) => {
+                      setShopifyConfig({...shopifyConfig, accessToken: e.target.value});
+                      updateChangeStatus('shopify', true);
+                    }}
                   />
                 </div>
               </div>
@@ -145,12 +319,19 @@ export default function SettingsPage() {
                   id="apiVersion"
                   placeholder="2023-10"
                   value={shopifyConfig.apiVersion}
-                  onChange={(e) => setShopifyConfig({...shopifyConfig, apiVersion: e.target.value})}
+                  onChange={(e) => {
+                    setShopifyConfig({...shopifyConfig, apiVersion: e.target.value});
+                    updateChangeStatus('shopify', true);
+                  }}
                 />
               </div>
-              <Button onClick={handleShopifySave} className="w-full">
+              <Button 
+                onClick={handleShopifySave} 
+                className={`w-full ${hasUnsavedChanges.shopify ? 'bg-orange-600 hover:bg-orange-700' : ''}`}
+                disabled={!hasUnsavedChanges.shopify}
+              >
                 <Save className="h-4 w-4 mr-2" />
-                Salva Configurazione Shopify
+                {hasUnsavedChanges.shopify ? '⚠️ Salva Modifiche Shopify' : '✅ Configurazione Salvata'}
               </Button>
             </CardContent>
           </Card>
@@ -355,11 +536,11 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" onClick={handleReloadConfigs} className="w-full">
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Ricarica Configurazioni
                 </Button>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" onClick={handleResetSettings} className="w-full">
                   <Trash2 className="h-4 w-4 mr-2" />
                   Reset Impostazioni
                 </Button>
