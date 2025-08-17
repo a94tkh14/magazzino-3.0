@@ -134,7 +134,26 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
           } else {
             console.log('⚠️ Nessuna prossima pagina trovata - controlla pagination:', data.pagination);
             console.log('⚠️ Link header:', data.linkHeader);
-            keepGoing = false;
+            console.log('⚠️ Metadati risposta:', data.metadata);
+            
+            // Se non c'è paginazione ma abbiamo ordini = limit, potrebbe esserci un problema
+            if (data.orders && data.orders.length === optimizedLimit) {
+              console.log('🔧 Tentativo di paginazione manuale...');
+              // Prova a creare una paginazione manuale usando l'ultimo ID
+              if (data.orders.length > 0) {
+                const lastOrder = data.orders[data.orders.length - 1];
+                console.log(`🔧 Ultimo ordine ID: ${lastOrder.id}`);
+                
+                // Crea un pageInfo manuale per la prossima pagina
+                pageInfo = `manual_${lastOrder.id}`;
+                console.log(`🔧 PageInfo manuale creato: ${pageInfo}`);
+                page++;
+              } else {
+                keepGoing = false;
+              }
+            } else {
+              keepGoing = false;
+            }
           }
         }
       } else {

@@ -221,7 +221,15 @@ exports.handler = async (event, context) => {
     
     // Aggiungi paginazione se specificata
     if (pageInfo) {
-      apiUrl += `&page_info=${pageInfo}`;
+      if (pageInfo.startsWith('manual_')) {
+        // Paginazione manuale - usa since_id per la prossima pagina
+        const lastOrderId = pageInfo.replace('manual_', '');
+        console.log(`🔧 Paginazione manuale con since_id: ${lastOrderId}`);
+        apiUrl += `&since_id=${lastOrderId}`;
+      } else {
+        // Paginazione standard di Shopify
+        apiUrl += `&page_info=${pageInfo}`;
+      }
     }
 
     console.log('🔗 URL costruito:', apiUrl);
@@ -316,13 +324,20 @@ exports.handler = async (event, context) => {
           console.log('🔧 Tentativo di creare paginazione manuale...');
           // Shopify potrebbe non inviare link header se non ci sono più pagine
           // Ma se abbiamo esattamente optimizedLimit ordini, probabilmente ce ne sono altri
-          result.pagination = {
-            hasMore: true,
-            next: {
-              pageInfo: 'manual_pagination_suggested',
-              message: 'Link header non trovato, ma ordini = limit. Prova a chiamare di nuovo.'
-            }
-          };
+          if (data.orders.length > 0) {
+            const lastOrder = data.orders[data.orders.length - 1];
+            console.log(`🔧 Ultimo ordine ID: ${lastOrder.id}`);
+            
+            result.pagination = {
+              hasMore: true,
+              next: {
+                pageInfo: `manual_${lastOrder.id}`,
+                message: 'Paginazione manuale creata. Prova a chiamare di nuovo con questo pageInfo.',
+                lastOrderId: lastOrder.id,
+                method: 'manual'
+              }
+            };
+          }
         }
       }
 
@@ -342,7 +357,8 @@ exports.handler = async (event, context) => {
         method: 'standard_pagination',
         hasLinkHeader: !!linkHeader,
         ordersCount: data.orders ? data.orders.length : 0,
-        isFullPage: data.orders && data.orders.length === optimizedLimit
+        isFullPage: data.orders && data.orders.length === optimizedLimit,
+        paginationMethod: linkHeader ? 'shopify_link_header' : 'manual_created'
       };
 
       console.log('🎉 Invio risposta finale');
