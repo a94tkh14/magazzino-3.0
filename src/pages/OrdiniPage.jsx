@@ -107,7 +107,7 @@ const OrdiniPage = () => {
       // Se è la prima volta o forziamo tutto, scarica tutto. Altrimenti solo ultimi 7 giorni
       const daysBack = (isFirstSync || forceAll) ? null : 7;
       
-      const shopifyOrders = await fetchShopifyOrders(250, 'open', (count, page) => {
+      const shopifyOrders = await fetchShopifyOrders(50, 'open', (count, page) => {
         setProgress({ count, page, active: true });
       }, daysBack);
       

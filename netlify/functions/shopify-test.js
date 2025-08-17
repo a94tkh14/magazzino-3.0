@@ -77,7 +77,7 @@ exports.handler = async (event, context) => {
         break;
       case 'orders':
         // Estrai tutti i parametri dal body già parsato
-        const { limit = 250, status = 'open', pageInfo, daysBack } = body;
+        const { limit = 50, status = 'open', pageInfo, daysBack } = body;
         
         // Shopify accetta solo questi status: open, closed, cancelled, pending, any
         // 'any' significa tutti gli status, ma dobbiamo gestirlo diversamente

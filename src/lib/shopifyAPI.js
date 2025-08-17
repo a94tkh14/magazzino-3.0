@@ -8,7 +8,7 @@ export const getShopifyCredentials = () => {
 };
 
 // Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
-export const fetchShopifyOrders = async (limit = 250, status = 'open', onProgress, daysBack = null) => {
+export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress, daysBack = null) => {
   try {
     const credentials = getShopifyCredentials();
     let allOrders = [];
@@ -72,6 +72,8 @@ export const fetchShopifyOrders = async (limit = 250, status = 'open', onProgres
           // Prova a ottenere la prossima pagina dal link header
           const linkHeader = data.data.linkHeader;
           console.log(`🔗 Link header ricevuto: ${linkHeader}`);
+          console.log(`📊 Ordini in questa pagina: ${data.data.orders.length}/${limit}`);
+          console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
           
           if (linkHeader && linkHeader.includes('rel="next"')) {
             // Estrai il page_info dal link header
@@ -85,22 +87,31 @@ export const fetchShopifyOrders = async (limit = 250, status = 'open', onProgres
               const altMatch = linkHeader.match(/<[^>]*>;\s*rel="next"/);
               if (altMatch) {
                 const url = altMatch[0].match(/<([^>]+)>/)[1];
-                const urlObj = new URL(url);
-                pageInfo = urlObj.searchParams.get('page_info');
-                if (pageInfo) {
-                  console.log(`📄 Prossima pagina estratta da URL: ${pageInfo}`);
-                  page++;
-                } else {
-                  console.log('⚠️ Link header trovato ma page_info non estraibile');
+                console.log(`🔗 URL estratto: ${url}`);
+                try {
+                  const urlObj = new URL(url);
+                  pageInfo = urlObj.searchParams.get('page_info');
+                  if (pageInfo) {
+                    console.log(`📄 Prossima pagina estratta da URL: ${pageInfo}`);
+                    page++;
+                  } else {
+                    console.log('⚠️ Link header trovato ma page_info non estraibile');
+                    console.log('🔍 Parametri URL:', Array.from(urlObj.searchParams.entries()));
+                    keepGoing = false;
+                  }
+                } catch (urlError) {
+                  console.log('❌ Errore nel parsing URL:', urlError);
                   keepGoing = false;
                 }
               } else {
                 console.log('⚠️ Link header trovato ma formato non riconosciuto');
+                console.log('🔍 Pattern non trovato in:', linkHeader);
                 keepGoing = false;
               }
             }
           } else {
             console.log('✅ Nessun link per la prossima pagina trovato');
+            console.log('🔍 Link header completo:', linkHeader);
             keepGoing = false;
           }
         }
