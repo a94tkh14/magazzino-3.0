@@ -42,6 +42,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Endpoint per salvare le credenziali Shopify
 app.post('/api/shopify/save-credentials', (req, res) => {
@@ -77,104 +78,182 @@ app.get('/api/shopify/load-credentials', (req, res) => {
   }
 });
 
-// Endpoint di test per verificare la connessione base
-app.get('/api/shopify/test', async (req, res) => {
+// Endpoint per testare la connessione Shopify
+app.post('/api/shopify/test', async (req, res) => {
   try {
-
-    let { shop, apiKey, apiPassword, apiVersion } = req.query;
+    const { shopDomain, accessToken, apiVersion, testType } = req.body;
     
-    // Se non ci sono parametri, prova a caricare le credenziali salvate
-    if (!shop || !apiKey || !apiPassword || !apiVersion) {
-      const savedCredentials = loadCredentials();
-      if (savedCredentials) {
-        shop = savedCredentials.shop;
-        apiKey = savedCredentials.apiKey;
-        apiPassword = savedCredentials.apiPassword;
-        apiVersion = savedCredentials.apiVersion;
-        console.log('=== TEST CONNECTION (credenziali salvate) ===');
+    if (!shopDomain || !accessToken) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Dominio shop e access token sono richiesti' 
+      });
+    }
+
+    // Validazione formato dominio
+    const domainRegex = /^[a-zA-Z0-9-]+\.myshopify\.com$/;
+    if (!domainRegex.test(shopDomain)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Formato dominio non valido. Deve essere: nome-shop.myshopify.com' 
+      });
+    }
+
+    // Validazione formato access token
+    if (!accessToken.startsWith('shpat_')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Access token non valido. Deve iniziare con "shpat_"' 
+      });
+    }
+
+    let apiUrl;
+    let responseData;
+
+    switch (testType) {
+      case 'shop':
+        apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/shop.json`;
+        break;
+      case 'products':
+        apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=5`;
+        break;
+      case 'orders':
+        apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=5&status=any`;
+        break;
+      default:
+        apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/shop.json`;
+    }
+
+    console.log(`🔄 Testando Shopify API: ${apiUrl}`);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Access token non valido o scaduto');
+      } else if (response.status === 404) {
+        throw new Error('Dominio shop non trovato');
       } else {
-        console.log('=== TEST CONNECTION ===');
-        console.log('Shop:', shop);
-        console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
-        console.log('API Version:', apiVersion);
-        return res.status(400).json({ error: 'Parametri mancanti' });
+        throw new Error(`Errore API Shopify: ${response.status} ${response.statusText}`);
       }
-    } else {
-      console.log('=== TEST CONNECTION ===');
-    }
-    
-    console.log('Shop:', shop);
-    console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING');
-    console.log('API Version:', apiVersion);
-
-    const baseURL = `https://${shop}/admin/api/${apiVersion}`;
-    const credentials = Buffer.from(`${apiKey}:${apiPassword}`).toString('base64');
-    
-    // Test 1: Verifica connessione base (shop info)
-    console.log('Test 1: Verifica shop info...');
-    const shopResponse = await fetch(`${baseURL}/shop.json`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('Shop Response Status:', shopResponse.status);
-    
-    if (!shopResponse.ok) {
-      const errorText = await shopResponse.text();
-      console.error('Shop API Error:', errorText);
-      return res.status(shopResponse.status).json({ 
-        error: `Errore connessione base: ${shopResponse.status}`,
-        details: errorText
-      });
     }
 
-    const shopData = await shopResponse.json();
-    console.log('Shop info ottenuta:', shopData.shop?.name);
+    responseData = await response.json();
+    console.log(`✅ Test Shopify riuscito per: ${testType}`);
 
-    // Test 2: Verifica permessi ordini
-    console.log('Test 2: Verifica permessi ordini...');
-    const ordersResponse = await fetch(`${baseURL}/orders.json?limit=1`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('Orders Response Status:', ordersResponse.status);
-    
-    if (!ordersResponse.ok) {
-      const errorText = await ordersResponse.text();
-      console.error('Orders API Error:', errorText);
-      return res.status(ordersResponse.status).json({ 
-        error: `Errore permessi ordini: ${ordersResponse.status}`,
-        details: errorText,
-        shopInfo: shopData.shop
-      });
-    }
-
-    const ordersData = await ordersResponse.json();
-    console.log('Orders access OK, count:', ordersData.orders?.length || 0);
-
-    // Salva le credenziali se il test ha successo
-    const testCredentials = { shop, apiKey, apiPassword, apiVersion };
-    saveCredentials(testCredentials);
-    
-    res.json({ 
+    res.json({
       success: true,
-      message: 'Connessione e permessi OK',
-      shop: shopData.shop,
-      ordersCount: ordersData.orders?.length || 0
+      data: responseData,
+      testType: testType
     });
 
   } catch (error) {
-    console.error('Test error:', error);
-    res.status(500).json({ 
-      error: 'Errore test connessione',
-      details: error.message 
+    console.error(`❌ Errore test Shopify:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Endpoint per sincronizzare prodotti da Shopify
+app.post('/api/shopify/sync-products', async (req, res) => {
+  try {
+    const { shopDomain, accessToken, apiVersion } = req.body;
+    
+    if (!shopDomain || !accessToken) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Credenziali Shopify richieste' 
+      });
+    }
+
+    const apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=250`;
+    
+    console.log(`🔄 Sincronizzando prodotti da Shopify: ${shopDomain}`);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Errore API Shopify: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const products = data.products || [];
+    
+    console.log(`✅ Sincronizzati ${products.length} prodotti da Shopify`);
+
+    res.json({
+      success: true,
+      products: products,
+      count: products.length
+    });
+
+  } catch (error) {
+    console.error(`❌ Errore sincronizzazione Shopify:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Endpoint per sincronizzare ordini da Shopify
+app.post('/api/shopify/sync-orders', async (req, res) => {
+  try {
+    const { shopDomain, accessToken, apiVersion } = req.body;
+    
+    if (!shopDomain || !accessToken) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Credenziali Shopify richieste' 
+      });
+    }
+
+    const apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=250&status=any`;
+    
+    console.log(`🔄 Sincronizzando ordini da Shopify: ${shopDomain}`);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Errore API Shopify: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const orders = data.orders || [];
+    
+    console.log(`✅ Sincronizzati ${orders.length} ordini da Shopify`);
+
+    res.json({
+      success: true,
+      orders: orders,
+      count: orders.length
+    });
+
+  } catch (error) {
+    console.error(`❌ Errore sincronizzazione Shopify:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });

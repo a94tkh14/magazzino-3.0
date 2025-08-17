@@ -56,38 +56,36 @@ const ShopifyTest = () => {
         throw new Error('Access token non valido. Deve iniziare con "shpat_"');
       }
 
-      // Test 3: Chiamata API reale a Shopify
-      const shopUrl = `https://${shopifyConfig.shopDomain}/admin/api/${shopifyConfig.apiVersion}/shop.json`;
-      
-      const response = await fetch(shopUrl, {
-        method: 'GET',
+      // Test 3: Chiamata API tramite nostro proxy
+      const response = await fetch('/api/shopify/test', {
+        method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': shopifyConfig.accessToken,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          shopDomain: shopifyConfig.shopDomain,
+          accessToken: shopifyConfig.accessToken,
+          apiVersion: shopifyConfig.apiVersion,
+          testType: 'shop'
+        })
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Access token non valido o scaduto');
-        } else if (response.status === 404) {
-          throw new Error('Dominio shop non trovato');
-        } else {
-          throw new Error(`Errore API Shopify: ${response.status} ${response.statusText}`);
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
       }
 
       const data = await response.json();
       
-      if (data.shop) {
+      if (data.success && data.data.shop) {
         setTestResult({
           success: true,
           data: {
-            shopName: data.shop.name,
-            shopEmail: data.shop.email,
-            shopDomain: data.shop.domain,
-            currency: data.shop.currency,
-            timezone: data.shop.iana_timezone
+            shopName: data.data.shop.name,
+            shopEmail: data.data.shop.email,
+            shopDomain: data.data.shop.domain,
+            currency: data.data.shop.currency,
+            timezone: data.data.shop.iana_timezone
           }
         });
       } else {
@@ -111,24 +109,32 @@ const ShopifyTest = () => {
     }
 
     try {
-      const productsUrl = `https://${shopifyConfig.shopDomain}/admin/api/${shopifyConfig.apiVersion}/products.json?limit=5`;
-      
-      const response = await fetch(productsUrl, {
-        method: 'GET',
+      const response = await fetch('/api/shopify/test', {
+        method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': shopifyConfig.accessToken,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          shopDomain: shopifyConfig.shopDomain,
+          accessToken: shopifyConfig.accessToken,
+          apiVersion: shopifyConfig.apiVersion,
+          testType: 'products'
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`Errore API prodotti: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
       }
 
       const data = await response.json();
-      const productCount = data.products ? data.products.length : 0;
       
-      alert(`✅ Connessione prodotti riuscita!\n\nTrovati ${productCount} prodotti\n\nPrimi prodotti:\n${data.products?.slice(0, 3).map(p => `- ${p.title}`).join('\n') || 'Nessun prodotto'}`);
+      if (data.success && data.data.products) {
+        const productCount = data.data.products.length;
+        alert(`✅ Connessione prodotti riuscita!\n\nTrovati ${productCount} prodotti\n\nPrimi prodotti:\n${data.data.products.slice(0, 3).map(p => `- ${p.title}`).join('\n') || 'Nessun prodotto'}`);
+      } else {
+        throw new Error('Risposta API prodotti non valida');
+      }
 
     } catch (error) {
       alert(`❌ Errore nel test prodotti: ${error.message}`);
@@ -142,24 +148,32 @@ const ShopifyTest = () => {
     }
 
     try {
-      const ordersUrl = `https://${shopifyConfig.shopDomain}/admin/api/${shopifyConfig.apiVersion}/orders.json?limit=5&status=any`;
-      
-      const response = await fetch(ordersUrl, {
-        method: 'GET',
+      const response = await fetch('/api/shopify/test', {
+        method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': shopifyConfig.accessToken,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          shopDomain: shopifyConfig.shopDomain,
+          accessToken: shopifyConfig.accessToken,
+          apiVersion: shopifyConfig.apiVersion,
+          testType: 'orders'
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`Errore API ordini: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
       }
 
       const data = await response.json();
-      const orderCount = data.orders ? data.orders.length : 0;
       
-      alert(`✅ Connessione ordini riuscita!\n\nTrovati ${orderCount} ordini\n\nPrimi ordini:\n${data.orders?.slice(0, 3).map(o => `- #${o.order_number} - ${o.total_price} ${o.currency}`).join('\n') || 'Nessun ordine'}`);
+      if (data.success && data.data.orders) {
+        const orderCount = data.data.orders.length;
+        alert(`✅ Connessione ordini riuscita!\n\nTrovati ${orderCount} ordini\n\nPrimi ordini:\n${data.data.orders.slice(0, 3).map(o => `- #${o.order_number} - ${o.total_price} ${o.currency}`).join('\n') || 'Nessun ordine'}`);
+      } else {
+        throw new Error('Risposta API ordini non valida');
+      }
 
     } catch (error) {
       alert(`❌ Errore nel test ordini: ${error.message}`);
