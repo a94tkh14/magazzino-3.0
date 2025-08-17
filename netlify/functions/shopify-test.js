@@ -75,7 +75,22 @@ exports.handler = async (event, context) => {
         apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=5`;
         break;
       case 'orders':
-        apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=5&status=any`;
+        const { limit = 50, status = 'any', pageInfo, daysBack } = JSON.parse(event.body);
+        let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=${limit}&status=${status}`;
+        
+        // Aggiungi filtro per data se specificato
+        if (daysBack) {
+          const cutoffDate = new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+          ordersUrl += `&created_at_min=${cutoffDate.toISOString()}`;
+        }
+        
+        // Aggiungi page_info per paginazione
+        if (pageInfo) {
+          ordersUrl += `&page_info=${pageInfo}`;
+        }
+        
+        apiUrl = ordersUrl;
         break;
       default:
         apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/shop.json`;

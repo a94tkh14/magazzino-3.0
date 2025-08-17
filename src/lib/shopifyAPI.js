@@ -1,13 +1,13 @@
 // Funzione per ottenere le credenziali Shopify salvate
 export const getShopifyCredentials = () => {
-  const saved = localStorage.getItem('shopify_settings');
+  const saved = localStorage.getItem('shopify_config');
   if (!saved) {
     throw new Error('Credenziali Shopify non configurate. Vai su Impostazioni per configurarle.');
   }
   return JSON.parse(saved);
 };
 
-// Funzione per recuperare tutti gli ordini da Shopify tramite proxy, gestendo la paginazione
+// Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
 export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress, daysBack = null) => {
   try {
     const credentials = getShopifyCredentials();
@@ -17,46 +17,35 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
     let page = 1;
 
     while (keepGoing) {
-      const params = new URLSearchParams({
-        shop: credentials.shop,
-        apiKey: credentials.apiKey,
-        apiPassword: credentials.apiPassword,
-        apiVersion: credentials.apiVersion,
-        limit: limit.toString(),
-        status: status
-      });
-      
-      // Aggiungi filtro per data se specificato
-      if (daysBack) {
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-        params.append('created_at_min', cutoffDate.toISOString());
-        console.log(`[SYNC] Filtro per ordini degli ultimi ${daysBack} giorni (da ${cutoffDate.toISOString()})`);
-      }
-      
-      if (pageInfo) {
-        params.append('page_info', pageInfo);
-        console.log(`[SYNC] Aggiungendo page_info alla richiesta:`, pageInfo);
-      } else {
-        console.log(`[SYNC] Prima richiesta senza page_info`);
-      }
-      const url = `http://localhost:3002/api/shopify/orders?${params}`;
-      console.log(`[SYNC] Richiesta pagina ${page}... URL:`, url);
-      const response = await fetch(url, {
-        method: 'GET',
+      // Chiamata tramite Netlify Function
+      const response = await fetch('/.netlify/functions/shopify-test', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          shopDomain: credentials.shopDomain,
+          accessToken: credentials.accessToken,
+          apiVersion: credentials.apiVersion,
+          testType: 'orders',
+          limit: limit,
+          status: status,
+          pageInfo: pageInfo,
+          daysBack: daysBack
+        })
       });
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`Errore API Shopify: ${errorData.error || response.statusText}`);
       }
+
       const data = await response.json();
-      if (data.orders && data.orders.length > 0) {
+      
+      if (data.success && data.data.orders && data.data.orders.length > 0) {
         // Filtro anti-duplicati
         const existingIds = new Set(allOrders.map(o => o.id));
-        const newOrders = data.orders.filter(order => !existingIds.has(order.id));
+        const newOrders = data.data.orders.filter(order => !existingIds.has(order.id));
         allOrders = allOrders.concat(newOrders);
         if (onProgress) onProgress(allOrders.length, page);
         console.log(`[SYNC] Scaricati ${allOrders.length} ordini totali dopo pagina ${page}`);
@@ -79,6 +68,7 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
       } else {
         console.log('[SYNC] Nessun link header presente. Fine paginazione.');
       }
+      
       if (nextPageInfo) {
         pageInfo = nextPageInfo;
         keepGoing = true;
@@ -92,7 +82,7 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
     return allOrders;
   } catch (error) {
     if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      throw new Error('Errore di connessione al proxy server. Verifica che il server sia avviato con "npm run server"');
+      throw new Error('Errore di connessione alle Netlify Functions. Verifica la connessione internet.');
     }
     throw error;
   }
