@@ -8,7 +8,7 @@ export const getShopifyCredentials = () => {
 };
 
 // Funzione per recuperare tutti gli ordini da Shopify tramite Netlify Functions, gestendo la paginazione
-export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress, daysBack = null) => {
+export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress, daysBack = null) => {
   try {
     const credentials = getShopifyCredentials();
     let allOrders = [];
@@ -164,8 +164,8 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
       }
       
       // Limite di sicurezza per evitare loop infiniti
-      if (page > 50) { // Ridotto da 100 a 50 per maggiore sicurezza
-        console.log('⚠️ Raggiunto limite massimo di pagine (50) - potrebbe esserci un problema di paginazione');
+      if (page > 200) { // Aumentato a 200 per permettere più ordini
+        console.log('⚠️ Raggiunto limite massimo di pagine (200) - potrebbe esserci un problema di paginazione');
         console.log(`🔍 Ordini totali scaricati: ${allOrders.length}`);
         console.log(`🔍 Limite richiesto: ${limit}`);
         keepGoing = false;
