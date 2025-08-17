@@ -270,8 +270,23 @@ exports.handler = async (event, context) => {
         needsPagination: limit > 250,
         message: limit > 250 ? 
           `Richiesti ${limit} ordini, caricati ${actualLimit} per pagina. Usa paginazione per ottenere tutti gli ordini.` :
-          `Caricati ${actualLimit} ordini come richiesto.`
+          `Caricati ${actualLimit} ordini come richiesto.`,
+        // Informazioni aggiuntive per debug
+        pageInfo: pageInfo,
+        hasLinkHeader: !!linkHeader,
+        linkHeaderContent: linkHeader || 'null',
+        urlCalled: apiUrl,
+        timestamp: new Date().toISOString()
       };
+      
+      // Log aggiuntivo per debug paginazione
+      console.log(`🔍 DEBUG - Paginazione info completata:`, responseData.paginationInfo);
+      if (responseData.orders && responseData.orders.length > 0) {
+        const firstOrderId = responseData.orders[0].id;
+        const lastOrderId = responseData.orders[responseData.orders.length - 1].id;
+        console.log(`🔍 DEBUG - Range ordini in questa pagina: ${firstOrderId} -> ${lastOrderId}`);
+        console.log(`🔍 DEBUG - Numero ordini: ${responseData.orders.length}`);
+      }
     }
 
     // Restituisci la risposta

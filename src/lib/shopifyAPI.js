@@ -149,29 +149,45 @@ export const fetchShopifyOrders = async (limit = 50, status = 'open', onProgress
               page++;
             } else {
               console.log('✅ Nessuna prossima pagina disponibile');
+              console.log(`📊 Motivo: ordini in questa pagina (${data.data.orders.length}) < limite richiesto (${limit})`);
+              console.log(`🔍 Questo potrebbe significare che abbiamo raggiunto tutti gli ordini disponibili`);
               keepGoing = false;
             }
           }
         }
       } else {
         console.log(`⚠️ Pagina ${page} non ha ordini o errore`);
+        if (data.error) {
+          console.error('❌ Errore dalla funzione:', data.error);
+        }
         keepGoing = false;
       }
       
       // Limite di sicurezza per evitare loop infiniti
-      if (page > 200) {
-        console.log('⚠️ Raggiunto limite massimo di pagine (200) - potrebbe esserci un problema di paginazione');
+      if (page > 50) { // Ridotto da 100 a 50 per maggiore sicurezza
+        console.log('⚠️ Raggiunto limite massimo di pagine (50) - potrebbe esserci un problema di paginazione');
+        console.log(`🔍 Ordini totali scaricati: ${allOrders.length}`);
+        console.log(`🔍 Limite richiesto: ${limit}`);
         keepGoing = false;
       }
       
       // Pausa intelligente per evitare rate limit
       if (keepGoing) {
-        const pauseTime = page === 1 ? 500 : 1000; // Prima pagina: 500ms, altre: 1000ms
+        const pauseTime = page === 1 ? 300 : 500; // Ridotte le pause per maggiore velocità
         console.log(`⏳ Pausa di ${pauseTime}ms prima della prossima richiesta...`);
         await new Promise(resolve => setTimeout(resolve, pauseTime));
       }
     }
     console.log(`🎉 Scaricamento completato! Totale ordini: ${allOrders.length}`);
+    console.log(`📊 Limite richiesto: ${limit}`);
+    console.log(`📈 Pagine processate: ${page}`);
+    
+    // Se abbiamo scaricato meno ordini del richiesto, potrebbe essere che non ce ne siano altri
+    if (allOrders.length < limit) {
+      console.log(`ℹ️ Nota: Scaricati ${allOrders.length} ordini su ${limit} richiesti`);
+      console.log(`ℹ️ Questo potrebbe significare che il tuo store Shopify ha solo ${allOrders.length} ordini totali`);
+    }
+    
     return allOrders;
   } catch (error) {
     if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
