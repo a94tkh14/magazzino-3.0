@@ -1,0 +1,49 @@
+functionsDirectory = "/Users/a.t./Desktop/project logitics/magazzino 3.0 /netlify/functions"
+functionsDirectoryOrigin = "config-v1"
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+publish = "/Users/a.t./Desktop/project logitics/magazzino 3.0 /build"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build"
+functions = "/Users/a.t./Desktop/project logitics/magazzino 3.0 /netlify/functions"
+
+[build.environment]
+NODE_VERSION = "18"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[dev]
+command = "npm run dev"
+port = 3000.0
+publish = "build"
+functions = "netlify/functions"
+
+[functions]
+
+[functions."*"]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
