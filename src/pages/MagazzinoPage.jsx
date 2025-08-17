@@ -626,7 +626,11 @@ const MagazzinoPage = () => {
                             autoFocus
                           />
                         ) : (
-                          <span onClick={() => handleEditField(item.sku, 'nome', item.nome)} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
+                          <span 
+                            onClick={() => handleEditField(item.sku, 'nome', item.nome)} 
+                            className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded text-blue-600 hover:text-blue-800 hover:underline"
+                            title="Clicca per modificare o per vedere i dettagli"
+                          >
                             {item.nome}
                           </span>
                         )}
@@ -643,7 +647,11 @@ const MagazzinoPage = () => {
                             autoFocus
                           />
                         ) : (
-                          <span className="font-mono bg-gray-100 px-2 py-1 rounded text-xs">
+                          <span 
+                            className="font-mono bg-gray-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-gray-200 text-blue-600 hover:text-blue-800"
+                            onClick={() => navigate(`/magazzino/${item.sku}`)}
+                            title="Clicca per vedere i dettagli del prodotto"
+                          >
                             {item.sku}
                           </span>
                         )}
@@ -736,8 +744,16 @@ const MagazzinoPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
                           <button
+                            onClick={() => navigate(`/magazzino/${item.sku}`)}
+                            className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                            title="Vedi dettagli e variazioni prezzo"
+                          >
+                            👁️ Dettagli
+                          </button>
+                          <button
                             onClick={() => handleDeleteProduct(item.sku)}
                             className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                            title="Elimina prodotto"
                           >
                             🗑️ Cancella
                           </button>
