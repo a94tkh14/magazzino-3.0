@@ -32,6 +32,9 @@ const MagazzinoPage = () => {
   const [addError, setAddError] = useState('');
   const [showAnagrafica, setShowAnagrafica] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [originalData, setOriginalData] = useState([]);
+  const [pendingChanges, setPendingChanges] = useState({});
 
   const navigate = useNavigate();
   const lowStockThreshold = 5;
@@ -88,12 +91,16 @@ const MagazzinoPage = () => {
   };
 
   const handleEditField = (sku, field, currentValue) => {
+    if (!isEditMode) return; // Solo in modalità modifica
+    
     setEditingSku(sku);
     setEditingField(field);
     setEditingValue(currentValue || '');
   };
 
   const handleSaveEdit = async (sku, field, value) => {
+    if (!isEditMode) return; // Solo in modalità modifica
+    
     let updated;
     if (field === 'nome') {
       if (!value.trim()) return;
@@ -161,74 +168,85 @@ const MagazzinoPage = () => {
     
     if (!updated) return;
     
+    // Salva le modifiche in pendingChanges invece di salvare subito
+    setPendingChanges(prev => ({
+      ...prev,
+      [sku]: { ...prev[sku], [field]: value }
+    }));
+    
+    // Aggiorna immediatamente l'interfaccia
+    setMagazzinoData(updated);
+    setFilteredData(updated);
+    
+    // Esci dalla modalità di modifica del campo
+    setEditingSku(null);
+    setEditingField(null);
+    setEditingValue('');
+  };
+
+  const startEditMode = () => {
+    setOriginalData([...magazzinoData]);
+    setPendingChanges({});
+    setIsEditMode(true);
+  };
+
+  const cancelEditMode = () => {
+    // Ripristina i dati originali
+    setMagazzinoData(originalData);
+    setFilteredData(originalData);
+    setPendingChanges({});
+    setIsEditMode(false);
+    setEditingSku(null);
+    setEditingField(null);
+    setEditingValue('');
+  };
+
+  const saveAllChanges = async () => {
     try {
-      // Trova il prodotto modificato
-      const modifiedItem = updated.find(item => item.sku === sku);
-      if (modifiedItem) {
-        // Salva solo il prodotto modificato su Firebase
-        const result = await saveMagazzino(modifiedItem);
-        if (result.success) {
-          // Aggiorna immediatamente l'interfaccia
-          setMagazzinoData(updated);
-          setFilteredData(updated);
-          
-          // Salva anche in localStorage come backup
-          saveToLocalStorage('magazzino_data', updated);
-          
-          // Esci dalla modalità di modifica
-          setEditingSku(null);
-          setEditingField(null);
-          setEditingValue(''); // Clear value after saving
-          
-          // Mostra messaggio di successo temporaneo
-          const successMessage = document.createElement('div');
-          successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-          successMessage.textContent = `Prodotto "${modifiedItem.nome}" modificato con successo!`;
-          document.body.appendChild(successMessage);
-          
-          // Rimuovi il messaggio dopo 3 secondi
-          setTimeout(() => {
-            if (successMessage.parentNode) {
-              successMessage.parentNode.removeChild(successMessage);
-            }
-          }, 3000);
-          
-        } else {
-          console.error('Errore nel salvare su Firebase:', result.error);
-          
-          // Mostra messaggio di errore temporaneo
-          const errorMessage = document.createElement('div');
-          errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-          errorMessage.textContent = `Errore: ${result.error}`;
-          document.body.appendChild(errorMessage);
-          
-          // Rimuovi il messaggio dopo 5 secondi
-          setTimeout(() => {
-            if (errorMessage.parentNode) {
-              errorMessage.parentNode.removeChild(errorMessage);
-            }
-          }, 5000);
+      // Salva tutte le modifiche su Firebase
+      const savePromises = Object.entries(pendingChanges).map(async ([sku, changes]) => {
+        const item = magazzinoData.find(item => item.sku === sku);
+        if (item) {
+          const updatedItem = { ...item, ...changes };
+          return await saveMagazzino(updatedItem);
         }
+      });
+
+      const results = await Promise.all(savePromises);
+      const allSuccessful = results.every(result => result && result.success);
+
+      if (allSuccessful) {
+        // Salva anche in localStorage come backup
+        saveToLocalStorage('magazzino_data', magazzinoData);
+        
+        // Esci dalla modalità di modifica
+        setIsEditMode(false);
+        setPendingChanges({});
+        setOriginalData([]);
+        
+        // Mostra messaggio di successo
+        const successMessage = document.createElement('div');
+        successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        successMessage.textContent = `Tutte le modifiche salvate con successo!`;
+        document.body.appendChild(successMessage);
+        
+        setTimeout(() => {
+          if (successMessage.parentNode) {
+            successMessage.parentNode.removeChild(successMessage);
+          }
+        }, 3000);
+      } else {
+        alert('Errore nel salvare alcune modifiche');
       }
     } catch (error) {
-      console.error('Errore nel salvare su Firebase:', error);
-      
-      // Mostra messaggio di errore temporaneo
-      const errorMessage = document.createElement('div');
-      errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      errorMessage.textContent = `Errore: ${error.message}`;
-      document.body.appendChild(errorMessage);
-      
-      // Rimuovi il messaggio dopo 5 secondi
-      setTimeout(() => {
-        if (errorMessage.parentNode) {
-          errorMessage.parentNode.removeChild(errorMessage);
-        }
-      }, 5000);
+      console.error('Errore nel salvare le modifiche:', error);
+      alert(`Errore nel salvare: ${error.message}`);
     }
   };
 
   const handleDeleteProduct = async (sku) => {
+    if (!isEditMode) return; // Solo in modalità modifica
+    
     if (!window.confirm(`Sei sicuro di voler eliminare il prodotto "${sku}"?`)) return;
     
     try {
@@ -516,6 +534,59 @@ const MagazzinoPage = () => {
         </div>
       )}
 
+      {/* Controlli per la modalità di modifica */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isEditMode ? '🔧 Modalità Modifica Attiva' : '📋 Visualizzazione Prodotti'}
+            </h3>
+            {isEditMode && (
+              <span className="text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded-full">
+                {Object.keys(pendingChanges).length} modifiche in sospeso
+              </span>
+            )}
+          </div>
+          
+          <div className="flex space-x-3">
+            {!isEditMode ? (
+              <button
+                onClick={startEditMode}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center space-x-2"
+              >
+                ✏️ Modifica Prodotti
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={saveAllChanges}
+                  disabled={Object.keys(pendingChanges).length === 0}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center space-x-2"
+                >
+                  💾 Salva Modifiche
+                </button>
+                <button
+                  onClick={cancelEditMode}
+                  className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center space-x-2"
+                >
+                  ❌ Annulla Modifiche
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        
+        {isEditMode && (
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <p className="text-sm text-blue-800">
+              💡 <strong>Istruzioni:</strong> Clicca sui campi che vuoi modificare. Le modifiche verranno salvate solo quando clicchi "Salva Modifiche".
+              Puoi annullare tutte le modifiche con "Annulla Modifiche".
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Tabella prodotti */}
       <Card>
         <CardHeader>
           <CardTitle>Ricerca Prodotti</CardTitle>
@@ -564,21 +635,24 @@ const MagazzinoPage = () => {
                 <tbody>
                   {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {editingSku === item.sku && editingField === 'nome' ? (
-                            <input
-                              type="text"
-                              value={editingValue}
-                              onChange={(e) => setEditingValue(e.target.value)}
-                              onBlur={() => handleSaveEdit(item.sku, 'nome', editingValue)}
-                              onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'nome', editingValue)}
-                              className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
-                              autoFocus
-                            />
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {isEditMode ? (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleEditField(item.sku, 'nome', item.nome)}
+                                className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                              >
+                                ✏️ Modifica
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(item.sku)}
+                                className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                              >
+                                🗑️ Cancella
+                              </button>
+                            </div>
                           ) : (
-                            <span onClick={() => handleEditField(item.sku, 'nome', item.nome)} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                              {item.nome}
-                            </span>
+                            <span className="text-gray-500 text-sm">Modalità visualizzazione</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
