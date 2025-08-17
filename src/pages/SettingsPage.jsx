@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import LogoUpload from '../components/LogoUpload';
 import GoogleAdsAPI from '../lib/googleAdsAPI';
 import MetaAPI from '../lib/metaAPI';
+import FirebaseMagazzinoTest from '../components/FirebaseMagazzinoTest';
 
 export default function SettingsPage() {
   const [shop, setShop] = useState('');
@@ -619,6 +620,12 @@ export default function SettingsPage() {
               REACT_APP_META_CLIENT_ID=your_client_id
             </div>
           </div>
+        </div>
+
+        {/* Test Firebase */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold text-gray-900">Test Firebase Database</h2>
+          <FirebaseMagazzinoTest />
         </div>
       </div>
     </div>

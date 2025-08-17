@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { FileText, Trash2, Send, Download, Package, Database } from 'lucide-react';
 import Button from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { loadMagazzinoData, saveMagazzinoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { loadMagazzino, saveMagazzino } from '../lib/firebase';
+import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import PriceSuggestionModal from '../components/PriceSuggestionModal';
 
 const StockPage = () => {
@@ -170,22 +171,25 @@ const StockPage = () => {
     setIsLoading(true);
 
     try {
-      let magazzino = await loadMagazzinoData();
+      const result = await loadMagazzino();
+      let magazzino = result.success ? result.data : [];
       let toImport = [...csvData];
 
     const processNext = async () => {
       if (toImport.length === 0) {
         try {
-          // Salva nel database
-          await saveMagazzinoData(magazzino);
+          // Salva su Firebase
+          for (const item of magazzino) {
+            await saveMagazzino(item);
+          }
           // Salva anche in localStorage come backup
           saveToLocalStorage('magazzino_data', magazzino);
           setIsLoading(false);
-          setMessage('Stock caricato e magazzino aggiornato!');
+          setMessage('Stock caricato e magazzino aggiornato su Firebase!');
           setCsvData([]);
         } catch (error) {
-          console.error('Errore nel salvare magazzino:', error);
-          setMessage('Errore nel salvare i dati');
+          console.error('Errore nel salvare su Firebase:', error);
+          setMessage('Errore nel salvare i dati su Firebase');
           setIsLoading(false);
         }
         return;
@@ -268,7 +272,8 @@ const StockPage = () => {
     }
     
     try {
-      let magazzino = await loadMagazzinoData();
+      const result = await loadMagazzino();
+      let magazzino = result.success ? result.data : [];
       let hasError = false;
       let errorMessage = '';
       
@@ -301,16 +306,18 @@ const StockPage = () => {
         return;
       }
       
-      // Salva nel database
-      await saveMagazzinoData(magazzino);
+      // Salva su Firebase
+      for (const item of magazzino) {
+        await saveMagazzino(item);
+      }
       // Salva anche in localStorage come backup
       saveToLocalStorage('magazzino_data', magazzino);
       
       setManualProducts([{ sku: '', nome: '', quantita: '', prezzo: '' }]);
-      setMessage(`${validProducts.length} prodotto/i aggiunto/i manualmente!`);
+      setMessage(`${validProducts.length} prodotto/i aggiunto/i manualmente su Firebase!`);
     } catch (error) {
-      console.error('Errore nel salvare dati:', error);
-      setMessage('Errore nel salvare i dati');
+      console.error('Errore nel salvare su Firebase:', error);
+      setMessage('Errore nel salvare i dati su Firebase');
     }
   };
 
@@ -322,7 +329,8 @@ const StockPage = () => {
     setIsLoading(true);
 
     try {
-      let magazzino = await loadMagazzinoData();
+      const result = await loadMagazzino();
+      let magazzino = result.success ? result.data : [];
       let updatedCount = 0;
       let newCount = 0;
 
@@ -350,17 +358,19 @@ const StockPage = () => {
         }
       });
 
-      // Salva nel database
-      await saveMagazzinoData(magazzino);
+      // Salva su Firebase
+      for (const item of magazzino) {
+        await saveMagazzino(item);
+      }
       // Salva anche in localStorage come backup
       saveToLocalStorage('magazzino_data', magazzino);
       
       setAnagraficaData([]);
       setIsLoading(false);
-      setAnagraficaMessage(`Anagrafica caricata: ${updatedCount} aggiornati, ${newCount} nuovi prodotti`);
+      setAnagraficaMessage(`Anagrafica caricata su Firebase: ${updatedCount} aggiornati, ${newCount} nuovi prodotti`);
     } catch (error) {
-      console.error('Errore nel salvare anagrafica:', error);
-      setAnagraficaMessage('Errore nel salvare i dati anagrafica');
+      console.error('Errore nel salvare anagrafica su Firebase:', error);
+      setAnagraficaMessage('Errore nel salvare i dati anagrafica su Firebase');
       setIsLoading(false);
     }
   };

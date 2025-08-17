@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Package, Tag, Settings } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { saveMagazzinoData, loadMagazzinoData, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { saveMagazzino, loadMagazzino } from '../lib/firebase';
+import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
 import Button from '../components/ui/button';
@@ -36,26 +37,27 @@ const MagazzinoPage = () => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const dbData = await loadMagazzinoData();
-        // Assicura che i dati siano un array
-        const dataArray = Array.isArray(dbData) ? dbData : [];
-        if (dataArray.length > 0) {
-          setMagazzinoData(dataArray);
-          setFilteredData(dataArray);
+        const result = await loadMagazzino();
+        if (result.success && result.data.length > 0) {
+          setMagazzinoData(result.data);
+          setFilteredData(result.data);
         } else {
+          // Fallback al localStorage se Firebase non ha dati
           const data = loadFromLocalStorage('magazzino_data', []);
-          // Assicura che anche i dati dal localStorage siano un array
           const localDataArray = Array.isArray(data) ? data : [];
           setMagazzinoData(localDataArray);
           setFilteredData(localDataArray);
+          // Migra i dati locali a Firebase
           if (localDataArray.length > 0) {
-            await saveMagazzinoData(localDataArray);
+            for (const item of localDataArray) {
+              await saveMagazzino(item);
+            }
           }
         }
       } catch (error) {
-        console.error('Errore nel caricare i dati:', error);
+        console.error('Errore nel caricare i dati da Firebase:', error);
+        // Fallback al localStorage
         const data = loadFromLocalStorage('magazzino_data', []);
-        // Assicura che anche i dati dal localStorage siano un array
         const localDataArray = Array.isArray(data) ? data : [];
         setMagazzinoData(localDataArray);
         setFilteredData(localDataArray);
@@ -106,10 +108,15 @@ const MagazzinoPage = () => {
     }
     
     try {
-      await saveMagazzinoData(updated);
+      // Salva su Firebase
+      for (const item of updated) {
+        await saveMagazzino(item);
+      }
+      // Salva anche in localStorage come backup
       saveToLocalStorage('magazzino_data', updated);
     } catch (error) {
-      console.error('Errore nel salvare nel database:', error);
+      console.error('Errore nel salvare su Firebase:', error);
+      // Fallback al localStorage
       saveToLocalStorage('magazzino_data', updated);
     }
     
@@ -125,10 +132,15 @@ const MagazzinoPage = () => {
     const updated = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => item.sku !== sku);
     
     try {
-      await saveMagazzinoData(updated);
+      // Salva su Firebase
+      for (const item of updated) {
+        await saveMagazzino(item);
+      }
+      // Salva anche in localStorage come backup
       saveToLocalStorage('magazzino_data', updated);
     } catch (error) {
-      console.error('Errore nel salvare nel database:', error);
+      console.error('Errore nel salvare su Firebase:', error);
+      // Fallback al localStorage
       saveToLocalStorage('magazzino_data', updated);
     }
     
@@ -183,10 +195,15 @@ const MagazzinoPage = () => {
     const updated = [...(Array.isArray(magazzinoData) ? magazzinoData : []), newItem];
     
     try {
-      await saveMagazzinoData(updated);
+      // Salva su Firebase
+      for (const item of updated) {
+        await saveMagazzino(item);
+      }
+      // Salva anche in localStorage come backup
       saveToLocalStorage('magazzino_data', updated);
     } catch (error) {
-      console.error('Errore nel salvare nel database:', error);
+      console.error('Errore nel salvare su Firebase:', error);
+      // Fallback al localStorage
       saveToLocalStorage('magazzino_data', updated);
     }
     
