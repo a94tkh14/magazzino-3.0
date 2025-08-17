@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Label } from '../components/ui/label';
 import MagazzinoReset from '../components/MagazzinoReset';
+import ShopifyTest from '../components/ShopifyTest';
 import { 
   Settings, 
   Database, 
@@ -102,12 +103,15 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="integrations" className="space-y-6">
+          {/* Test Integrazione Shopify */}
+          <ShopifyTest />
+
           {/* Configurazione Shopify */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <ShoppingCart className="h-5 w-5" />
-                <span>Shopify</span>
+                <span>Configurazione Shopify</span>
               </CardTitle>
               <CardDescription>
                 Configura l'integrazione con Shopify per sincronizzare ordini e prodotti
