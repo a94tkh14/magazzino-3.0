@@ -117,46 +117,114 @@ const MagazzinoPage = () => {
         // Salva solo il prodotto modificato su Firebase
         const result = await saveMagazzino(modifiedItem);
         if (result.success) {
-          // Salva anche in localStorage come backup
-          saveToLocalStorage('magazzino_data', updated);
+          // Aggiorna immediatamente l'interfaccia
           setMagazzinoData(updated);
           setFilteredData(updated);
+          
+          // Salva anche in localStorage come backup
+          saveToLocalStorage('magazzino_data', updated);
+          
+          // Esci dalla modalità di modifica
           setEditingSku(null);
           setEditingField(null);
+          
+          // Mostra messaggio di successo temporaneo
+          const successMessage = document.createElement('div');
+          successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+          successMessage.textContent = `Prodotto "${modifiedItem.nome}" modificato con successo!`;
+          document.body.appendChild(successMessage);
+          
+          // Rimuovi il messaggio dopo 3 secondi
+          setTimeout(() => {
+            if (successMessage.parentNode) {
+              successMessage.parentNode.removeChild(successMessage);
+            }
+          }, 3000);
+          
         } else {
           console.error('Errore nel salvare su Firebase:', result.error);
-          alert('Errore nel salvataggio: ' + result.error);
+          
+          // Mostra messaggio di errore temporaneo
+          const errorMessage = document.createElement('div');
+          errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+          errorMessage.textContent = `Errore: ${result.error}`;
+          document.body.appendChild(errorMessage);
+          
+          // Rimuovi il messaggio dopo 5 secondi
+          setTimeout(() => {
+            if (errorMessage.parentNode) {
+              errorMessage.parentNode.removeChild(errorMessage);
+            }
+          }, 5000);
         }
       }
     } catch (error) {
       console.error('Errore nel salvare su Firebase:', error);
-      alert('Errore nel salvataggio: ' + error.message);
+      
+      // Mostra messaggio di errore temporaneo
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      errorMessage.textContent = `Errore: ${error.message}`;
+      document.body.appendChild(errorMessage);
+      
+      // Rimuovi il messaggio dopo 5 secondi
+      setTimeout(() => {
+        if (errorMessage.parentNode) {
+          errorMessage.parentNode.removeChild(errorMessage);
+        }
+      }, 5000);
     }
   };
 
   const handleDeleteProduct = async (sku) => {
-    if (!window.confirm(`Sei sicuro di voler eliminare il prodotto "${sku}"? Questa azione non può essere annullata.`)) return;
+    if (!window.confirm(`Sei sicuro di voler eliminare il prodotto "${sku}"?`)) return;
     
     try {
       // Prima elimina da Firebase se ha un ID
       const itemToDelete = magazzinoData.find(item => item.sku === sku);
       if (itemToDelete && itemToDelete.id) {
-        // Se ha un ID Firebase, eliminalo anche da lì
-        const result = await deleteDoc(doc(db, 'magazzino', itemToDelete.id));
+        await deleteDoc(doc(db, 'magazzino', itemToDelete.id));
         console.log('✅ Prodotto eliminato da Firebase');
       }
       
-      // Poi elimina da localStorage e stato locale
-      const updated = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => item.sku !== sku);
-      saveToLocalStorage('magazzino_data', updated);
+      // Poi elimina immediatamente da stato locale e localStorage
+      const updated = magazzinoData.filter(item => item.sku !== sku);
+      
+      // Aggiorna immediatamente l'interfaccia
       setMagazzinoData(updated);
       setFilteredData(updated);
       
-      // Mostra messaggio di successo
-      alert(`Prodotto "${sku}" eliminato con successo!`);
+      // Salva in localStorage come backup
+      saveToLocalStorage('magazzino_data', updated);
+      
+      // Mostra messaggio di successo temporaneo
+      const successMessage = document.createElement('div');
+      successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      successMessage.textContent = `Prodotto "${sku}" eliminato!`;
+      document.body.appendChild(successMessage);
+      
+      // Rimuovi il messaggio dopo 3 secondi
+      setTimeout(() => {
+        if (successMessage.parentNode) {
+          successMessage.parentNode.removeChild(successMessage);
+        }
+      }, 3000);
+      
     } catch (error) {
       console.error('❌ Errore nell\'eliminazione del prodotto:', error);
-      alert(`Errore nell'eliminazione: ${error.message}`);
+      
+      // Mostra messaggio di errore temporaneo
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      errorMessage.textContent = `Errore: ${error.message}`;
+      document.body.appendChild(errorMessage);
+      
+      // Rimuovi il messaggio dopo 5 secondi
+      setTimeout(() => {
+        if (errorMessage.parentNode) {
+          errorMessage.parentNode.removeChild(errorMessage);
+        }
+      }, 5000);
     }
   };
 
@@ -207,20 +275,19 @@ const MagazzinoPage = () => {
     try {
       // Salva solo il nuovo prodotto su Firebase
       const result = await saveMagazzino(newItem);
-      
       if (result.success) {
-        // Aggiorna l'ID se è stato creato
-        if (result.id) {
-          newItem.id = result.id;
-        }
+        // Aggiungi il nuovo prodotto con l'ID restituito
+        const productWithId = { ...newItem, id: result.id };
         
-        const updated = [...(Array.isArray(magazzinoData) ? magazzinoData : []), newItem];
+        // Aggiorna immediatamente l'interfaccia
+        const updated = [...magazzinoData, productWithId];
+        setMagazzinoData(updated);
+        setFilteredData(updated);
         
         // Salva anche in localStorage come backup
         saveToLocalStorage('magazzino_data', updated);
         
-        setMagazzinoData(updated);
-        setFilteredData(updated);
+        // Pulisci il form
         setNewProduct({
           sku: '',
           nome: '',
@@ -230,16 +297,26 @@ const MagazzinoPage = () => {
           tipologia: '',
           marca: ''
         });
-        setShowAddModal(false);
         setAddError('');
         
-        // Mostra messaggio di successo
-        alert('Prodotto salvato con successo!');
+        // Mostra messaggio di successo temporaneo
+        const successMessage = document.createElement('div');
+        successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        successMessage.textContent = `Prodotto "${newItem.nome}" aggiunto con successo!`;
+        document.body.appendChild(successMessage);
+        
+        // Rimuovi il messaggio dopo 3 secondi
+        setTimeout(() => {
+          if (successMessage.parentNode) {
+            successMessage.parentNode.removeChild(successMessage);
+          }
+        }, 3000);
+        
       } else {
-        setAddError('Errore nel salvataggio: ' + (result.error || 'Errore sconosciuto'));
+        setAddError('Errore nel salvataggio: ' + result.error);
       }
     } catch (error) {
-      console.error('Errore nel salvare su Firebase:', error);
+      console.error('Errore nel salvataggio:', error);
       setAddError('Errore nel salvataggio: ' + error.message);
     }
   };

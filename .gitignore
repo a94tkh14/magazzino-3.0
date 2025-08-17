@@ -96,3 +96,5 @@ uploads/
 
 # Credentials
 shopify_credentials.json 
+# Local Netlify folder
+.netlify
