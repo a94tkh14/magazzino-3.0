@@ -67,25 +67,33 @@ exports.handler = async (event, context) => {
     // Costruisci URL base
     let apiUrl = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?limit=${limit}`;
     
-    // Aggiungi filtri se specificati
-    if (status && status !== 'any') {
-      apiUrl += `&status=${status}`;
-    }
-    
-    if (fulfillmentStatus) {
-      apiUrl += `&fulfillment_status=${fulfillmentStatus}`;
-    }
-    
-    if (financialStatus) {
-      apiUrl += `&financial_status=${financialStatus}`;
-    }
-    
-    // Aggiungi filtro per data se specificato
-    if (daysBack) {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-      const isoDate = cutoffDate.toISOString().split('T')[0];
-      apiUrl += `&created_at_min=${isoDate}`;
+    // Aggiungi filtri se specificati (ma NON quando c'è paginazione)
+    // Shopify non permette di usare status + page_info contemporaneamente
+    if (!pageInfo) {
+      // Solo per la prima chiamata, aggiungi filtri di status
+      if (status && status !== 'any') {
+        apiUrl += `&status=${status}`;
+      }
+      
+      if (fulfillmentStatus) {
+        apiUrl += `&fulfillment_status=${fulfillmentStatus}`;
+      }
+      
+      if (financialStatus) {
+        apiUrl += `&financial_status=${financialStatus}`;
+      }
+      
+      // Aggiungi filtro per data se specificato
+      if (daysBack) {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+        const isoDate = cutoffDate.toISOString().split('T')[0];
+        apiUrl += `&created_at_min=${isoDate}`;
+      }
+    } else {
+      // Per le chiamate di paginazione, usa SOLO page_info
+      // I filtri sono già applicati dalla prima chiamata
+      console.log('📄 Paginazione: uso solo page_info, filtri già applicati');
     }
     
     // Aggiungi paginazione se specificata
@@ -157,10 +165,11 @@ exports.handler = async (event, context) => {
     result.metadata = {
       apiVersion,
       limit,
-      status,
-      daysBack,
-      fulfillmentStatus,
-      financialStatus,
+      status: pageInfo ? 'filtered_from_first_call' : status, // Status applicato solo alla prima chiamata
+      daysBack: pageInfo ? 'filtered_from_first_call' : daysBack,
+      fulfillmentStatus: pageInfo ? 'filtered_from_first_call' : fulfillmentStatus,
+      financialStatus: pageInfo ? 'filtered_from_first_call' : financialStatus,
+      isPaginationCall: !!pageInfo,
       timestamp: new Date().toISOString()
     };
 
