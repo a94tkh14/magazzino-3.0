@@ -43,10 +43,10 @@ const MagazzinoPage = () => {
     const loadData = async () => {
       try {
         // Prova prima a caricare da Firebase
-        const firebaseData = await loadMagazzino();
-        if (firebaseData && firebaseData.length > 0) {
-          setMagazzinoData(firebaseData);
-          setFilteredData(firebaseData);
+        const firebaseResult = await loadMagazzino();
+        if (firebaseResult.success && firebaseResult.data && firebaseResult.data.length > 0) {
+          setMagazzinoData(firebaseResult.data);
+          setFilteredData(firebaseResult.data);
         } else {
           // Fallback al localStorage se Firebase non ha dati
           const data = loadFromLocalStorage('magazzino_data', []);
@@ -318,9 +318,13 @@ const MagazzinoPage = () => {
       marca: newProduct.marca
     };
 
+    console.log('🔄 Tentativo di salvataggio prodotto:', newItem);
+
     try {
       // Salva solo il nuovo prodotto su Firebase
       const result = await saveMagazzino(newItem);
+      console.log('📡 Risposta Firebase:', result);
+      
       if (result.success) {
         // Aggiungi il nuovo prodotto con l'ID restituito
         const productWithId = { ...newItem, id: result.id };
@@ -359,10 +363,11 @@ const MagazzinoPage = () => {
         }, 3000);
         
       } else {
+        console.error('❌ Errore Firebase:', result.error);
         setAddError('Errore nel salvataggio: ' + result.error);
       }
     } catch (error) {
-      console.error('Errore nel salvataggio:', error);
+      console.error('❌ Errore nel salvataggio:', error);
       setAddError('Errore nel salvataggio: ' + error.message);
     }
   };
