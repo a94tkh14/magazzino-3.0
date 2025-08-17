@@ -21,21 +21,30 @@ export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress
     while (keepGoing) {
       console.log(`📄 Scaricamento pagina ${page}...`);
       
+      // Prepara il body della richiesta
+      const requestBody = {
+        shopDomain: credentials.shopDomain,
+        accessToken: credentials.accessToken,
+        apiVersion: credentials.apiVersion,
+        testType: 'orders',
+        limit: limit,
+        status: status
+      };
+      
+      // Aggiungi parametri opzionali solo se definiti
+      if (pageInfo) {
+        requestBody.pageInfo = pageInfo;
+      }
+      if (daysBack) {
+        requestBody.daysBack = daysBack;
+      }
+      
       const response = await fetch('/.netlify/functions/shopify-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          shopDomain: credentials.shopDomain,
-          accessToken: credentials.accessToken,
-          apiVersion: credentials.apiVersion,
-          testType: 'orders',
-          limit: limit,
-          status: status,
-          pageInfo: pageInfo,
-          daysBack: daysBack
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {

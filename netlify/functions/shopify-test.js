@@ -27,7 +27,8 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { shopDomain, accessToken, apiVersion, testType } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { shopDomain, accessToken, apiVersion, testType } = body;
     
     if (!shopDomain || !accessToken) {
       return {
@@ -75,7 +76,8 @@ exports.handler = async (event, context) => {
         apiUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/products.json?limit=5`;
         break;
       case 'orders':
-        const { limit = 250, status = 'any', pageInfo, daysBack } = JSON.parse(event.body);
+        // Estrai tutti i parametri dal body già parsato
+        const { limit = 250, status = 'any', pageInfo, daysBack } = body;
         let ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json?limit=${limit}&status=${status}`;
 
         if (daysBack) {
