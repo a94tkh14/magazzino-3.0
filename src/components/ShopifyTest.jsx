@@ -56,8 +56,8 @@ const ShopifyTest = () => {
         throw new Error('Access token non valido. Deve iniziare con "shpat_"');
       }
 
-      // Test 3: Chiamata API tramite nostro proxy
-      const response = await fetch('/api/shopify/test', {
+      // Test 3: Chiamata API tramite Netlify Function
+      const response = await fetch('/.netlify/functions/shopify-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -109,7 +109,7 @@ const ShopifyTest = () => {
     }
 
     try {
-      const response = await fetch('/api/shopify/test', {
+      const response = await fetch('/.netlify/functions/shopify-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -148,7 +148,7 @@ const ShopifyTest = () => {
     }
 
     try {
-      const response = await fetch('/api/shopify/test', {
+      const response = await fetch('/.netlify/functions/shopify-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
