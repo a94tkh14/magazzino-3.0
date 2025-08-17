@@ -16,8 +16,55 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
     let keepGoing = true;
     let page = 1;
     
-    console.log(`🔄 Inizio scaricamento ordini Shopify (limite: ${limit}, status: ${status}, daysBack: ${daysBack})`);
+    // Ottimizzazione: usa un limit più alto per ridurre il numero di chiamate
+    const optimizedLimit = Math.min(limit, 250); // Shopify supporta fino a 250 per pagina
+    
+    console.log(`🔄 Inizio scaricamento ordini Shopify (limite ottimizzato: ${optimizedLimit}, status: ${status}, daysBack: ${daysBack})`);
 
+    // Se il limite è molto alto, prova prima il metodo di chunking
+    if (limit > 1000) {
+      console.log('🚀 Tentativo di scaricamento con metodo chunking per ordini molto grandi...');
+      try {
+        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            shopDomain: credentials.shopDomain,
+            accessToken: credentials.accessToken,
+            apiVersion: credentials.apiVersion || '2024-01',
+            limit: limit,
+            status: status,
+            daysBack: daysBack,
+            fulfillmentStatus: fulfillmentStatus,
+            financialStatus: financialStatus,
+            useChunking: true // Abilita il chunking
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          throw new Error(`Errore API Shopify: ${errorData || response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.success && data.orders) {
+          console.log(`✅ Chunking completato con successo: ${data.orders.length} ordini`);
+          if (onProgress) onProgress(data.orders.length, 1);
+          return data.orders;
+        } else {
+          console.log('⚠️ Chunking fallito, uso metodo standard');
+        }
+      } catch (chunkError) {
+        console.log('⚠️ Errore nel chunking, uso metodo standard:', chunkError.message);
+      }
+    }
+
+    // Metodo standard con paginazione
+    console.log('📄 Utilizzo metodo standard con paginazione...');
+    
     while (keepGoing) {
       console.log(`📄 Scaricamento pagina ${page}...`);
       
@@ -31,12 +78,13 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
           shopDomain: credentials.shopDomain,
           accessToken: credentials.accessToken,
           apiVersion: credentials.apiVersion || '2024-01',
-          limit: limit,
+          limit: optimizedLimit,
           status: status,
           pageInfo: pageInfo,
           daysBack: daysBack,
           fulfillmentStatus: fulfillmentStatus,
-          financialStatus: financialStatus
+          financialStatus: financialStatus,
+          useChunking: false
         })
       });
 
@@ -54,11 +102,16 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
         
         if (onProgress) onProgress(allOrders.length, page);
         console.log(`[SYNC] Scaricati ${allOrders.length} ordini totali dopo pagina ${page}`);
-        console.log(`📊 Ordini in questa pagina: ${data.orders.length}/${limit}`);
+        console.log(`📊 Ordini in questa pagina: ${data.orders.length}/${optimizedLimit}`);
         console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
 
-        if (data.orders.length < limit) {
-          console.log(`✅ Ultima pagina raggiunta (${data.orders.length} ordini < ${limit})`);
+        // Controlla se abbiamo raggiunto il limite richiesto
+        if (limit && allOrders.length >= limit) {
+          console.log(`✅ Raggiunto il limite richiesto di ${limit} ordini`);
+          allOrders = allOrders.slice(0, limit);
+          keepGoing = false;
+        } else if (data.orders.length < optimizedLimit) {
+          console.log(`✅ Ultima pagina raggiunta (${data.orders.length} ordini < ${optimizedLimit})`);
           keepGoing = false;
         } else {
           // Usa la nuova struttura di paginazione
@@ -67,7 +120,7 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
             console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
             page++;
           } else {
-            console.log('✅ Nessuna prossima pagina disponibile');
+            console.log('✅ Nessuna prossima pagina trovata');
             keepGoing = false;
           }
         }
@@ -80,14 +133,14 @@ export const fetchShopifyOrders = async (limit = 50, status = 'any', onProgress,
       }
       
       // Limite di sicurezza per evitare loop infiniti
-      if (page > 200) {
-        console.log('⚠️ Raggiunto limite massimo di pagine (200) - potrebbe esserci un problema di paginazione');
+      if (page > 100) { // Ridotto da 200 a 100 per maggiore sicurezza
+        console.log('⚠️ Raggiunto limite massimo di pagine (100) - potrebbe esserci un problema di paginazione');
         keepGoing = false;
       }
       
       // Pausa intelligente per evitare rate limit
       if (keepGoing) {
-        const pauseTime = page === 1 ? 500 : 1000; // Prima pagina: 500ms, altre: 1000ms
+        const pauseTime = page === 1 ? 300 : 500; // Ridotte le pause per maggiore velocità
         console.log(`⏳ Pausa di ${pauseTime}ms prima della prossima richiesta...`);
         await new Promise(resolve => setTimeout(resolve, pauseTime));
       }

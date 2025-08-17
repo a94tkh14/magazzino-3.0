@@ -15,4 +15,45 @@
   command = "npm run dev"
   port = 3000
   publish = "build"
-  functions = "netlify/functions" 
+  functions = "netlify/functions"
+
+# Configurazioni per le funzioni serverless
+[functions]
+  # Aumenta il timeout a 30 secondi (massimo consentito)
+  timeout = 30
+  # Aumenta la memoria a 1024 MB
+  memory = 1024
+  # Abilita il logging dettagliato
+  included_files = ["netlify/functions/**/*"]
+
+# Configurazioni specifiche per le funzioni Shopify
+[[functions]]
+  function = "shopify-sync-orders"
+  timeout = 30
+  memory = 1024
+
+[[functions]]
+  function = "shopify-sync-products"
+  timeout = 30
+  memory = 1024
+
+# Configurazioni per l'ambiente di produzione
+[context.production]
+  [context.production.functions]
+    timeout = 30
+    memory = 1024
+
+# Configurazioni per l'ambiente di sviluppo
+[context.deploy-preview]
+  [context.deploy-preview.functions]
+    timeout = 30
+    memory = 1024
+
+# Ottimizzazioni per le funzioni
+[functions."shopify-sync-orders"]
+  timeout = 30
+  memory = 1024
+
+[functions."shopify-sync-products"]
+  timeout = 30
+  memory = 1024 
