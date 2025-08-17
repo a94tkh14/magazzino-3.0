@@ -69,6 +69,9 @@ exports.handler = async (event, context) => {
 
     let apiUrl;
     const { shopDomain, accessToken, apiVersion, testType } = body;
+    
+    // Variabili per la gestione degli ordini - spostate qui per essere accessibili ovunque
+    let limit, actualLimit, status, pageInfo, daysBack;
 
     // Determina l'URL dell'API in base al tipo di test
     switch (testType) {
@@ -83,7 +86,7 @@ exports.handler = async (event, context) => {
           console.log(`🔍 DEBUG - Inizio gestione orders...`);
           
           // Estrai tutti i parametri dal body già parsato
-          const { limit = 50, status = 'open', pageInfo, daysBack } = body;
+          ({ limit = 50, status = 'open', pageInfo, daysBack } = body);
           
           console.log(`🔍 DEBUG - Body ricevuto:`, JSON.stringify(body, null, 2));
           console.log(`🔍 DEBUG - Parametri estratti:`, { limit, status, pageInfo, daysBack });
@@ -91,7 +94,7 @@ exports.handler = async (event, context) => {
           console.log(`🔍 DEBUG - Lunghezza pageInfo:`, pageInfo ? pageInfo.length : 'null');
           
           // Validazione del limite - permette limiti più alti per gestire la paginazione
-          let actualLimit = limit;
+          actualLimit = limit;
           if (limit && limit > 250) {
             console.log(`🔍 DEBUG - Limite richiesto ${limit} > 250, uso 250 per pagina e gestisco paginazione`);
             actualLimit = 250; // Shopify supporta max 250 per pagina
