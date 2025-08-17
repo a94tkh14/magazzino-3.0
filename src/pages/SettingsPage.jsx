@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import MagazzinoReset from '../components/MagazzinoReset';
 import { 
   Settings, 
@@ -46,37 +44,33 @@ export default function SettingsPage() {
     backupInterval: '24'
   });
 
+  const [activeTab, setActiveTab] = useState('integrations');
+
   const handleShopifySave = () => {
-    // Salva configurazione Shopify
     localStorage.setItem('shopify_config', JSON.stringify(shopifyConfig));
     alert('Configurazione Shopify salvata!');
   };
 
   const handleGoogleAdsSave = () => {
-    // Salva configurazione Google Ads
     localStorage.setItem('google_ads_config', JSON.stringify(googleAdsConfig));
     alert('Configurazione Google Ads salvata!');
   };
 
   const handleMetaSave = () => {
-    // Salva configurazione Meta
     localStorage.setItem('meta_config', JSON.stringify(metaConfig));
     alert('Configurazione Meta salvata!');
   };
 
   const handleDatabaseSave = () => {
-    // Salva configurazione database
     localStorage.setItem('database_config', JSON.stringify(databaseConfig));
     alert('Configurazione database salvata!');
   };
 
   const handleBackup = () => {
-    // Logica per il backup
     alert('Backup avviato...');
   };
 
   const handleRestore = () => {
-    // Logica per il restore
     alert('Restore avviato...');
   };
 
@@ -87,27 +81,57 @@ export default function SettingsPage() {
         <p className="text-gray-600">Gestisci le configurazioni dell'applicazione</p>
       </div>
 
-      <Tabs defaultValue="integrations" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="integrations" className="flex items-center space-x-2">
-            <Globe className="h-4 w-4" />
-            <span>Integrazioni</span>
-          </TabsTrigger>
-          <TabsTrigger value="database" className="flex items-center space-x-2">
-            <Database className="h-4 w-4" />
-            <span>Database</span>
-          </TabsTrigger>
-          <TabsTrigger value="backup" className="flex items-center space-x-2">
-            <FileText className="h-4 w-4" />
-            <span>Backup</span>
-          </TabsTrigger>
-          <TabsTrigger value="advanced" className="flex items-center space-x-2">
-            <Settings className="h-4 w-4" />
-            <span>Avanzate</span>
-          </TabsTrigger>
-        </TabsList>
+      {/* Tab Navigation */}
+      <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
+        <button
+          onClick={() => setActiveTab('integrations')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'integrations' 
+              ? 'bg-white text-gray-900 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Globe className="h-4 w-4 inline mr-2" />
+          Integrazioni
+        </button>
+        <button
+          onClick={() => setActiveTab('database')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'database' 
+              ? 'bg-white text-gray-900 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Database className="h-4 w-4 inline mr-2" />
+          Database
+        </button>
+        <button
+          onClick={() => setActiveTab('backup')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'backup' 
+              ? 'bg-white text-gray-900 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="h-4 w-4 inline mr-2" />
+          Backup
+        </button>
+        <button
+          onClick={() => setActiveTab('advanced')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'advanced' 
+              ? 'bg-white text-gray-900 shadow-sm' 
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Settings className="h-4 w-4 inline mr-2" />
+          Avanzate
+        </button>
+      </div>
 
-        <TabsContent value="integrations" className="space-y-6">
+      {/* Tab Content */}
+      {activeTab === 'integrations' && (
+        <div className="space-y-6">
           {/* Configurazione Shopify */}
           <Card>
             <CardHeader>
@@ -122,7 +146,9 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="shopDomain">Dominio Shop</Label>
+                  <label htmlFor="shopDomain" className="block text-sm font-medium text-gray-700 mb-1">
+                    Dominio Shop
+                  </label>
                   <Input
                     id="shopDomain"
                     placeholder="mio-shop.myshopify.com"
@@ -131,7 +157,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="accessToken">Access Token</Label>
+                  <label htmlFor="accessToken" className="block text-sm font-medium text-gray-700 mb-1">
+                    Access Token
+                  </label>
                   <Input
                     id="accessToken"
                     type="password"
@@ -142,7 +170,9 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div>
-                <Label htmlFor="apiVersion">Versione API</Label>
+                <label htmlFor="apiVersion" className="block text-sm font-medium text-gray-700 mb-1">
+                  Versione API
+                </label>
                 <Input
                   id="apiVersion"
                   placeholder="2023-10"
@@ -171,7 +201,9 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="clientId">Client ID</Label>
+                  <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Client ID
+                  </label>
                   <Input
                     id="clientId"
                     placeholder="123456789-..."
@@ -180,7 +212,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="clientSecret">Client Secret</Label>
+                  <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700 mb-1">
+                    Client Secret
+                  </label>
                   <Input
                     id="clientSecret"
                     type="password"
@@ -192,7 +226,9 @@ export default function SettingsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="refreshToken">Refresh Token</Label>
+                  <label htmlFor="refreshToken" className="block text-sm font-medium text-gray-700 mb-1">
+                    Refresh Token
+                  </label>
                   <Input
                     id="refreshToken"
                     type="password"
@@ -202,7 +238,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="customerId">Customer ID</Label>
+                  <label htmlFor="customerId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer ID
+                  </label>
                   <Input
                     id="customerId"
                     placeholder="123-456-7890"
@@ -232,7 +270,9 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="metaAccessToken">Access Token</Label>
+                  <label htmlFor="metaAccessToken" className="block text-sm font-medium text-gray-700 mb-1">
+                    Access Token
+                  </label>
                   <Input
                     id="metaAccessToken"
                     type="password"
@@ -242,7 +282,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="pixelId">Pixel ID</Label>
+                  <label htmlFor="pixelId" className="block text-sm font-medium text-gray-700 mb-1">
+                    Pixel ID
+                  </label>
                   <Input
                     id="pixelId"
                     placeholder="123456789"
@@ -257,9 +299,11 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="database" className="space-y-6">
+      {activeTab === 'database' && (
+        <div className="space-y-6">
           {/* Configurazione Database */}
           <Card>
             <CardHeader>
@@ -280,7 +324,9 @@ export default function SettingsPage() {
                     checked={databaseConfig.backupEnabled}
                     onChange={(e) => setDatabaseConfig({...databaseConfig, backupEnabled: e.target.checked})}
                   />
-                  <Label htmlFor="backupEnabled">Abilita backup automatici</Label>
+                  <label htmlFor="backupEnabled" className="text-sm font-medium text-gray-700">
+                    Abilita backup automatici
+                  </label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
@@ -289,10 +335,14 @@ export default function SettingsPage() {
                     checked={databaseConfig.autoBackup}
                     onChange={(e) => setDatabaseConfig({...databaseConfig, autoBackup: e.target.checked})}
                   />
-                  <Label htmlFor="autoBackup">Backup automatico</Label>
+                  <label htmlFor="autoBackup" className="text-sm font-medium text-gray-700">
+                    Backup automatico
+                  </label>
                 </div>
                 <div>
-                  <Label htmlFor="backupInterval">Intervallo backup (ore)</Label>
+                  <label htmlFor="backupInterval" className="block text-sm font-medium text-gray-700 mb-1">
+                    Intervallo backup (ore)
+                  </label>
                   <Input
                     id="backupInterval"
                     type="number"
@@ -309,9 +359,11 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="backup" className="space-y-6">
+      {activeTab === 'backup' && (
+        <div className="space-y-6">
           {/* Operazioni di Backup */}
           <Card>
             <CardHeader>
@@ -341,9 +393,11 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="advanced" className="space-y-6">
+      {activeTab === 'advanced' && (
+        <div className="space-y-6">
           {/* Impostazioni Avanzate */}
           <Card>
             <CardHeader>
@@ -376,8 +430,8 @@ export default function SettingsPage() {
 
           {/* Reset Completo Magazzino */}
           <MagazzinoReset />
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   );
 } 
