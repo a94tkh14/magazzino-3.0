@@ -245,8 +245,6 @@ const MagazzinoPage = () => {
   };
 
   const handleDeleteProduct = async (sku) => {
-    if (!isEditMode) return; // Solo in modalità modifica
-    
     if (!window.confirm(`Sei sicuro di voler eliminare il prodotto "${sku}"?`)) return;
     
     try {
@@ -257,7 +255,7 @@ const MagazzinoPage = () => {
         console.log('✅ Prodotto eliminato da Firebase');
       }
       
-      // Poi elimina immediatamente da stato locale e localStorage
+      // Poi elimina immediatamente da stato locale
       const updated = magazzinoData.filter(item => item.sku !== sku);
       
       // Aggiorna immediatamente l'interfaccia
@@ -267,34 +265,12 @@ const MagazzinoPage = () => {
       // Salva in localStorage come backup
       saveToLocalStorage('magazzino_data', updated);
       
-      // Mostra messaggio di successo temporaneo
-      const successMessage = document.createElement('div');
-      successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      successMessage.textContent = `Prodotto "${sku}" eliminato!`;
-      document.body.appendChild(successMessage);
-      
-      // Rimuovi il messaggio dopo 3 secondi
-      setTimeout(() => {
-        if (successMessage.parentNode) {
-          successMessage.parentNode.removeChild(successMessage);
-        }
-      }, 3000);
+      // Mostra messaggio di successo
+      alert(`Prodotto "${sku}" eliminato con successo!`);
       
     } catch (error) {
       console.error('❌ Errore nell\'eliminazione del prodotto:', error);
-      
-      // Mostra messaggio di errore temporaneo
-      const errorMessage = document.createElement('div');
-      errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      errorMessage.textContent = `Errore: ${error.message}`;
-      document.body.appendChild(errorMessage);
-      
-      // Rimuovi il messaggio dopo 5 secondi
-      setTimeout(() => {
-        if (errorMessage.parentNode) {
-          errorMessage.parentNode.removeChild(errorMessage);
-        }
-      }, 5000);
+      alert(`Errore nell'eliminazione: ${error.message}`);
     }
   };
 
@@ -636,24 +612,14 @@ const MagazzinoPage = () => {
                   {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => (
                     <tr key={index} className="border-b hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {isEditMode ? (
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => handleEditField(item.sku, 'nome', item.nome)}
-                                className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
-                              >
-                                ✏️ Modifica
-                              </button>
-                              <button
-                                onClick={() => handleDeleteProduct(item.sku)}
-                                className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
-                              >
-                                🗑️ Cancella
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-gray-500 text-sm">Modalità visualizzazione</span>
-                          )}
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleDeleteProduct(item.sku)}
+                              className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
+                            >
+                              🗑️ Cancella
+                            </button>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {editingSku === item.sku && editingField === 'sku' ? (
