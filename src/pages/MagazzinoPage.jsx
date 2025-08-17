@@ -3,6 +3,8 @@ import { Search, Package, Tag, Settings } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { saveMagazzino, loadMagazzino } from '../lib/firebase';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
@@ -133,14 +135,29 @@ const MagazzinoPage = () => {
   };
 
   const handleDeleteProduct = async (sku) => {
-    if (!window.confirm('Sei sicuro di voler eliminare questo prodotto?')) return;
+    if (!window.confirm(`Sei sicuro di voler eliminare il prodotto "${sku}"? Questa azione non può essere annullata.`)) return;
     
-    const updated = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => item.sku !== sku);
-    
-    // Salva solo in localStorage come backup
-    saveToLocalStorage('magazzino_data', updated);
-    setMagazzinoData(updated);
-    setFilteredData(updated);
+    try {
+      // Prima elimina da Firebase se ha un ID
+      const itemToDelete = magazzinoData.find(item => item.sku === sku);
+      if (itemToDelete && itemToDelete.id) {
+        // Se ha un ID Firebase, eliminalo anche da lì
+        const result = await deleteDoc(doc(db, 'magazzino', itemToDelete.id));
+        console.log('✅ Prodotto eliminato da Firebase');
+      }
+      
+      // Poi elimina da localStorage e stato locale
+      const updated = (Array.isArray(magazzinoData) ? magazzinoData : []).filter(item => item.sku !== sku);
+      saveToLocalStorage('magazzino_data', updated);
+      setMagazzinoData(updated);
+      setFilteredData(updated);
+      
+      // Mostra messaggio di successo
+      alert(`Prodotto "${sku}" eliminato con successo!`);
+    } catch (error) {
+      console.error('❌ Errore nell\'eliminazione del prodotto:', error);
+      alert(`Errore nell'eliminazione: ${error.message}`);
+    }
   };
 
   const handleOpenAnagrafica = (product) => {

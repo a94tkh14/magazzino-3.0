@@ -372,3 +372,43 @@ export const saveStorico = async (storicoData) => {
     return { success: false, error: error.message };
   }
 }; 
+
+export const clearAllMagazzino = async () => {
+  try {
+    console.log('🗑️ Cancellando tutti i dati del magazzino...');
+    const querySnapshot = await getDocs(collection(db, 'magazzino'));
+    const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+    console.log('✅ Tutti i dati del magazzino sono stati cancellati');
+    return { success: true, deletedCount: querySnapshot.docs.length };
+  } catch (error) {
+    console.error('❌ Errore nella cancellazione del magazzino:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const resetMagazzino = async () => {
+  try {
+    console.log('🔄 Reset completo del magazzino...');
+    // Prima cancella tutto
+    const clearResult = await clearAllMagazzino();
+    if (!clearResult.success) {
+      return clearResult;
+    }
+    
+    // Poi cancella anche localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('magazzino_data');
+      console.log('✅ LocalStorage pulito');
+    }
+    
+    return { 
+      success: true, 
+      message: `Magazzino resettato. ${clearResult.deletedCount} prodotti cancellati.`,
+      deletedCount: clearResult.deletedCount
+    };
+  } catch (error) {
+    console.error('❌ Errore nel reset del magazzino:', error);
+    return { success: false, error: error.message };
+  }
+}; 

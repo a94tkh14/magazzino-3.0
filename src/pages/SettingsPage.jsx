@@ -5,6 +5,7 @@ import MetaAPI from '../lib/metaAPI';
 import FirebaseMagazzinoTest from '../components/FirebaseMagazzinoTest';
 import SafeNumberTest from '../components/SafeNumberTest';
 import SafeStringTest from '../components/SafeStringTest';
+import MagazzinoReset from '../components/MagazzinoReset';
 
 export default function SettingsPage() {
   const [shop, setShop] = useState('');
@@ -640,6 +641,10 @@ export default function SettingsPage() {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold text-gray-900">Test Funzioni Sicure per Stringhe</h2>
           <SafeStringTest />
+        </div>
+
+        <div className="mt-8">
+          <MagazzinoReset />
         </div>
       </div>
     </div>
