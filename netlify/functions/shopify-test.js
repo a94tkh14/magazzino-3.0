@@ -123,6 +123,13 @@ exports.handler = async (event, context) => {
             ordersUrl += ordersUrl.includes('?') ? `&status=${status}` : `?status=${status}`;
             console.log(`🔍 DEBUG - Dopo aggiunta status: ${ordersUrl}`);
           }
+          
+          // Per status='any', aggiungi parametri per includere ordini archiviati
+          if (status === 'any') {
+            // Includi tutti gli stati possibili per ottenere anche ordini archiviati
+            ordersUrl += ordersUrl.includes('?') ? '&status=any' : '?status=any';
+            console.log(`🔍 DEBUG - Aggiunto status=any per includere ordini archiviati`);
+          }
 
           // Aggiungi page_info se presente
           if (pageInfo) {
