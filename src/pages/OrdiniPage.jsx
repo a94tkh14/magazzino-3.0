@@ -233,7 +233,6 @@ const OrdiniPage = () => {
   // Funzione per scaricare tutti gli ordini senza limiti temporali
   const downloadAllOrdersComplete = async (controller) => {
     const allOrders = [];
-    let pageInfo = null;
     let pageCount = 0;
     const maxPages = 500; // Aumentato per store molto grandi
 
@@ -243,6 +242,79 @@ const OrdiniPage = () => {
     setSyncProgress(prev => ({
       ...prev,
       currentStatus: 'Scaricamento ordini attivi (senza limiti temporali)...'
+    }));
+
+    // PRIMA PROVA: Usa il metodo di chunking per scaricare tutti gli ordini in una volta
+    try {
+      console.log('🔄 Tentativo con metodo chunking per scaricare tutti gli ordini...');
+      
+      const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          shopDomain: credentials.shopDomain,
+          accessToken: credentials.accessToken,
+          apiVersion: credentials.apiVersion,
+          limit: 10000, // Limite alto per forzare il chunking
+          status: 'any', // Tutti gli status attivi
+          pageInfo: null,
+          useChunking: true, // ABILITA il chunking
+          daysBack: null // NO filtro temporale per sincronizzazione completa
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('📥 Chunking response:', {
+        success: data.success,
+        ordersCount: data.orders?.length || 0,
+        method: data.method,
+        metadata: data.metadata
+      });
+      
+      if (data.success && data.orders && data.orders.length > 0) {
+        console.log(`✅ Chunking completato con successo: ${data.orders.length} ordini scaricati`);
+        
+        // Aggiungi tutti gli ordini scaricati
+        allOrders.push(...data.orders);
+        
+        setSyncProgress(prev => ({
+          ...prev,
+          ordersDownloaded: allOrders.length,
+          currentStatus: `✅ Chunking completato: ${allOrders.length} ordini scaricati`
+        }));
+
+        // Salva progressivamente per evitare problemi di quota
+        if (allOrders.length > 1000) {
+          try {
+            const convertedOrders = allOrders.map(convertShopifyOrder);
+            await saveOrders(convertedOrders);
+            setSyncProgress(prev => ({
+              ...prev,
+              currentStatus: `✅ ${allOrders.length} ordini scaricati e salvati progressivamente`
+            }));
+          } catch (saveError) {
+            console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
+          }
+        }
+
+        return allOrders;
+      }
+    } catch (chunkError) {
+      console.warn('⚠️ Chunking fallito, passo al metodo di paginazione standard:', chunkError);
+    }
+
+    // SECONDA PROVA: Se il chunking fallisce, usa la paginazione standard
+    console.log('🔄 Fallback alla paginazione standard...');
+    
+    setSyncProgress(prev => ({
+      ...prev,
+      currentStatus: 'Fallback: paginazione standard per ordini attivi...'
     }));
 
     // Prima scarica tutti gli ordini attivi (senza filtro temporale)
@@ -271,7 +343,7 @@ const OrdiniPage = () => {
             apiVersion: credentials.apiVersion,
             limit: 250, // Massimo consentito da Shopify
             status: 'any', // Tutti gli status attivi
-            pageInfo: pageInfo,
+            pageInfo: pageCount === 1 ? null : pageInfo, // Solo per la prima pagina
             useChunking: false,
             // NO filtro temporale per sincronizzazione completa
             daysBack: null
@@ -389,7 +461,7 @@ const OrdiniPage = () => {
               apiVersion: credentials.apiVersion,
               limit: 250,
               status: status, // Status specifico per archiviati
-              pageInfo: pageInfo,
+              pageInfo: pageCount === 1 ? null : pageInfo, // Solo per la prima pagina
               useChunking: false,
               daysBack: null // NO filtro temporale per archiviati
             })
