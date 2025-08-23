@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
+import { fetchShopifyOrders, convertShopifyOrder, getShopifyCredentials } from '../lib/shopifyAPI';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
@@ -237,6 +237,9 @@ const OrdiniPage = () => {
     let pageCount = 0;
     const maxPages = 500; // Aumentato per store molto grandi
 
+    // Ottieni le credenziali Shopify
+    const credentials = getShopifyCredentials();
+
     setSyncProgress(prev => ({
       ...prev,
       currentStatus: 'Scaricamento ordini attivi (senza limiti temporali)...'
@@ -257,15 +260,39 @@ const OrdiniPage = () => {
       }));
 
       try {
-        const shopifyOrders = await fetchShopifyOrders(250, (count, page) => {
-          setSyncProgress(prev => ({
-            ...prev,
-            ordersDownloaded: allOrders.length + count,
-            currentStatus: `Scaricati ${allOrders.length + count} ordini attivi...`
-          }));
-        }, pageInfo);
+        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            shopDomain: credentials.shopDomain,
+            accessToken: credentials.accessToken,
+            apiVersion: credentials.apiVersion,
+            limit: 250, // Massimo consentito da Shopify
+            status: 'any', // Tutti gli status attivi
+            pageInfo: pageInfo,
+            useChunking: false,
+            // NO filtro temporale per sincronizzazione completa
+            daysBack: null
+          })
+        });
 
-        if (!shopifyOrders || shopifyOrders.length === 0) {
+        if (!response.ok) {
+          throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.success || !data.orders) {
+          console.log(`⚠️ Pagina ${pageCount} - Response non valida:`, data);
+          break; // Nessuna pagina successiva
+        }
+
+        const shopifyOrders = data.orders;
+        
+        if (shopifyOrders.length === 0) {
+          console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine sincronizzazione`);
           break; // Nessuna pagina successiva
         }
 
@@ -293,6 +320,14 @@ const OrdiniPage = () => {
           }
         }
 
+        // Aggiorna pageInfo per la prossima pagina
+        if (data.pageInfo) {
+          pageInfo = data.pageInfo;
+        } else {
+          console.log(`⚠️ Pagina ${pageCount} - Nessun pageInfo, fine sincronizzazione`);
+          break; // Nessuna pagina successiva
+        }
+
         // Pausa per evitare rate limit
         await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -300,7 +335,7 @@ const OrdiniPage = () => {
         if (error.name === 'AbortError') {
           throw error;
         }
-        console.error(`Errore pagina ${pageCount}:`, error);
+        console.error(`❌ Errore pagina ${pageCount}:`, error);
         throw new Error(`Errore pagina ${pageCount}: ${error.message}`);
       }
     }
@@ -321,6 +356,7 @@ const OrdiniPage = () => {
       }
 
       pageCount = 0;
+      pageInfo = null;
 
       while (pageCount < 100) { // Limite più basso per status archiviati
         if (controller.signal.aborted) {
@@ -335,15 +371,38 @@ const OrdiniPage = () => {
         }));
 
         try {
-          const archivedOrders = await fetchShopifyOrders(250, (count, page) => {
-            setSyncProgress(prev => ({
-              ...prev,
-              ordersDownloaded: allOrders.length + count,
-              currentStatus: `Scaricati ${allOrders.length + count} ordini totali (inclusi ${status}, archiviati)...`
-            }));
-          }, null, status);
+          const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              shopDomain: credentials.shopDomain,
+              accessToken: credentials.accessToken,
+              apiVersion: credentials.apiVersion,
+              limit: 250,
+              status: status, // Status specifico per archiviati
+              pageInfo: pageInfo,
+              useChunking: false,
+              daysBack: null // NO filtro temporale per archiviati
+            })
+          });
 
-          if (!archivedOrders || archivedOrders.length === 0) {
+          if (!response.ok) {
+            throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          if (!data.success || !data.orders) {
+            console.log(`⚠️ Status ${status} - Pagina ${pageCount} - Response non valida:`, data);
+            break; // Nessuna pagina successiva per questo status
+          }
+
+          const archivedOrders = data.orders;
+          
+          if (archivedOrders.length === 0) {
+            console.log(`✅ Status ${status} - Pagina ${pageCount} - Nessun ordine, fine per questo status`);
             break; // Nessuna pagina successiva per questo status
           }
 
@@ -371,6 +430,14 @@ const OrdiniPage = () => {
             }
           }
 
+          // Aggiorna pageInfo per la prossima pagina
+          if (data.pageInfo) {
+            pageInfo = data.pageInfo;
+          } else {
+            console.log(`⚠️ Status ${status} - Pagina ${pageCount} - Nessun pageInfo, fine per questo status`);
+            break; // Nessuna pagina successiva per questo status
+          }
+
           // Pausa per evitare rate limit
           await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -378,7 +445,7 @@ const OrdiniPage = () => {
           if (error.name === 'AbortError') {
             throw error;
           }
-          console.error(`Errore per status ${status}:`, error);
+          console.error(`❌ Errore per status ${status}:`, error);
           break; // Passa al prossimo status
         }
       }
@@ -393,6 +460,9 @@ const OrdiniPage = () => {
     const allOrders = [];
     let pageCount = 0;
     const maxPages = 100;
+
+    // Ottieni le credenziali Shopify
+    const credentials = getShopifyCredentials();
 
     setSyncProgress(prev => ({
       ...prev,
@@ -412,15 +482,38 @@ const OrdiniPage = () => {
       }));
 
       try {
-        const shopifyOrders = await fetchShopifyOrders(250, (count, page) => {
-          setSyncProgress(prev => ({
-            ...prev,
-            ordersDownloaded: allOrders.length + count,
-            currentStatus: `Scaricati ${allOrders.length + count} ordini (ultimi ${daysBack} giorni)...`
-          }));
-        }, null, 'any', daysBack);
+        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            shopDomain: credentials.shopDomain,
+            accessToken: credentials.accessToken,
+            apiVersion: credentials.apiVersion,
+            limit: 250,
+            status: 'any',
+            pageInfo: null, // Reset per ogni chiamata
+            useChunking: false,
+            daysBack: daysBack // Filtro temporale specifico
+          })
+        });
 
-        if (!shopifyOrders || shopifyOrders.length === 0) {
+        if (!response.ok) {
+          throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.success || !data.orders) {
+          console.log(`⚠️ Pagina ${pageCount} - Response non valida:`, data);
+          break; // Nessuna pagina successiva
+        }
+
+        const shopifyOrders = data.orders;
+        
+        if (shopifyOrders.length === 0) {
+          console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine sincronizzazione`);
           break; // Nessuna pagina successiva
         }
 
@@ -440,7 +533,7 @@ const OrdiniPage = () => {
         if (error.name === 'AbortError') {
           throw error;
         }
-        console.error(`Errore pagina ${pageCount}:`, error);
+        console.error(`❌ Errore pagina ${pageCount}:`, error);
         throw new Error(`Errore pagina ${pageCount}: ${error.message}`);
       }
     }
