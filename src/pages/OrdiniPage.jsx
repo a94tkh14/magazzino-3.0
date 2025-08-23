@@ -233,34 +233,40 @@ const OrdiniPage = () => {
   // Funzione per scaricare tutti gli ordini senza limiti temporali
   const downloadAllOrdersComplete = async (controller) => {
     const allOrders = [];
-    let pageCount = 0;
-    const maxPages = 500; // Aumentato per store molto grandi
 
     // Ottieni le credenziali Shopify
     const credentials = getShopifyCredentials();
 
     setSyncProgress(prev => ({
       ...prev,
-      currentStatus: 'Scaricamento ordini attivi (senza limiti temporali)...'
+      currentStatus: 'Scaricamento ordini per status separati...'
     }));
 
-    // SOLUZIONE DIRETTA: Prova con limiti crescenti per forzare il download completo
-    const limitsToTry = [250, 500, 1000, 2500, 5000, 10000];
-    
-    for (const limit of limitsToTry) {
+    // SOLUZIONE SEMPLICE: Scarica ordini per status separati
+    // Questo evita problemi di paginazione e filtri
+    const statusesToDownload = [
+      { status: 'open', description: 'ordini aperti' },
+      { status: 'closed', description: 'ordini chiusi' },
+      { status: 'fulfilled', description: 'ordini evasi' },
+      { status: 'cancelled', description: 'ordini cancellati' },
+      { status: 'refunded', description: 'ordini rimborsati' }
+    ];
+
+    for (const { status, description } of statusesToDownload) {
       // Controlla se la sincronizzazione è stata annullata
       if (controller.signal.aborted) {
         throw new Error('Sincronizzazione annullata');
       }
 
-      try {
-        console.log(`🔄 Tentativo con limite ${limit} ordini...`);
-        
-        setSyncProgress(prev => ({
-          ...prev,
-          currentStatus: `Tentativo con limite ${limit} ordini...`
-        }));
+      console.log(`🔄 Scaricamento ${description} (status: ${status})...`);
+      
+      setSyncProgress(prev => ({
+        ...prev,
+        currentStatus: `Scaricamento ${description}...`
+      }));
 
+      try {
+        // Scarica ordini per questo status specifico
         const response = await fetch('/.netlify/functions/shopify-sync-orders', {
           method: 'POST',
           headers: {
@@ -270,11 +276,11 @@ const OrdiniPage = () => {
             shopDomain: credentials.shopDomain,
             accessToken: credentials.accessToken,
             apiVersion: credentials.apiVersion,
-            limit: limit,
-            status: 'any', // Tutti gli status attivi
-            pageInfo: null,
-            useChunking: false, // Disabilita chunking per ora
-            daysBack: null // NO filtro temporale per sincronizzazione completa
+            limit: 1000, // Limite alto per questo status
+            status: status, // Status specifico
+            pageInfo: null, // Nessuna paginazione
+            useChunking: false,
+            daysBack: null // NO filtro temporale
           })
         });
 
@@ -283,149 +289,43 @@ const OrdiniPage = () => {
         }
 
         const data = await response.json();
-        console.log(`📥 Tentativo limite ${limit}:`, {
+        console.log(`📥 Status ${status}:`, {
           success: data.success,
           ordersCount: data.orders?.length || 0,
-          pagination: data.pagination,
-          hasNextPage: !!(data.pagination && data.pagination.next && data.pagination.next.pageInfo)
+          method: data.method
         });
         
         if (data.success && data.orders && data.orders.length > 0) {
-          console.log(`✅ Limite ${limit}: ${data.orders.length} ordini scaricati`);
+          console.log(`✅ Status ${status}: ${data.orders.length} ordini scaricati`);
           
-          // Se abbiamo molti ordini, probabilmente abbiamo scaricato tutto
-          if (data.orders.length >= limit) {
-            console.log(`🎯 Limite ${limit} raggiunto! Probabilmente ci sono più ordini.`);
-            continue; // Prova il prossimo limite
-          } else {
-            console.log(`✅ Limite ${limit}: ${data.orders.length} ordini (meno del limite, probabilmente tutti scaricati)`);
-            
-            // Aggiungi tutti gli ordini scaricati
-            allOrders.push(...data.orders);
-            
-            setSyncProgress(prev => ({
-              ...prev,
-              ordersDownloaded: allOrders.length,
-              currentStatus: `✅ Scaricati ${allOrders.length} ordini con limite ${limit}`
-            }));
+          // Aggiungi ordini alla lista
+          allOrders.push(...data.orders);
+          
+          setSyncProgress(prev => ({
+            ...prev,
+            ordersDownloaded: allOrders.length,
+            currentStatus: `Scaricati ${allOrders.length} ordini totali (inclusi ${description})...`
+          }));
 
-            // Salva progressivamente per evitare problemi di quota
-            if (allOrders.length > 1000) {
-              try {
-                const convertedOrders = allOrders.map(convertShopifyOrder);
-                await saveOrders(convertedOrders);
-                setSyncProgress(prev => ({
-                  ...prev,
-                  currentStatus: `✅ ${allOrders.length} ordini scaricati e salvati progressivamente`
-                }));
-              } catch (saveError) {
-                console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
-              }
-            }
-
-            // Se abbiamo meno ordini del limite, probabilmente abbiamo scaricato tutto
-            if (data.orders.length < limit) {
-              console.log(`🎯 Probabilmente tutti gli ordini attivi scaricati (${data.orders.length} < ${limit})`);
-              break; // Esci dal ciclo dei limiti
+          // Salva progressivamente per evitare problemi di quota
+          if (allOrders.length > 1000) {
+            try {
+              const convertedOrders = allOrders.map(convertShopifyOrder);
+              await saveOrders(convertedOrders);
+              setSyncProgress(prev => ({
+                ...prev,
+                currentStatus: `Scaricati ${allOrders.length} ordini totali... (salvati progressivamente)`
+              }));
+            } catch (saveError) {
+              console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
+              // Continua comunque la sincronizzazione
             }
           }
         } else {
-          console.log(`⚠️ Limite ${limit}: Nessun ordine ricevuto`);
-          break; // Nessun ordine, esci
+          console.log(`⚠️ Status ${status}: Nessun ordine trovato`);
         }
 
-        // Pausa tra i tentativi per evitare rate limit
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          throw error;
-        }
-        console.warn(`⚠️ Errore con limite ${limit}:`, error);
-        // Continua con il prossimo limite
-      }
-    }
-
-    // Ora scarica gli ordini archiviati (cancelled e refunded)
-    setSyncProgress(prev => ({
-      ...prev,
-      currentStatus: 'Scaricamento ordini archiviati (cancelled e refunded)...'
-    }));
-
-    // Scarica ordini archiviati (status = 'cancelled' o 'refunded')
-    const archivedStatuses = ['cancelled', 'refunded'];
-    
-    for (const status of archivedStatuses) {
-      // Controlla se la sincronizzazione è stata annullata
-      if (controller.signal.aborted) {
-        throw new Error('Sincronizzazione annullata');
-      }
-
-      console.log(`🔄 Scaricamento ordini archiviati: ${status}...`);
-
-      try {
-        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            shopDomain: credentials.shopDomain,
-            accessToken: credentials.accessToken,
-            apiVersion: credentials.apiVersion,
-            limit: 1000, // Limite alto per archiviati
-            status: status, // Status specifico per archiviati
-            pageInfo: null,
-            useChunking: false,
-            daysBack: null // NO filtro temporale per archiviati
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        
-        if (!data.success || !data.orders) {
-          console.log(`⚠️ Status ${status} - Response non valida:`, data);
-          continue; // Passa al prossimo status
-        }
-
-        const archivedOrders = data.orders;
-        
-        if (archivedOrders.length === 0) {
-          console.log(`✅ Status ${status} - Nessun ordine archivato trovato`);
-          continue; // Passa al prossimo status
-        }
-
-        console.log(`✅ Status ${status}: ${archivedOrders.length} ordini archiviati scaricati`);
-
-        // Aggiungi ordini archiviati alla lista
-        allOrders.push(...archivedOrders);
-        
-        setSyncProgress(prev => ({
-          ...prev,
-          ordersDownloaded: allOrders.length,
-          currentStatus: `Scaricati ${allOrders.length} ordini totali (inclusi ${status}, archiviati)...`
-        }));
-
-        // Salva progressivamente per evitare problemi di quota
-        if (allOrders.length > 1000) {
-          try {
-            const convertedOrders = allOrders.map(convertShopifyOrder);
-            await saveOrders(convertedOrders);
-            setSyncProgress(prev => ({
-              ...prev,
-              currentStatus: `Scaricati ${allOrders.length} ordini totali... (salvati progressivamente)`
-            }));
-          } catch (saveError) {
-            console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
-            // Continua comunque la sincronizzazione
-          }
-        }
-
-        // Pausa per evitare rate limit
+        // Pausa tra i status per evitare rate limit
         await new Promise(resolve => setTimeout(resolve, 2000));
 
       } catch (error) {
@@ -433,7 +333,7 @@ const OrdiniPage = () => {
           throw error;
         }
         console.error(`❌ Errore per status ${status}:`, error);
-        // Passa al prossimo status
+        // Continua con il prossimo status
       }
     }
 
