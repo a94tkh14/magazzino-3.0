@@ -7,183 +7,62 @@ export const getShopifyCredentials = () => {
   return JSON.parse(saved);
 };
 
-// Funzione SEMPLICE per scaricare TUTTI gli ordini Shopify senza limiti
-export const fetchShopifyOrders = async (limit = 250, status = 'any', onProgress, daysBack = null) => {
+// FUNZIONE SEMPLICE per testare Shopify da zero
+export const fetchShopifyOrders = async (limit = 50, onProgress) => {
   try {
     const credentials = getShopifyCredentials();
-    let allOrders = [];
-    let pageInfo = null;
-    let keepGoing = true;
-    let page = 1;
-    
-    console.log(`🔄 Inizio scaricamento TUTTI gli ordini Shopify (limite: ${limit}, daysBack: ${daysBack})`);
+    console.log(`🚀 INIZIO TEST SHOPIFY DA ZERO`);
+    console.log(`🔍 Credenziali:`, { 
+      shopDomain: credentials.shopDomain, 
+      apiVersion: credentials.apiVersion,
+      hasToken: !!credentials.accessToken 
+    });
 
-    while (keepGoing) {
-      console.log(`📄 Scaricamento pagina ${page}...`);
-      
-      // Prepara il body della richiesta SEMPLIFICATO
-      const requestBody = {
-        shopDomain: credentials.shopDomain,
-        accessToken: credentials.accessToken,
-        apiVersion: credentials.apiVersion,
-        testType: 'orders',
-        limit: limit
-      };
-      
-      // NESSUN FILTRO - scarica TUTTO
-      console.log(`🚀 NESSUN FILTRO APPLICATO - scaricamento TUTTI gli ordini`);
-      
-      if (pageInfo) {
-        requestBody.pageInfo = pageInfo;
-      }
-      // Rimuoviamo temporaneamente daysBack per test
-      // if (daysBack) {
-      //   requestBody.daysBack = daysBack;
-      // }
-      
-      console.log(`🔍 DEBUG - Request body inviato:`, JSON.stringify(requestBody, null, 2));
+    // Test 1: Endpoint base senza filtri
+    console.log(`\n📋 TEST 1: Endpoint base senza filtri`);
+    const requestBody = {
+      shopDomain: credentials.shopDomain,
+      accessToken: credentials.accessToken,
+      apiVersion: credentials.apiVersion,
+      testType: 'orders',
+      limit: limit
+    };
 
-      const response = await fetch('/.netlify/functions/shopify-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
+    console.log(`📤 Request body:`, JSON.stringify(requestBody, null, 2));
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Errore API Shopify: ${errorData.error || response.statusText}`);
-      }
+    const response = await fetch('/.netlify/functions/shopify-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
 
-      const data = await response.json();
-      
-      if (data.success && data.data.orders && data.data.orders.length > 0) {
-        const existingIds = new Set(allOrders.map(o => o.id));
-        const newOrders = data.data.orders.filter(order => !existingIds.has(order.id));
-        allOrders = allOrders.concat(newOrders);
-        
-        if (onProgress) onProgress(allOrders.length, page);
-        console.log(`[SYNC] Scaricati ${allOrders.length} ordini totali dopo pagina ${page}`);
-        console.log(`📊 Ordini in questa pagina: ${data.data.orders.length}/${limit}`);
-        console.log(`📈 Totale ordini scaricati finora: ${allOrders.length}`);
-        console.log(`🔍 Pagination info:`, data.data.paginationInfo);
-
-        if (data.data.orders.length < limit) {
-          console.log(`✅ Ultima pagina raggiunta (${data.data.orders.length} ordini < ${limit})`);
-          keepGoing = false;
-        } else {
-          const linkHeader = data.data.linkHeader;
-          console.log(`🔗 Link header ricevuto: ${linkHeader}`);
-          if (linkHeader && linkHeader.includes('rel="next"')) {
-            const nextMatch = linkHeader.match(/<[^>]*page_info=([^&>]+)[^>]*>;\s*rel="next"/);
-            if (nextMatch) {
-              pageInfo = nextMatch[1];
-              console.log(`📄 Prossima pagina trovata: ${pageInfo}`);
-              page++;
-            } else {
-              const altMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-              if (altMatch) {
-                const url = altMatch[0].match(/<([^>]+)>/)[1];
-                console.log(`🔗 URL estratto: ${url}`);
-                try {
-                  const urlObj = new URL(url);
-                  pageInfo = urlObj.searchParams.get('page_info');
-                  if (pageInfo) {
-                    console.log(`📄 PageInfo estratto dall'URL: ${pageInfo}`);
-                    page++;
-                  } else {
-                    console.log('⚠️ Nessun pageInfo trovato nell\'URL, uso fallback since_id');
-                    // Fallback: usa since_id per la prossima pagina
-                    if (data.data.orders.length > 0) {
-                      const lastOrder = data.data.orders[data.data.orders.length - 1];
-                      pageInfo = `fallback_${lastOrder.id}`;
-                      console.log(`🔧 Fallback pageInfo creato: ${pageInfo}`);
-                      page++;
-                    } else {
-                      keepGoing = false;
-                    }
-                  }
-                } catch (urlError) {
-                  console.error('❌ Errore nel parsing URL:', urlError);
-                  // Fallback: usa since_id per la prossima pagina
-                  if (data.data.orders.length > 0) {
-                    const lastOrder = data.data.orders[data.data.orders.length - 1];
-                    pageInfo = `fallback_${lastOrder.id}`;
-                    console.log(`🔧 Fallback pageInfo creato dopo errore URL: ${pageInfo}`);
-                    page++;
-                  } else {
-                    keepGoing = false;
-                  }
-                }
-              } else {
-                console.log('⚠️ Nessun pattern di link trovato, uso fallback since_id');
-                // Fallback: usa since_id per la prossima pagina
-                if (data.data.orders.length > 0) {
-                  const lastOrder = data.data.orders[data.data.orders.length - 1];
-                  pageInfo = `fallback_${lastOrder.id}`;
-                  console.log(`🔧 Fallback pageInfo creato dopo pattern non trovato: ${pageInfo}`);
-                  page++;
-                } else {
-                  keepGoing = false;
-                }
-              }
-            }
-          } else {
-            console.log('⚠️ Nessun link header o link "next" trovato');
-            // Fallback: prova a continuare con since_id
-            if (data.data.orders.length > 0 && data.data.orders.length === limit) {
-              console.log('🔧 Tentativo di continuare con fallback since_id...');
-              const lastOrder = data.data.orders[data.data.orders.length - 1];
-              pageInfo = `fallback_${lastOrder.id}`;
-              console.log(`🔧 Fallback pageInfo creato: ${pageInfo}`);
-              page++;
-            } else {
-              console.log('✅ Nessuna prossima pagina disponibile');
-              console.log(`📊 Motivo: ordini in questa pagina (${data.data.orders.length}) < limite richiesto (${limit})`);
-              console.log(`🔍 Questo potrebbe significare che abbiamo raggiunto tutti gli ordini disponibili`);
-              keepGoing = false;
-            }
-          }
-        }
-      } else {
-        console.log(`⚠️ Pagina ${page} non ha ordini o errore`);
-        if (data.error) {
-          console.error('❌ Errore dalla funzione:', data.error);
-        }
-        keepGoing = false;
-      }
-      
-      // NESSUN LIMITE DI PAGINE - scarica tutto
-      if (page > 1000) {
-        console.log('⚠️ Raggiunto limite massimo di pagine (1000) - continua a scaricare...');
-        console.log(`🔍 Ordini totali scaricati: ${allOrders.length}`);
-        console.log(`🔍 Limite richiesto: ${limit}`);
-        // NON fermare - continua a scaricare
-      }
-      
-      // Pausa intelligente per evitare rate limit
-      if (keepGoing) {
-        const pauseTime = page === 1 ? 300 : 500; // Ridotte le pause per maggiore velocità
-        console.log(`⏳ Pausa di ${pauseTime}ms prima della prossima richiesta...`);
-        await new Promise(resolve => setTimeout(resolve, pauseTime));
-      }
+    if (!response.ok) {
+      throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
     }
-    console.log(`🎉 Scaricamento completato! Totale ordini: ${allOrders.length}`);
-    console.log(`📊 Limite richiesto: ${limit}`);
-    console.log(`📈 Pagine processate: ${page}`);
-    
-    // Se abbiamo scaricato meno ordini del richiesto, potrebbe essere che non ce ne siano altri
-    if (allOrders.length < limit) {
-      console.log(`ℹ️ Nota: Scaricati ${allOrders.length} ordini su ${limit} richiesti`);
-      console.log(`ℹ️ Questo potrebbe significare che il tuo store Shopify ha solo ${allOrders.length} ordini totali`);
+
+    const data = await response.json();
+    console.log(`📥 Response ricevuta:`, data);
+
+    if (data.success && data.data && data.data.orders) {
+      const orders = data.data.orders;
+      console.log(`✅ SUCCESSO! Trovati ${orders.length} ordini`);
+      console.log(`📊 Primi 3 ordini:`, orders.slice(0, 3).map(o => ({
+        id: o.id,
+        name: o.name,
+        status: o.status,
+        fulfillment_status: o.fulfillment_status,
+        financial_status: o.financial_status
+      })));
+      
+      if (onProgress) onProgress(orders.length, 1);
+      return orders;
+    } else {
+      console.log(`⚠️ Response non valida:`, data);
+      return [];
     }
-    
-    return allOrders;
+
   } catch (error) {
-    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      throw new Error('Errore di connessione alle Netlify Functions. Verifica la connessione internet.');
-    }
+    console.error(`❌ ERRORE TEST SHOPIFY:`, error);
     throw error;
   }
 };

@@ -101,62 +101,42 @@ const OrdiniPage = () => {
     setError('');
     setMessage('');
     setProgress({ count: 0, page: 1, active: true });
+    
     try {
-      // Determina se è la prima sincronizzazione o se forziamo tutto
-      const isFirstSync = orders.length === 0;
+      console.log('🧪 INIZIO TEST SHOPIFY DA ZERO...');
       
-      // Se è la prima volta o forziamo tutto, scarica tutto. Altrimenti solo ultimi 7 giorni
-      const daysBack = (isFirstSync || forceAll) ? null : 7;
-      
-      // Usa il limite appropriato in base al tipo di sincronizzazione
-      const ordersLimit = forceAll ? getOrdersLimit('max') : getOrdersLimit('incremental');
-      
-      const shopifyOrders = await fetchShopifyOrders(1000, 'any', (count, page) => {
+      // Test semplice con limite basso
+      const shopifyOrders = await fetchShopifyOrders(50, (count, page) => {
         setProgress({ count, page, active: true });
-      }, daysBack);
-      
-      const convertedOrders = (Array.isArray(shopifyOrders) ? shopifyOrders : []).map(convertShopifyOrder);
-      const existingOrders = orders;
-      
-      // Trova ordini nuovi (che non esistono già)
-      const newOrders = convertedOrders.filter(newOrder => 
-        !existingOrders.some(existing => existing.id === newOrder.id)
-      );
-      
-      // Trova ordini aggiornati (stesso ID ma dati diversi)
-      const updatedOrders = convertedOrders.filter(newOrder => {
-        const existing = existingOrders.find(existing => existing.id === newOrder.id);
-        return existing && JSON.stringify(existing) !== JSON.stringify(newOrder);
       });
       
-      // Combina ordini esistenti + nuovi + aggiornati
-      const allOrders = [
-        ...existingOrders.filter(existing => 
-          !convertedOrders.some(newOrder => newOrder.id === existing.id)
-        ), // Ordini esistenti non presenti nei nuovi
-        ...convertedOrders // Tutti i nuovi/aggiornati
-      ];
+      console.log('📊 Risultato test:', shopifyOrders);
       
-      saveOrders(allOrders);
-      
-      let message = '';
-      if (forceAll) {
-        message = `Sincronizzazione completa completata! Scaricati ${convertedOrders.length} ordini totali.`;
-      } else if (isFirstSync) {
-        message = `Prima sincronizzazione completata! Scaricati ${convertedOrders.length} ordini totali.`;
-      } else if (newOrders.length > 0 && updatedOrders.length > 0) {
-        message = `Sincronizzati ${newOrders.length} nuovi ordini e aggiornati ${updatedOrders.length} ordini esistenti!`;
-      } else if (newOrders.length > 0) {
-        message = `Sincronizzati ${newOrders.length} nuovi ordini da Shopify!`;
-      } else if (updatedOrders.length > 0) {
-        message = `Aggiornati ${updatedOrders.length} ordini esistenti!`;
+      if (shopifyOrders && shopifyOrders.length > 0) {
+        setMessage(`✅ TEST COMPLETATO! Trovati ${shopifyOrders.length} ordini`);
+        
+        // Mostra dettagli degli ordini trovati
+        const orderDetails = shopifyOrders.slice(0, 5).map(order => ({
+          id: order.id,
+          name: order.name,
+          status: order.status,
+          fulfillment: order.fulfillment_status,
+          financial: order.financial_status
+        }));
+        
+        console.log('📋 Dettagli primi 5 ordini:', orderDetails);
+        
+        // Salva gli ordini trovati
+        const convertedOrders = shopifyOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
       } else {
-        message = 'Nessun nuovo ordine trovato negli ultimi 7 giorni.';
+        setMessage('⚠️ TEST COMPLETATO ma nessun ordine trovato');
       }
       
-      setMessage(message);
     } catch (err) {
-      setError(err.message);
+      console.error('❌ ERRORE TEST:', err);
+      setError(`Errore test: ${err.message}`);
     } finally {
       setIsLoading(false);
       setProgress({ count: 0, page: 1, active: false });
@@ -409,18 +389,10 @@ const OrdiniPage = () => {
           <Button 
             onClick={() => handleSyncOrders(true)} 
             disabled={isLoading}
-            className="bg-red-600 hover:bg-red-700 text-white"
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'SCARICAMENTO...' : '🚀 SCARICA TUTTO'}
-          </Button>
-          <Button 
-            onClick={() => handleSyncOrders(false)} 
-            disabled={isLoading}
-            variant="outline"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            {isLoading ? 'Sincronizzazione...' : 'Sincronizza Ultimi 7 giorni'}
+            {isLoading ? 'TEST...' : '🧪 TEST SHOPIFY'}
           </Button>
         </div>
       </div>

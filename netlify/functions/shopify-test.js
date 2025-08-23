@@ -122,6 +122,7 @@ exports.handler = async (event, context) => {
             ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
             console.log(`🔍 DEBUG - URL base per ordini archiviati: ${ordersUrl}`);
           } else {
+            // Per ordini normali, prova endpoint diverso
             ordersUrl = `https://${shopDomain}/admin/api/${apiVersion || '2023-10'}/orders.json`;
             console.log(`🔍 DEBUG - URL base per ordini normali: ${ordersUrl}`);
           }
@@ -132,8 +133,8 @@ exports.handler = async (event, context) => {
             console.log(`🔍 DEBUG - Dopo aggiunta limit: ${ordersUrl}`);
           }
           
-          // NESSUN FILTRO - scarica TUTTO
-          console.log(`🚀 NESSUN FILTRO APPLICATO - endpoint base per massima compatibilità`);
+          // ENDPOINT SEMPLICE senza filtri
+          console.log(`🚀 Endpoint base senza filtri per massima compatibilità`);
 
           // Aggiungi page_info se presente
           if (pageInfo) {

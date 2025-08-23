@@ -130,7 +130,7 @@ exports.handler = async (event, context) => {
       limit = 50,
       status = 'any',
       pageInfo = null,
-      daysBack = null,
+      daysBack = null, // RIMOSSO il valore di default per permettere scaricamento completo
       fulfillmentStatus = null,
       financialStatus = null,
       useChunking = false // Nuovo parametro per abilitare il chunking
@@ -195,7 +195,17 @@ exports.handler = async (event, context) => {
     if (!pageInfo) {
       // Solo per la prima chiamata, aggiungi filtri di status
       if (status && status !== 'any') {
-        apiUrl += `&status=${status}`;
+        // Gestisci status speciali per ordini archiviati
+        if (status === 'cancelled' || status === 'refunded') {
+          apiUrl += `&status=${status}`;
+          console.log(`📦 Filtro per ordini archiviati: ${status}`);
+        } else if (status === 'active') {
+          // Per ordini attivi, escludi quelli cancellati e rimborsati
+          apiUrl += `&status=open&status=closed&status=fulfilled`;
+          console.log('📦 Filtro per ordini attivi (escludendo archiviati)');
+        } else {
+          apiUrl += `&status=${status}`;
+        }
       }
       
       if (fulfillmentStatus) {
@@ -207,11 +217,14 @@ exports.handler = async (event, context) => {
       }
       
       // Aggiungi filtro per data se specificato
-      if (daysBack) {
+      if (daysBack && daysBack > 0) {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysBack);
         const isoDate = cutoffDate.toISOString().split('T')[0];
         apiUrl += `&created_at_min=${isoDate}`;
+        console.log(`📅 Filtro temporale applicato: ultimi ${daysBack} giorni (${isoDate})`);
+      } else {
+        console.log('📅 Nessun filtro temporale: scaricamento di TUTTI gli ordini disponibili');
       }
     } else {
       // Per le chiamate di paginazione, usa SOLO page_info
@@ -284,11 +297,38 @@ exports.handler = async (event, context) => {
       const data = await response.json();
       console.log('✅ Risposta parsata');
 
+      // Normalizza i dati degli ordini per compatibilità
+      const normalizedOrders = (data.orders || []).map(order => {
+        return {
+          ...order,
+          // Assicurati che i campi principali siano sempre presenti
+          id: order.id,
+          orderNumber: order.order_number || order.id,
+          customerName: order.customer?.first_name && order.customer?.last_name 
+            ? `${order.customer.first_name} ${order.customer.last_name}` 
+            : order.customer?.first_name || order.customer?.last_name || 'Cliente non specificato',
+          customerEmail: order.customer?.email || 'Email non disponibile',
+          totalPrice: order.total_price || order.totalPrice || 0,
+          currency: order.currency || 'EUR',
+          createdAt: order.created_at || order.createdAt,
+          financialStatus: order.financial_status || order.financialStatus || 'unknown',
+          fulfillmentStatus: order.fulfillment_status || order.fulfillmentStatus || 'unknown',
+          // Marca ordini archiviati
+          archived: ['cancelled', 'refunded'].includes(order.financial_status || order.financialStatus),
+          archiveReason: ['cancelled', 'refunded'].includes(order.financial_status || order.financialStatus) 
+            ? (order.financial_status || order.financialStatus) 
+            : null,
+          // Normalizza line items
+          lineItems: order.line_items || order.lineItems || [],
+          items: order.line_items || order.lineItems || [] // Per compatibilità
+        };
+      });
+
       // Prepara risposta
       const result = {
         success: true,
-        orders: data.orders || [],
-        totalCount: data.orders ? data.orders.length : 0,
+        orders: normalizedOrders,
+        totalCount: normalizedOrders.length,
         optimizedLimit: optimizedLimit,
         originalLimit: limit
       };
@@ -320,12 +360,12 @@ exports.handler = async (event, context) => {
       } else {
         console.log('⚠️ Nessun link header ricevuto da Shopify');
         // Se non c'è link header, prova a creare una paginazione manuale
-        if (data.orders && data.orders.length === optimizedLimit) {
+        if (normalizedOrders.length === optimizedLimit) {
           console.log('🔧 Tentativo di creare paginazione manuale...');
           // Shopify potrebbe non inviare link header se non ci sono più pagine
           // Ma se abbiamo esattamente optimizedLimit ordini, probabilmente ce ne sono altri
-          if (data.orders.length > 0) {
-            const lastOrder = data.orders[data.orders.length - 1];
+          if (normalizedOrders.length > 0) {
+            const lastOrder = normalizedOrders[normalizedOrders.length - 1];
             console.log(`🔧 Ultimo ordine ID: ${lastOrder.id}`);
             
             result.pagination = {
@@ -356,9 +396,16 @@ exports.handler = async (event, context) => {
         functionMemory: 1024,
         method: 'standard_pagination',
         hasLinkHeader: !!linkHeader,
-        ordersCount: data.orders ? data.orders.length : 0,
-        isFullPage: data.orders && data.orders.length === optimizedLimit,
-        paginationMethod: linkHeader ? 'shopify_link_header' : 'manual_created'
+        ordersCount: normalizedOrders.length,
+        isFullPage: normalizedOrders.length === optimizedLimit,
+        paginationMethod: linkHeader ? 'shopify_link_header' : 'manual_created',
+        // Informazioni sui tipi di ordini
+        orderTypes: {
+          active: normalizedOrders.filter(o => !o.archived).length,
+          archived: normalizedOrders.filter(o => o.archived).length,
+          cancelled: normalizedOrders.filter(o => o.financialStatus === 'cancelled').length,
+          refunded: normalizedOrders.filter(o => o.financialStatus === 'refunded').length
+        }
       };
 
       console.log('🎉 Invio risposta finale');
