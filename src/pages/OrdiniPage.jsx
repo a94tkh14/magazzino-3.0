@@ -4,7 +4,7 @@ import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
 import { getOrdersLimit } from '../config/shopify';
-import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
@@ -19,6 +19,19 @@ const OrdiniPage = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState({ count: 0, page: 1, active: false });
+  
+  // Nuovi stati per sincronizzazione avanzata
+  const [syncProgress, setSyncProgress] = useState({
+    isRunning: false,
+    currentPage: 0,
+    totalPages: 0,
+    ordersDownloaded: 0,
+    totalOrders: 0,
+    currentStatus: ''
+  });
+  
+  const [abortController, setAbortController] = useState(null);
+  
   const [sortBy, setSortBy] = useState('date');
   const [range, setRange] = useState({
     startDate: startOfDay(addDays(new Date(), -30)),
@@ -46,10 +59,10 @@ const OrdiniPage = () => {
         // Poi sincronizza automaticamente con Shopify per avere i dati più recenti
         if (parsedOrders.length === 0) {
           console.log('🔄 Nessun ordine in locale, avvio sincronizzazione automatica...');
-          await handleSyncOrders(true); // Forza sincronizzazione completa
+          await handleSyncOrdersComplete(); // Sincronizzazione completa
         } else {
           console.log('🔄 Ordini presenti in locale, sincronizzazione incrementale...');
-          await handleSyncOrders(false); // Sincronizzazione incrementale (ultimi 7 giorni)
+          await handleSyncOrdersIncremental(); // Sincronizzazione incrementale (ultimi 7 giorni)
         }
         
         // Pulisci dati vecchi (più di 30 giorni)
@@ -61,7 +74,7 @@ const OrdiniPage = () => {
         // Se c'è un errore, prova comunque a sincronizzare
         try {
           console.log('🔄 Tentativo di sincronizzazione dopo errore...');
-          await handleSyncOrders(true);
+          await handleSyncOrdersComplete();
         } catch (syncError) {
           console.error('Errore anche nella sincronizzazione:', syncError);
           setError('Errore nel caricamento ordini. Verifica la configurazione Shopify.');
@@ -96,50 +109,379 @@ const OrdiniPage = () => {
     window.dispatchEvent(new CustomEvent('dashboard-update'));
   };
 
-  const handleSyncOrders = async (forceAll = false) => {
+  // Nuova funzione per sincronizzazione completa senza limiti temporali
+  const handleSyncOrdersComplete = async () => {
     setIsLoading(true);
     setError('');
     setMessage('');
-    setProgress({ count: 0, page: 1, active: true });
     
+    // Crea un nuovo abort controller
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Inizializzazione sincronizzazione completa...'
+    });
+
     try {
-      console.log('🧪 INIZIO TEST SHOPIFY DA ZERO...');
+      console.log('🚀 INIZIO SINCRONIZZAZIONE COMPLETA SHOPIFY...');
       
-      // Test semplice con limite basso
-      const shopifyOrders = await fetchShopifyOrders(50, (count, page) => {
-        setProgress({ count, page, active: true });
-      });
+      // Sincronizzazione completa senza limiti temporali
+      const allOrders = await downloadAllOrdersComplete(controller);
       
-      console.log('📊 Risultato test:', shopifyOrders);
-      
-      if (shopifyOrders && shopifyOrders.length > 0) {
-        setMessage(`✅ TEST COMPLETATO! Trovati ${shopifyOrders.length} ordini`);
-        
-        // Mostra dettagli degli ordini trovati
-        const orderDetails = shopifyOrders.slice(0, 5).map(order => ({
-          id: order.id,
-          name: order.name,
-          status: order.status,
-          fulfillment: order.fulfillment_status,
-          financial: order.financial_status
-        }));
-        
-        console.log('📋 Dettagli primi 5 ordini:', orderDetails);
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ SINCRONIZZAZIONE COMPLETATA! Scaricati ${allOrders.length} ordini totali`);
         
         // Salva gli ordini trovati
-        const convertedOrders = shopifyOrders.map(convertShopifyOrder);
+        const convertedOrders = allOrders.map(convertShopifyOrder);
         await saveOrders(convertedOrders);
         
       } else {
-        setMessage('⚠️ TEST COMPLETATO ma nessun ordine trovato');
+        setMessage('⚠️ SINCRONIZZAZIONE COMPLETATA ma nessun ordine trovato');
       }
       
     } catch (err) {
-      console.error('❌ ERRORE TEST:', err);
-      setError(`Errore test: ${err.message}`);
+      if (err.name === 'AbortError') {
+        setMessage('❌ Sincronizzazione annullata dall\'utente');
+      } else {
+        console.error('❌ ERRORE SINCRONIZZAZIONE COMPLETA:', err);
+        setError(`Errore sincronizzazione completa: ${err.message}`);
+      }
     } finally {
       setIsLoading(false);
-      setProgress({ count: 0, page: 1, active: false });
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
+  // Nuova funzione per sincronizzazione incrementale (ultimi 7 giorni)
+  const handleSyncOrdersIncremental = async () => {
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Sincronizzazione incrementale (ultimi 7 giorni)...'
+    });
+
+    try {
+      console.log('🔄 SINCRONIZZAZIONE INCREMENTALE (ultimi 7 giorni)...');
+      
+      // Sincronizzazione solo ultimi 7 giorni
+      const recentOrders = await downloadOrdersWithPeriod(7, controller);
+      
+      if (recentOrders && recentOrders.length > 0) {
+        setMessage(`✅ SINCRONIZZAZIONE INCREMENTALE COMPLETATA! Scaricati ${recentOrders.length} ordini recenti`);
+        
+        // Unisci con ordini esistenti (evita duplicati)
+        const existingOrders = orders || [];
+        const newOrders = recentOrders.filter(newOrder => 
+          !existingOrders.some(existingOrder => existingOrder.id === newOrder.id)
+        );
+        
+        if (newOrders.length > 0) {
+          const allOrders = [...existingOrders, ...newOrders];
+          const convertedOrders = allOrders.map(convertShopifyOrder);
+          await saveOrders(convertedOrders);
+        }
+        
+      } else {
+        setMessage('✅ SINCRONIZZAZIONE INCREMENTALE: nessun ordine nuovo trovato');
+      }
+      
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setMessage('❌ Sincronizzazione incrementale annullata');
+      } else {
+        console.error('❌ ERRORE SINCRONIZZAZIONE INCREMENTALE:', err);
+        setError(`Errore sincronizzazione incrementale: ${err.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
+  // Funzione per scaricare tutti gli ordini senza limiti temporali
+  const downloadAllOrdersComplete = async (controller) => {
+    const allOrders = [];
+    let pageInfo = null;
+    let pageCount = 0;
+    const maxPages = 500; // Aumentato per store molto grandi
+
+    setSyncProgress(prev => ({
+      ...prev,
+      currentStatus: 'Scaricamento ordini attivi (senza limiti temporali)...'
+    }));
+
+    // Prima scarica tutti gli ordini attivi (senza filtro temporale)
+    while (pageCount < maxPages) {
+      // Controlla se la sincronizzazione è stata annullata
+      if (controller.signal.aborted) {
+        throw new Error('Sincronizzazione annullata');
+      }
+
+      pageCount++;
+      setSyncProgress(prev => ({
+        ...prev,
+        currentPage: pageCount,
+        currentStatus: `Scaricamento pagina ${pageCount} (ordini attivi, senza limiti temporali)...`
+      }));
+
+      try {
+        const shopifyOrders = await fetchShopifyOrders(250, (count, page) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ordersDownloaded: allOrders.length + count,
+            currentStatus: `Scaricati ${allOrders.length + count} ordini attivi...`
+          }));
+        }, pageInfo);
+
+        if (!shopifyOrders || shopifyOrders.length === 0) {
+          break; // Nessuna pagina successiva
+        }
+
+        // Aggiungi ordini alla lista
+        allOrders.push(...shopifyOrders);
+        
+        setSyncProgress(prev => ({
+          ...prev,
+          ordersDownloaded: allOrders.length,
+          currentStatus: `Scaricati ${allOrders.length} ordini attivi (senza limiti temporali)...`
+        }));
+
+        // Salva progressivamente per evitare problemi di quota
+        if (allOrders.length % 1000 === 0) {
+          try {
+            const convertedOrders = allOrders.map(convertShopifyOrder);
+            await saveOrders(convertedOrders);
+            setSyncProgress(prev => ({
+              ...prev,
+              currentStatus: `Scaricati ${allOrders.length} ordini attivi... (salvati progressivamente)`
+            }));
+          } catch (saveError) {
+            console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
+            // Continua comunque la sincronizzazione
+          }
+        }
+
+        // Pausa per evitare rate limit
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw error;
+        }
+        console.error(`Errore pagina ${pageCount}:`, error);
+        throw new Error(`Errore pagina ${pageCount}: ${error.message}`);
+      }
+    }
+
+    // Ora scarica gli ordini archiviati (cancelled e refunded)
+    setSyncProgress(prev => ({
+      ...prev,
+      currentStatus: 'Scaricamento ordini archiviati (cancelled e refunded)...'
+    }));
+
+    // Scarica ordini archiviati (status = 'cancelled' o 'refunded')
+    const archivedStatuses = ['cancelled', 'refunded'];
+    
+    for (const status of archivedStatuses) {
+      // Controlla se la sincronizzazione è stata annullata
+      if (controller.signal.aborted) {
+        throw new Error('Sincronizzazione annullata');
+      }
+
+      pageCount = 0;
+
+      while (pageCount < 100) { // Limite più basso per status archiviati
+        if (controller.signal.aborted) {
+          throw new Error('Sincronizzazione annullata');
+        }
+
+        pageCount++;
+        setSyncProgress(prev => ({
+          ...prev,
+          currentPage: pageCount,
+          currentStatus: `Scaricamento pagina ${pageCount} (ordini ${status}, archiviati)...`
+        }));
+
+        try {
+          const archivedOrders = await fetchShopifyOrders(250, (count, page) => {
+            setSyncProgress(prev => ({
+              ...prev,
+              ordersDownloaded: allOrders.length + count,
+              currentStatus: `Scaricati ${allOrders.length + count} ordini totali (inclusi ${status}, archiviati)...`
+            }));
+          }, null, status);
+
+          if (!archivedOrders || archivedOrders.length === 0) {
+            break; // Nessuna pagina successiva per questo status
+          }
+
+          // Aggiungi ordini archiviati alla lista
+          allOrders.push(...archivedOrders);
+          
+          setSyncProgress(prev => ({
+            ...prev,
+            ordersDownloaded: allOrders.length,
+            currentStatus: `Scaricati ${allOrders.length} ordini totali (inclusi ${status}, archiviati)...`
+          }));
+
+          // Salva progressivamente per evitare problemi di quota
+          if (allOrders.length % 1000 === 0) {
+            try {
+              const convertedOrders = allOrders.map(convertShopifyOrder);
+              await saveOrders(convertedOrders);
+              setSyncProgress(prev => ({
+                ...prev,
+                currentStatus: `Scaricati ${allOrders.length} ordini totali... (salvati progressivamente)`
+              }));
+            } catch (saveError) {
+              console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
+              // Continua comunque la sincronizzazione
+            }
+          }
+
+          // Pausa per evitare rate limit
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            throw error;
+          }
+          console.error(`Errore per status ${status}:`, error);
+          break; // Passa al prossimo status
+        }
+      }
+    }
+
+    console.log(`✅ Sincronizzazione completa terminata: ${allOrders.length} ordini totali`);
+    return allOrders;
+  };
+
+  // Funzione per scaricare ordini con periodo specifico
+  const downloadOrdersWithPeriod = async (daysBack, controller) => {
+    const allOrders = [];
+    let pageCount = 0;
+    const maxPages = 100;
+
+    setSyncProgress(prev => ({
+      ...prev,
+      currentStatus: `Scaricamento ordini ultimi ${daysBack} giorni...`
+    }));
+
+    while (pageCount < maxPages) {
+      if (controller.signal.aborted) {
+        throw new Error('Sincronizzazione annullata');
+      }
+
+      pageCount++;
+      setSyncProgress(prev => ({
+        ...prev,
+        currentPage: pageCount,
+        currentStatus: `Scaricamento pagina ${pageCount} (ultimi ${daysBack} giorni)...`
+      }));
+
+      try {
+        const shopifyOrders = await fetchShopifyOrders(250, (count, page) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ordersDownloaded: allOrders.length + count,
+            currentStatus: `Scaricati ${allOrders.length + count} ordini (ultimi ${daysBack} giorni)...`
+          }));
+        }, null, 'any', daysBack);
+
+        if (!shopifyOrders || shopifyOrders.length === 0) {
+          break; // Nessuna pagina successiva
+        }
+
+        // Aggiungi ordini alla lista
+        allOrders.push(...shopifyOrders);
+        
+        setSyncProgress(prev => ({
+          ...prev,
+          ordersDownloaded: allOrders.length,
+          currentStatus: `Scaricati ${allOrders.length} ordini (ultimi ${daysBack} giorni)...`
+        }));
+
+        // Pausa per evitare rate limit
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw error;
+        }
+        console.error(`Errore pagina ${pageCount}:`, error);
+        throw new Error(`Errore pagina ${pageCount}: ${error.message}`);
+      }
+    }
+
+    console.log(`✅ Sincronizzazione periodo ${daysBack} giorni terminata: ${allOrders.length} ordini`);
+    return allOrders;
+  };
+
+  // Funzione per annullare la sincronizzazione
+  const cancelSync = () => {
+    if (abortController) {
+      abortController.abort();
+      setSyncProgress(prev => ({
+        ...prev,
+        currentStatus: 'Sincronizzazione annullata...'
+      }));
+    }
+  };
+
+  // Funzione per pulire la cache
+  const clearOrdersCache = () => {
+    if (confirm('Sei sicuro di voler pulire la cache degli ordini? Questo eliminerà tutti gli ordini scaricati e archiviati dal tuo browser. Questa azione non può essere annullata.')) {
+      localStorage.removeItem('shopify_orders');
+      localStorage.removeItem('shopify_orders_compressed');
+      localStorage.removeItem('shopify_orders_count');
+      localStorage.removeItem('shopify_orders_compressed_date');
+      localStorage.removeItem('shopify_orders_recent');
+      localStorage.removeItem('shopify_orders_total_count');
+      localStorage.removeItem('shopify_orders_partial_save');
+      setOrders([]);
+      setMessage('✅ Cache pulita con successo!');
+      setTimeout(() => setMessage(''), 5000);
+    }
+  };
+
+  // Funzione legacy per compatibilità
+  const handleSyncOrders = async (forceAll = false) => {
+    if (forceAll) {
+      await handleSyncOrdersComplete();
+    } else {
+      await handleSyncOrdersIncremental();
     }
   };
 
@@ -175,7 +517,20 @@ const OrdiniPage = () => {
     
     // Filtro per status
     if (filterStatus !== 'all') {
-      filtered = filtered.filter(order => order.status === filterStatus);
+      if (filterStatus === 'active') {
+        // Ordini attivi (non archiviati)
+        filtered = filtered.filter(order => 
+          order.status !== 'cancelled' && order.status !== 'refunded'
+        );
+      } else if (filterStatus === 'archived') {
+        // Ordini archiviati (cancellati + rimborsati)
+        filtered = filtered.filter(order => 
+          order.status === 'cancelled' || order.status === 'refunded'
+        );
+      } else {
+        // Status specifico
+        filtered = filtered.filter(order => order.status === filterStatus);
+      }
     }
     
     // Filtro per data con orario
@@ -258,6 +613,7 @@ const OrdiniPage = () => {
       case 'paid': return 'bg-green-100 text-green-800';
       case 'pending': return 'bg-yellow-100 text-yellow-800';
       case 'refunded': return 'bg-red-100 text-red-800';
+      case 'cancelled': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -267,6 +623,7 @@ const OrdiniPage = () => {
       case 'paid': return 'Pagato';
       case 'pending': return 'In attesa';
       case 'refunded': return 'Rimborsato';
+      case 'cancelled': return 'Cancellato';
       default: return status;
     }
   };
@@ -293,6 +650,14 @@ const OrdiniPage = () => {
       const paidShippingOrders = filteredOrders.filter(order => order.shippingPrice > 0);
       const shippingRevenue = paidShippingOrders.reduce((sum, order) => sum + order.shippingPrice, 0);
       
+      // Nuove statistiche per ordini archiviati e attivi
+      const archivedOrders = filteredOrders.filter(order => 
+        order.status === 'cancelled' || order.status === 'refunded'
+      );
+      const activeOrders = filteredOrders.filter(order => 
+        order.status !== 'cancelled' && order.status !== 'refunded'
+      );
+      
       return {
         totalOrders: filteredOrders.length,
         totalValue: filteredOrders.reduce((sum, order) => sum + order.totalPrice, 0),
@@ -302,6 +667,8 @@ const OrdiniPage = () => {
         totalInvoices: filteredOrders.length,
         paidOrders: filteredOrders.filter(order => order.status === 'paid').length,
         pendingOrders: filteredOrders.filter(order => order.status === 'pending').length,
+        archivedOrders: archivedOrders.length,
+        activeOrders: activeOrders.length,
         paidShippingOrders: paidShippingOrders.length,
         shippingRevenue: shippingRevenue,
         freeShippingOrders: filteredOrders.filter(order => order.shippingPrice === 0).length,
@@ -322,9 +689,7 @@ const OrdiniPage = () => {
         ...item,
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
-        orderStatus: order.status,
-        orderTotal: order.totalPrice,
-        shippingPrice: order.shippingPrice
+        orderStatus: order.status
       }))
     );
 
@@ -362,6 +727,14 @@ const OrdiniPage = () => {
     const paidShippingOrders = matchingOrders.filter(order => order.shippingPrice > 0);
     const shippingRevenue = paidShippingOrders.reduce((sum, order) => sum + order.shippingPrice, 0);
 
+    // Nuove statistiche per ricerca
+    const archivedOrders = matchingOrders.filter(order => 
+      order.status === 'cancelled' || order.status === 'refunded'
+    );
+    const activeOrders = matchingOrders.filter(order => 
+      order.status !== 'cancelled' && order.status !== 'refunded'
+    );
+
     return {
       totalOrders,
       totalValue,
@@ -369,6 +742,8 @@ const OrdiniPage = () => {
       totalInvoices: totalOrders,
       paidOrders,
       pendingOrders,
+      archivedOrders: archivedOrders.length,
+      activeOrders: activeOrders.length,
       paidShippingOrders: paidShippingOrders.length,
       shippingRevenue: shippingRevenue,
       freeShippingOrders: matchingOrders.filter(order => order.shippingPrice === 0).length,
@@ -387,65 +762,139 @@ const OrdiniPage = () => {
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={() => handleSyncOrders(true)} 
+            onClick={() => handleSyncOrdersComplete()} 
             disabled={isLoading}
             className="bg-green-600 hover:bg-green-700 text-white"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'TEST...' : '🧪 TEST SHOPIFY'}
+            {isLoading ? 'SINCRONIZZAZIONE...' : '🚀 SINCRONIZZA TUTTO'}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Sincronizzazione Shopify</CardTitle>
+          <CardTitle>Sincronizzazione Shopify Avanzata</CardTitle>
           <CardDescription>
-            Importa automaticamente gli ordini dal tuo store Shopify
+            Importa automaticamente tutti gli ordini dal tuo store Shopify, inclusi quelli archiviati
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleSyncOrders(false)}
-              disabled={isLoading}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded font-semibold disabled:opacity-50"
-            >
-              {isLoading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
+          <div className="space-y-4">
+            {/* Pulsanti principali */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleSyncOrdersIncremental()}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {isLoading ? 'Sincronizzazione...' : '🔄 Sincronizza Recenti (7 giorni)'}
+              </button>
+              
+              <button
+                onClick={() => handleSyncOrdersComplete()}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+              >
                 <Download className="h-4 w-4" />
-              )}
-              {isLoading ? 'Sincronizzazione...' : 'Sincronizza Recenti'}
-            </button>
-            
-            <button
-              onClick={() => {
-                if (window.confirm('Sicuro di voler scaricare tutti gli ordini? Questo può richiedere molto tempo.')) {
-                  handleSyncOrders(true);
-                }
-              }}
-              disabled={isLoading}
-              className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded font-semibold disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              Sincronizza Tutto
-            </button>
+                🚀 Sincronizza TUTTI gli Ordini
+              </button>
+
+              <button
+                onClick={() => downloadOrdersWithPeriod(30, new AbortController())}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                📅 Ultimi 30 Giorni
+              </button>
+
+              <button
+                onClick={() => downloadOrdersWithPeriod(90, new AbortController())}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                📅 Ultimi 90 Giorni
+              </button>
+            </div>
+
+            {/* Progresso sincronizzazione */}
+            {syncProgress.isRunning && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-blue-800">🔄 Sincronizzazione in corso...</h4>
+                  <button
+                    onClick={cancelSync}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
+                  >
+                    ❌ Annulla
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm text-blue-700">
+                    <strong>Stato:</strong> {syncProgress.currentStatus}
+                  </div>
+                  <div className="text-sm text-blue-700">
+                    <strong>Pagina corrente:</strong> {syncProgress.currentPage}
+                  </div>
+                  <div className="text-sm text-blue-700">
+                    <strong>Ordini scaricati:</strong> {syncProgress.ordersDownloaded}
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: syncProgress.currentPage > 0 
+                          ? `${Math.min((syncProgress.currentPage / 100) * 100, 100)}%` 
+                          : '0%' 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Messaggi e errori */}
+            {message && (
+              <div className="mt-2 text-green-600 font-medium">{message}</div>
+            )}
+            {error && (
+              <div className="mt-2 flex items-center gap-2 text-red-600">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Gestione dati e spazio */}
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Gestione Dati e Spazio
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={clearOrdersCache}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm"
+                >
+                  <Archive className="h-4 w-4" />
+                  Pulisci Cache
+                </button>
+                <div className="text-sm text-gray-600">
+                  <strong>Ordini in cache:</strong> {orders.length} | 
+                  <strong> Spazio utilizzato:</strong> {Math.round(JSON.stringify(orders).length / 1024)} KB
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                💡 La cache viene pulita automaticamente ogni 30 giorni. Usa "Pulisci Cache" solo se necessario.
+              </p>
+            </div>
           </div>
-          {progress.active && (
-            <div className="mt-2 text-blue-600 font-medium">
-              Scaricati {progress.count} ordini... (pagina {progress.page})
-            </div>
-          )}
-          {message && (
-            <div className="mt-2 text-green-600 font-medium">{message}</div>
-          )}
-          {error && (
-            <div className="mt-2 flex items-center gap-2 text-red-600">
-              <AlertCircle className="h-4 w-4" />
-              <span>{error}</span>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -521,6 +970,9 @@ const OrdiniPage = () => {
                 <option value="paid">Pagati</option>
                 <option value="pending">In attesa</option>
                 <option value="refunded">Rimborsati</option>
+                <option value="cancelled">Cancellati</option>
+                <option value="active">Attivi (non archiviati)</option>
+                <option value="archived">Archiviati (cancellati + rimborsati)</option>
               </select>
             </div>
             <div>
@@ -597,7 +1049,7 @@ const OrdiniPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-10 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{getFilteredStats().totalOrders}</div>
                 <div className="text-sm text-muted-foreground">Totale Ordini</div>
@@ -628,6 +1080,18 @@ const OrdiniPage = () => {
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-700">
+                  {getFilteredStats().activeOrders}
+                </div>
+                <div className="text-sm text-muted-foreground">Attivi</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600">
+                  {getFilteredStats().archivedOrders}
+                </div>
+                <div className="text-sm text-muted-foreground">Archiviati</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-700">
                   {getFilteredStats().paidShippingOrders}
                 </div>
                 <div className="text-sm text-muted-foreground">Con Spedizione</div>
@@ -643,6 +1107,24 @@ const OrdiniPage = () => {
                   {formatPrice(getFilteredStats().shippingRevenue)}
                 </div>
                 <div className="text-sm text-muted-foreground">Incasso Spedizioni</div>
+              </div>
+            </div>
+            
+            {/* Riepilogo ordini archiviati e attivi */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm font-medium text-gray-800 mb-1">📊 Riepilogo Ordini:</div>
+              <div className="text-xs text-gray-700">
+                {getFilteredStats().totalOrders > 0 && (
+                  <>
+                    <span className="font-medium">{getFilteredStats().activeOrders}</span> ordini attivi 
+                    ({((getFilteredStats().activeOrders / getFilteredStats().totalOrders) * 100).toFixed(1)}%) e 
+                    <span className="font-medium"> {getFilteredStats().archivedOrders}</span> ordini archiviati 
+                    ({((getFilteredStats().archivedOrders / getFilteredStats().totalOrders) * 100).toFixed(1)}%).
+                    {getFilteredStats().archivedOrders > 0 && (
+                      <> Gli ordini archiviati includono cancellati e rimborsati.</>
+                    )}
+                  </>
+                )}
               </div>
             </div>
             
@@ -706,9 +1188,16 @@ const OrdiniPage = () => {
                     </div>
                     <div className="text-right">
                       <p className="font-semibold">{formatPrice(order.totalPrice)}</p>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                        {getStatusLabel(order.status)}
-                      </span>
+                      <div className="flex items-center gap-2 justify-end">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                          {getStatusLabel(order.status)}
+                        </span>
+                        {(order.status === 'cancelled' || order.status === 'refunded') && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            📁 Archiviati
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-sm text-muted-foreground">
