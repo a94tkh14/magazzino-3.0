@@ -283,6 +283,12 @@ const OrdiniPage = () => {
         }
 
         const data = await response.json();
+        console.log(`📥 Pagina ${pageCount} - Response ricevuta:`, {
+          success: data.success,
+          ordersCount: data.orders?.length || 0,
+          pagination: data.pagination,
+          hasNextPage: !!(data.pagination && data.pagination.next && data.pagination.next.pageInfo)
+        });
         
         if (!data.success || !data.orders) {
           console.log(`⚠️ Pagina ${pageCount} - Response non valida:`, data);
@@ -321,8 +327,9 @@ const OrdiniPage = () => {
         }
 
         // Aggiorna pageInfo per la prossima pagina
-        if (data.pageInfo) {
-          pageInfo = data.pageInfo;
+        if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
+          pageInfo = data.pagination.next.pageInfo;
+          console.log(`✅ Prossima pagina disponibile: ${pageInfo}`);
         } else {
           console.log(`⚠️ Pagina ${pageCount} - Nessun pageInfo, fine sincronizzazione`);
           break; // Nessuna pagina successiva
@@ -431,8 +438,9 @@ const OrdiniPage = () => {
           }
 
           // Aggiorna pageInfo per la prossima pagina
-          if (data.pageInfo) {
-            pageInfo = data.pageInfo;
+          if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
+            pageInfo = data.pagination.next.pageInfo;
+            console.log(`✅ Status ${status} - Prossima pagina disponibile: ${pageInfo}`);
           } else {
             console.log(`⚠️ Status ${status} - Pagina ${pageCount} - Nessun pageInfo, fine per questo status`);
             break; // Nessuna pagina successiva per questo status
