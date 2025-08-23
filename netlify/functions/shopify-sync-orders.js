@@ -185,7 +185,51 @@ exports.handler = async (event, context) => {
     }
 
     // Ottimizzazione: usa limit più alto per ridurre il numero di chiamate
-    const optimizedLimit = Math.min(limit, 250); // Shopify supporta fino a 250 per pagina
+    // RIMOSSO il limite forzato per permettere download completo
+    let optimizedLimit = limit; // Usa il limite richiesto dall'utente
+    
+    // Se il limite è molto alto, usa chunking automatico
+    if (limit > 250) {
+      console.log(`🔄 Limite alto richiesto (${limit}), uso chunking automatico`);
+      try {
+        const orders = await fetchOrdersInChunks(
+          shopDomain, 
+          accessToken, 
+          apiVersion, 
+          limit, 
+          status, 
+          daysBack, 
+          fulfillmentStatus, 
+          financialStatus
+        );
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            orders: orders,
+            totalCount: orders.length,
+            method: 'auto_chunking',
+            metadata: {
+              apiVersion,
+              limit,
+              status,
+              daysBack,
+              fulfillmentStatus,
+              financialStatus,
+              method: 'auto_chunking',
+              timestamp: new Date().toISOString()
+            }
+          })
+        };
+      } catch (chunkError) {
+        console.error('❌ Errore nel chunking automatico:', chunkError);
+        // Fallback: usa limite massimo di Shopify
+        optimizedLimit = 250;
+        console.log(`⚠️ Fallback a limite Shopify standard: ${optimizedLimit}`);
+      }
+    }
     
     // Costruisci URL base
     let apiUrl = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?limit=${optimizedLimit}`;
@@ -246,7 +290,7 @@ exports.handler = async (event, context) => {
     }
 
     console.log('🔗 URL costruito:', apiUrl);
-    console.log(`📊 Limit ottimizzato: ${optimizedLimit} (richiesto: ${limit})`);
+    console.log(`📊 Limit utilizzato: ${optimizedLimit} (richiesto: ${limit})`);
 
     // Chiamata a Shopify con timeout più lungo
     console.log('📡 Chiamata a Shopify...');
