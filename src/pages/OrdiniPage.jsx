@@ -242,7 +242,7 @@ const OrdiniPage = () => {
       currentStatus: 'Scaricamento ordini per status separati...'
     }));
 
-    // SOLUZIONE SEMPLICE: Scarica ordini per status separati
+    // SOLUZIONE MIGLIORATA: Scarica ordini per status separati con limiti più alti
     // Questo evita problemi di paginazione e filtri
     const statusesToDownload = [
       { status: 'open', description: 'ordini aperti' },
@@ -266,45 +266,71 @@ const OrdiniPage = () => {
       }));
 
       try {
-        // Scarica ordini per questo status specifico
-        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            shopDomain: credentials.shopDomain,
-            accessToken: credentials.accessToken,
-            apiVersion: credentials.apiVersion,
-            limit: 1000, // Limite alto per questo status
-            status: status, // Status specifico
-            pageInfo: null, // Nessuna paginazione
-            useChunking: false,
-            daysBack: null // NO filtro temporale
-          })
-        });
+        // Prova prima con limite alto, poi con chunking se necessario
+        let ordersForThisStatus = [];
+        let currentLimit = 2500; // Inizia con limite alto
+        
+        while (true) {
+          console.log(`🔄 Tentativo ${description} con limite ${currentLimit}...`);
+          
+          const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              shopDomain: credentials.shopDomain,
+              accessToken: credentials.accessToken,
+              apiVersion: credentials.apiVersion,
+              limit: currentLimit, // Limite dinamico
+              status: status, // Status specifico
+              pageInfo: null, // Nessuna paginazione
+              useChunking: currentLimit > 250, // Abilita chunking per limiti alti
+              daysBack: null // NO filtro temporale
+            })
+          });
 
-        if (!response.ok) {
-          throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
+          if (!response.ok) {
+            throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          console.log(`📥 Status ${status} con limite ${currentLimit}:`, {
+            success: data.success,
+            ordersCount: data.orders?.length || 0,
+            method: data.method,
+            totalCount: data.totalCount
+          });
+          
+          if (data.success && data.orders && data.orders.length > 0) {
+            console.log(`✅ Status ${status} con limite ${currentLimit}: ${data.orders.length} ordini scaricati`);
+            
+            // Aggiungi ordini alla lista per questo status
+            ordersForThisStatus = data.orders;
+            
+            // Se abbiamo ricevuto esattamente il limite richiesto, probabilmente ce ne sono altri
+            if (data.orders.length === currentLimit) {
+              console.log(`🎯 Limite ${currentLimit} raggiunto per ${status}, provo con limite più alto...`);
+              currentLimit = Math.min(currentLimit * 2, 10000); // Raddoppia il limite fino a 10.000
+              continue; // Prova con il nuovo limite
+            } else {
+              console.log(`✅ Status ${status}: ${data.orders.length} ordini (meno del limite, probabilmente tutti scaricati)`);
+              break; // Abbiamo scaricato tutti gli ordini per questo status
+            }
+          } else {
+            console.log(`⚠️ Status ${status} con limite ${currentLimit}: Nessun ordine trovato`);
+            break; // Nessun ordine per questo status
+          }
         }
 
-        const data = await response.json();
-        console.log(`📥 Status ${status}:`, {
-          success: data.success,
-          ordersCount: data.orders?.length || 0,
-          method: data.method
-        });
-        
-        if (data.success && data.orders && data.orders.length > 0) {
-          console.log(`✅ Status ${status}: ${data.orders.length} ordini scaricati`);
-          
-          // Aggiungi ordini alla lista
-          allOrders.push(...data.orders);
+        // Aggiungi tutti gli ordini di questo status alla lista principale
+        if (ordersForThisStatus.length > 0) {
+          allOrders.push(...ordersForThisStatus);
           
           setSyncProgress(prev => ({
             ...prev,
             ordersDownloaded: allOrders.length,
-            currentStatus: `Scaricati ${allOrders.length} ordini totali (inclusi ${description})...`
+            currentStatus: `Scaricati ${allOrders.length} ordini totali (inclusi ${description}: ${ordersForThisStatus.length})...`
           }));
 
           // Salva progressivamente per evitare problemi di quota
@@ -321,12 +347,10 @@ const OrdiniPage = () => {
               // Continua comunque la sincronizzazione
             }
           }
-        } else {
-          console.log(`⚠️ Status ${status}: Nessun ordine trovato`);
         }
 
         // Pausa tra i status per evitare rate limit
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
       } catch (error) {
         if (error.name === 'AbortError') {
