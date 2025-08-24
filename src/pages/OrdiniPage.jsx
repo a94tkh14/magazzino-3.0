@@ -233,6 +233,7 @@ const OrdiniPage = () => {
   // Funzione per scaricare tutti gli ordini senza limiti temporali
   const downloadAllOrdersComplete = async (controller) => {
     const allOrders = [];
+    const uniqueOrderIds = new Set(); // Per evitare duplicati
 
     // Ottieni le credenziali Shopify
     const credentials = getShopifyCredentials();
@@ -323,14 +324,29 @@ const OrdiniPage = () => {
           }
         }
 
-        // Aggiungi tutti gli ordini di questo status alla lista principale
+        // Aggiungi ordini di questo status alla lista principale, evitando duplicati
         if (ordersForThisStatus.length > 0) {
-          allOrders.push(...ordersForThisStatus);
+          let newOrdersCount = 0;
+          let duplicateOrdersCount = 0;
+          
+          for (const order of ordersForThisStatus) {
+            if (order.id && !uniqueOrderIds.has(order.id)) {
+              // Nuovo ordine, aggiungilo
+              allOrders.push(order);
+              uniqueOrderIds.add(order.id);
+              newOrdersCount++;
+            } else {
+              // Ordine duplicato, salta
+              duplicateOrdersCount++;
+            }
+          }
+          
+          console.log(`✅ Status ${status}: ${newOrdersCount} ordini nuovi, ${duplicateOrdersCount} duplicati saltati`);
           
           setSyncProgress(prev => ({
             ...prev,
             ordersDownloaded: allOrders.length,
-            currentStatus: `Scaricati ${allOrders.length} ordini totali (inclusi ${description}: ${ordersForThisStatus.length})...`
+            currentStatus: `Scaricati ${allOrders.length} ordini unici (inclusi ${description}: ${newOrdersCount} nuovi)...`
           }));
 
           // Salva progressivamente per evitare problemi di quota
@@ -340,7 +356,7 @@ const OrdiniPage = () => {
               await saveOrders(convertedOrders);
               setSyncProgress(prev => ({
                 ...prev,
-                currentStatus: `Scaricati ${allOrders.length} ordini totali... (salvati progressivamente)`
+                currentStatus: `Scaricati ${allOrders.length} ordini unici... (salvati progressivamente)`
               }));
             } catch (saveError) {
               console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
@@ -361,7 +377,8 @@ const OrdiniPage = () => {
       }
     }
 
-    console.log(`✅ Sincronizzazione completa terminata: ${allOrders.length} ordini totali`);
+    console.log(`✅ Sincronizzazione completa terminata: ${allOrders.length} ordini unici totali`);
+    console.log(`📊 Riepilogo: ${uniqueOrderIds.size} ID unici, ${allOrders.length} ordini totali`);
     return allOrders;
   };
 
