@@ -7,11 +7,13 @@ import {
   downloadOrdersByStatus, 
   downloadArchivedOrders,
   downloadAllOrdersForced,
+  downloadAllOrdersNoStatus,
   convertShopifyOrder, 
   getShopifyCredentials,
   testShopifyPagination,
   testAllOrdersCount,
-  testArchivedOrders
+  testArchivedOrders,
+  debugPaginationDetailed
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -313,6 +315,104 @@ const OrdiniPage = () => {
     } catch (error) {
       console.error('❌ Errore test ordini archiviati:', error);
       alert(`Errore test ordini archiviati: ${error.message}`);
+    }
+  };
+
+  const handleDebugPaginationDetailed = async () => {
+    try {
+      console.log('🔍 Avvio debug paginazione dettagliata...');
+      const result = await debugPaginationDetailed();
+      console.log('✅ Debug paginazione completato:', result);
+      
+      let message = `Debug paginazione completato!\n\n`;
+      message += `Totale ordini: ${result.totalOrders}\n`;
+      message += `Pagine scaricate: ${result.pageCount}\n\n`;
+      message += `Dettagli per pagina:\n`;
+      
+      result.results.forEach(page => {
+        message += `Pagina ${page.page}: ${page.ordersCount} ordini (${page.firstOrderNumber} - ${page.lastOrderNumber})\n`;
+      });
+      
+      message += '\nControlla la console per i dettagli completi.';
+      
+      alert(message);
+    } catch (error) {
+      console.error('❌ Errore debug paginazione:', error);
+      alert(`Errore debug paginazione: ${error.message}`);
+    }
+  };
+
+  const handleDownloadNoStatus = async () => {
+    if (!window.confirm('Vuoi avviare il download SENZA filtri di status? Questo dovrebbe scaricare tutti gli ordini disponibili.')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Download senza filtri in corso...'
+    });
+
+    try {
+      console.log('🚀 INIZIO DOWNLOAD SENZA FILTRI...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Usa il metodo senza filtri
+      const allOrders = await downloadAllOrdersNoStatus(
+        (progress) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ...progress,
+            currentStatus: progress.currentStatus || 'Download senza filtri in corso...'
+          }));
+        },
+        controller
+      );
+
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ DOWNLOAD SENZA FILTRI COMPLETATO! Scaricati ${allOrders.length} ordini totali`);
+        
+        // Converti e salva gli ordini
+        const convertedOrders = allOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+      } else {
+        setMessage('ℹ️ Nessun ordine trovato con il download senza filtri');
+      }
+
+    } catch (err) {
+      console.error('❌ ERRORE DOWNLOAD SENZA FILTRI:', err);
+      setError(`Errore download senza filtri: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
     }
   };
 
@@ -822,6 +922,22 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleDebugPaginationDetailed()} 
+            disabled={isLoading}
+            className="bg-cyan-600 hover:bg-cyan-700 text-white"
+          >
+            🔍 DEBUG DETTAGLIATO
+          </Button>
+          
+          <Button 
+            onClick={() => handleDownloadNoStatus()} 
+            disabled={isLoading}
+            className="bg-teal-600 hover:bg-teal-700 text-white"
+          >
+            🚫 SENZA FILTRI
+          </Button>
+          
+          <Button 
             onClick={() => handleForcedDownload()} 
             disabled={isLoading}
             className="bg-green-600 hover:bg-green-700 text-white"
@@ -951,9 +1067,11 @@ const OrdiniPage = () => {
               <div><strong>🚀 Metodo Principale:</strong> Scarica ordini per status separati (più robusto, evita duplicati)</div>
               <div><strong>🔄 Metodo Alternativo:</strong> Paginazione semplice sequenziale (backup se il primo fallisce)</div>
               <div><strong>⚡ Download Forzato:</strong> Bypassa filtri, scarica TUTTI gli ordini senza limitazioni</div>
+              <div><strong>🚫 Senza Filtri:</strong> Download senza filtri di status (approccio alternativo)</div>
               <div><strong>📦 Scarica Archiviati:</strong> Focus su ordini chiusi/archiviati che potrebbero mancare</div>
               <div><strong>🔢 Conta Tutti:</strong> Test per verificare quanti ordini sono disponibili</div>
               <div><strong>📦 Test Archiviati:</strong> Verifica se ci sono ordini archiviati disponibili</div>
+              <div><strong>🔍 Debug Dettagliato:</strong> Analisi dettagliata della paginazione per identificare problemi</div>
               <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
             </div>
             </div>

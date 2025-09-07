@@ -520,6 +520,182 @@ export const testArchivedOrders = async () => {
   return results;
 };
 
+// Funzione di debug dettagliata per capire dove si ferma
+export const debugPaginationDetailed = async () => {
+  console.log('🔍 DEBUG PAGINAZIONE DETTAGLIATA...');
+  
+  try {
+    let totalOrders = 0;
+    let pageCount = 0;
+    let nextPageInfo = null;
+    const maxPages = 20; // Limite per debug
+    const results = [];
+    
+    while (pageCount < maxPages) {
+      pageCount++;
+      
+      console.log(`\n📄 === PAGINA ${pageCount} ===`);
+      
+      const response = await fetchShopifyOrders({
+        limit: 250,
+        status: 'any',
+        pageInfo: nextPageInfo
+      });
+
+      if (!response.success) {
+        console.error(`❌ Errore pagina ${pageCount}:`, response);
+        break;
+      }
+
+      const ordersCount = response.orders?.length || 0;
+      totalOrders += ordersCount;
+      
+      const pageResult = {
+        page: pageCount,
+        ordersCount,
+        totalOrders,
+        hasNext: response.pagination?.hasNext,
+        nextPageInfo: response.pagination?.nextPageInfo ? 'presente' : 'assente',
+        firstOrderId: response.orders?.[0]?.id,
+        lastOrderId: response.orders?.[response.orders.length - 1]?.id,
+        firstOrderNumber: response.orders?.[0]?.order_number,
+        lastOrderNumber: response.orders?.[response.orders.length - 1]?.order_number
+      };
+      
+      results.push(pageResult);
+      
+      console.log(`✅ Pagina ${pageCount}: ${ordersCount} ordini (totale: ${totalOrders})`);
+      console.log(`📊 hasNext: ${pageResult.hasNext}, nextPageInfo: ${pageResult.nextPageInfo}`);
+      console.log(`🆔 Primo ordine: ${pageResult.firstOrderId} (#${pageResult.firstOrderNumber})`);
+      console.log(`🆔 Ultimo ordine: ${pageResult.lastOrderId} (#${pageResult.lastOrderNumber})`);
+      
+      nextPageInfo = response.pagination?.nextPageInfo;
+      
+      if (!nextPageInfo) {
+        console.log(`✅ Fine paginazione dopo ${pageCount} pagine`);
+        break;
+      }
+      
+      // Pausa tra le pagine
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+  console.log(`\n🎯 RISULTATO FINALE: ${totalOrders} ordini in ${pageCount} pagine`);
+  console.log('📊 DETTAGLI PAGINE:', results);
+  
+  return { totalOrders, pageCount, results };
+  
+} catch (error) {
+  console.error('❌ Errore debug paginazione:', error);
+  throw error;
+}
+};
+
+// Funzione per scaricare senza filtri di status (approccio alternativo)
+export const downloadAllOrdersNoStatus = async (onProgress = null, abortController = null) => {
+  const allOrders = [];
+  const uniqueOrderIds = new Set();
+  let pageCount = 0;
+  const maxPages = 1000;
+  const ordersPerPage = 250;
+  let nextPageInfo = null;
+  
+  console.log('🚀 INIZIO DOWNLOAD SENZA FILTRI STATUS...');
+  
+  try {
+    while (pageCount < maxPages) {
+      if (abortController?.signal?.aborted) {
+        throw new Error('Download annullato dall\'utente');
+      }
+
+      pageCount++;
+      
+      if (onProgress) {
+        onProgress({
+          currentPage: pageCount,
+          totalPages: '?',
+          ordersDownloaded: allOrders.length,
+          currentStatus: `Scaricamento pagina ${pageCount} (senza filtri)...`
+        });
+      }
+
+      console.log(`📄 Scaricamento pagina ${pageCount} (senza filtri)...`);
+
+      try {
+        const response = await fetchShopifyOrders({
+          limit: ordersPerPage,
+          status: null, // Non specificare status
+          pageInfo: nextPageInfo
+        });
+
+        if (!response.success) {
+          console.error(`❌ Errore pagina ${pageCount}:`, response);
+          throw new Error(response.error || 'Errore nella risposta API');
+        }
+
+        const orders = response.orders || [];
+        
+        if (orders.length === 0) {
+          console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine download`);
+          break;
+        }
+
+        let newOrdersCount = 0;
+        for (const order of orders) {
+          if (order.id && !uniqueOrderIds.has(order.id.toString())) {
+            allOrders.push(order);
+            uniqueOrderIds.add(order.id.toString());
+            newOrdersCount++;
+          }
+        }
+
+        console.log(`✅ Pagina ${pageCount}: ${newOrdersCount} ordini nuovi, ${orders.length - newOrdersCount} duplicati saltati`);
+
+        if (onProgress) {
+          onProgress({
+            currentPage: pageCount,
+            totalPages: '?',
+            ordersDownloaded: allOrders.length,
+            currentStatus: `Scaricati ${allOrders.length} ordini unici (pagina ${pageCount})...`
+          });
+        }
+
+        nextPageInfo = response.pagination?.nextPageInfo;
+        
+        if (!nextPageInfo) {
+          console.log(`✅ Pagina ${pageCount} - Ultima pagina raggiunta`);
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw error;
+        }
+        console.error(`❌ Errore pagina ${pageCount}:`, error);
+        
+        if (error.message.includes('fetch') || error.message.includes('network')) {
+          console.log(`🔄 Retry pagina ${pageCount} dopo 5 secondi...`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          pageCount--;
+          continue;
+        }
+        
+        throw error;
+      }
+    }
+
+    console.log(`🎉 DOWNLOAD SENZA FILTRI COMPLETATO: ${allOrders.length} ordini totali scaricati`);
+    
+    return allOrders;
+
+  } catch (error) {
+    console.error('❌ ERRORE DOWNLOAD SENZA FILTRI:', error);
+    throw error;
+  }
+};
+
 // Funzione per scaricare TUTTI gli ordini senza filtri (forzata)
 export const downloadAllOrdersForced = async (onProgress = null, abortController = null) => {
   const allOrders = [];
