@@ -426,3 +426,167 @@ export const testShopifyPagination = async () => {
     throw error;
   }
 };
+
+// Funzione di test per contare TUTTI gli ordini disponibili
+export const testAllOrdersCount = async () => {
+  console.log('🔢 TEST CONTO TUTTI GLI ORDINI...');
+  
+  try {
+    let totalOrders = 0;
+    let pageCount = 0;
+    let nextPageInfo = null;
+    const maxPages = 50; // Limite di sicurezza per il test
+    
+    while (pageCount < maxPages) {
+      pageCount++;
+      
+      console.log(`📄 Test pagina ${pageCount}...`);
+      
+      const response = await fetchShopifyOrders({
+        limit: 250,
+        status: 'any',
+        pageInfo: nextPageInfo
+      });
+
+      if (!response.success || !response.orders) {
+        console.log(`❌ Errore pagina ${pageCount}:`, response);
+        break;
+      }
+
+      const ordersCount = response.orders.length;
+      totalOrders += ordersCount;
+      
+      console.log(`✅ Pagina ${pageCount}: ${ordersCount} ordini (totale: ${totalOrders})`);
+      
+      nextPageInfo = response.pagination?.nextPageInfo;
+      
+      if (!nextPageInfo) {
+        console.log(`✅ Fine paginazione dopo ${pageCount} pagine`);
+        break;
+      }
+      
+      // Pausa tra le pagine
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+  console.log(`🎯 TOTALE ORDINI DISPONIBILI: ${totalOrders}`);
+  return { totalOrders, pageCount };
+  
+} catch (error) {
+  console.error('❌ Errore test conteggio:', error);
+  throw error;
+}
+};
+
+// Funzione per scaricare TUTTI gli ordini senza filtri (forzata)
+export const downloadAllOrdersForced = async (onProgress = null, abortController = null) => {
+  const allOrders = [];
+  const uniqueOrderIds = new Set();
+  let pageCount = 0;
+  const maxPages = 1000; // Limite di sicurezza
+  const ordersPerPage = 250;
+  let nextPageInfo = null;
+  
+  console.log('🚀 INIZIO DOWNLOAD FORZATO TUTTI GLI ORDINI...');
+  
+  try {
+    while (pageCount < maxPages) {
+      // Controlla se la sincronizzazione è stata annullata
+      if (abortController?.signal?.aborted) {
+        throw new Error('Download annullato dall\'utente');
+      }
+
+      pageCount++;
+      
+      // Aggiorna progresso
+      if (onProgress) {
+        onProgress({
+          currentPage: pageCount,
+          totalPages: '?',
+          ordersDownloaded: allOrders.length,
+          currentStatus: `Scaricamento pagina ${pageCount} (forzato)...`
+        });
+      }
+
+      console.log(`📄 Scaricamento pagina ${pageCount} (forzato)...`);
+
+      try {
+        const response = await fetchShopifyOrders({
+          limit: ordersPerPage,
+          status: 'any', // Forza 'any' per tutti gli ordini
+          pageInfo: nextPageInfo
+        });
+
+        if (!response.success) {
+          console.error(`❌ Errore pagina ${pageCount}:`, response);
+          throw new Error(response.error || 'Errore nella risposta API');
+        }
+
+        const orders = response.orders || [];
+        
+        if (orders.length === 0) {
+          console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine download`);
+          break;
+        }
+
+        // Aggiungi ordini evitando duplicati
+        let newOrdersCount = 0;
+        for (const order of orders) {
+          if (order.id && !uniqueOrderIds.has(order.id.toString())) {
+            allOrders.push(order);
+            uniqueOrderIds.add(order.id.toString());
+            newOrdersCount++;
+          }
+        }
+
+        console.log(`✅ Pagina ${pageCount}: ${newOrdersCount} ordini nuovi, ${orders.length - newOrdersCount} duplicati saltati`);
+
+        // Aggiorna progresso
+        if (onProgress) {
+          onProgress({
+            currentPage: pageCount,
+            totalPages: '?',
+            ordersDownloaded: allOrders.length,
+            currentStatus: `Scaricati ${allOrders.length} ordini unici (pagina ${pageCount})...`
+          });
+        }
+
+        // Aggiorna nextPageInfo per la prossima iterazione
+        nextPageInfo = response.pagination?.nextPageInfo;
+        
+        // Controlla se c'è una pagina successiva
+        if (!nextPageInfo) {
+          console.log(`✅ Pagina ${pageCount} - Ultima pagina raggiunta`);
+          break;
+        }
+
+        // Pausa per evitare rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw error;
+        }
+        console.error(`❌ Errore pagina ${pageCount}:`, error);
+        
+        // Se è un errore di rete, riprova dopo una pausa più lunga
+        if (error.message.includes('fetch') || error.message.includes('network')) {
+          console.log(`🔄 Retry pagina ${pageCount} dopo 5 secondi...`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          pageCount--; // Riprova la stessa pagina
+          continue;
+        }
+        
+        throw error;
+      }
+    }
+
+    console.log(`🎉 DOWNLOAD FORZATO COMPLETATO: ${allOrders.length} ordini totali scaricati`);
+    
+    return allOrders;
+
+  } catch (error) {
+    console.error('❌ ERRORE DOWNLOAD FORZATO:', error);
+    throw error;
+  }
+};

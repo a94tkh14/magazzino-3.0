@@ -6,9 +6,11 @@ import {
   downloadAllShopifyOrders, 
   downloadOrdersByStatus, 
   downloadArchivedOrders,
+  downloadAllOrdersForced,
   convertShopifyOrder, 
   getShopifyCredentials,
-  testShopifyPagination
+  testShopifyPagination,
+  testAllOrdersCount
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -275,6 +277,92 @@ const OrdiniPage = () => {
     } catch (error) {
       console.error('❌ Errore test paginazione:', error);
       alert(`Errore test paginazione: ${error.message}`);
+    }
+  };
+
+  const handleTestAllOrdersCount = async () => {
+    try {
+      console.log('🔢 Avvio test conteggio ordini...');
+      const result = await testAllOrdersCount();
+      console.log('✅ Test conteggio completato:', result);
+      alert(`Test conteggio completato! Trovati ${result.totalOrders} ordini in ${result.pageCount} pagine. Controlla la console per i dettagli.`);
+    } catch (error) {
+      console.error('❌ Errore test conteggio:', error);
+      alert(`Errore test conteggio: ${error.message}`);
+    }
+  };
+
+  const handleForcedDownload = async () => {
+    if (!window.confirm('Vuoi avviare il download FORZATO di TUTTI gli ordini? Questo metodo bypassa i filtri e scarica tutto.')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Download forzato in corso...'
+    });
+
+    try {
+      console.log('🚀 INIZIO DOWNLOAD FORZATO...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Usa il metodo forzato
+      const allOrders = await downloadAllOrdersForced(
+        (progress) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ...progress,
+            currentStatus: progress.currentStatus || 'Download forzato in corso...'
+          }));
+        },
+        controller
+      );
+
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ DOWNLOAD FORZATO COMPLETATO! Scaricati ${allOrders.length} ordini totali`);
+        
+        // Converti e salva gli ordini
+        const convertedOrders = allOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+      } else {
+        setMessage('ℹ️ Nessun ordine trovato con il download forzato');
+      }
+
+    } catch (err) {
+      console.error('❌ ERRORE DOWNLOAD FORZATO:', err);
+      setError(`Errore download forzato: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
     }
   };
 
@@ -694,6 +782,22 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleTestAllOrdersCount()} 
+            disabled={isLoading}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            🔢 CONTA TUTTI
+          </Button>
+          
+          <Button 
+            onClick={() => handleForcedDownload()} 
+            disabled={isLoading}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            ⚡ DOWNLOAD FORZATO
+          </Button>
+          
+          <Button 
             onClick={() => handleDownloadArchived()} 
             disabled={isLoading}
             className="bg-red-600 hover:bg-red-700 text-white"
@@ -814,7 +918,9 @@ const OrdiniPage = () => {
             <div className="text-sm text-yellow-700 space-y-1">
               <div><strong>🚀 Metodo Principale:</strong> Scarica ordini per status separati (più robusto, evita duplicati)</div>
               <div><strong>🔄 Metodo Alternativo:</strong> Paginazione semplice sequenziale (backup se il primo fallisce)</div>
+              <div><strong>⚡ Download Forzato:</strong> Bypassa filtri, scarica TUTTI gli ordini senza limitazioni</div>
               <div><strong>📦 Scarica Archiviati:</strong> Focus su ordini chiusi/archiviati che potrebbero mancare</div>
+              <div><strong>🔢 Conta Tutti:</strong> Test per verificare quanti ordini sono disponibili</div>
               <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
             </div>
             </div>
