@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { fetchShopifyOrders, convertShopifyOrder, getShopifyCredentials } from '../lib/shopifyAPI';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
-import { getOrdersLimit } from '../config/shopify';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -51,34 +49,17 @@ const OrdiniPage = () => {
   useEffect(() => {
     const loadOrders = async () => {
       try {
-        // Prima carica da localStorage per mostrare subito qualcosa
+        // Carica ordini esistenti da localStorage
         const parsedOrders = await loadLargeData('shopify_orders');
         setOrders(parsedOrders);
         console.log(`✅ Caricati ${parsedOrders.length} ordini da localStorage`);
-        
-        // Poi sincronizza automaticamente con Shopify per avere i dati più recenti
-        if (parsedOrders.length === 0) {
-          console.log('🔄 Nessun ordine in locale, avvio sincronizzazione automatica...');
-          await handleSyncOrdersComplete(); // Sincronizzazione completa
-        } else {
-          console.log('🔄 Ordini presenti in locale, sincronizzazione incrementale...');
-          await handleSyncOrdersIncremental(); // Sincronizzazione incrementale (ultimi 7 giorni)
-        }
         
         // Pulisci dati vecchi (più di 30 giorni)
         await cleanupOldData('shopify_orders', 30);
       } catch (error) {
         console.error('Errore nel caricare ordini:', error);
         setOrders([]);
-        
-        // Se c'è un errore, prova comunque a sincronizzare
-        try {
-          console.log('🔄 Tentativo di sincronizzazione dopo errore...');
-          await handleSyncOrdersComplete();
-        } catch (syncError) {
-          console.error('Errore anche nella sincronizzazione:', syncError);
-          setError('Errore nel caricamento ordini. Verifica la configurazione Shopify.');
-        }
+        setError('Errore nel caricamento ordini esistenti.');
       }
     };
     loadOrders();
@@ -109,376 +90,25 @@ const OrdiniPage = () => {
     window.dispatchEvent(new CustomEvent('dashboard-update'));
   };
 
-  // Nuova funzione per sincronizzazione completa senza limiti temporali
-  const handleSyncOrdersComplete = async () => {
+  // Funzione per caricare ordini esistenti
+  const handleLoadOrders = async () => {
     setIsLoading(true);
     setError('');
     setMessage('');
     
-    // Crea un nuovo abort controller
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    setSyncProgress({
-      isRunning: true,
-      currentPage: 0,
-      totalPages: 0,
-      ordersDownloaded: 0,
-      totalOrders: 0,
-      currentStatus: 'Inizializzazione sincronizzazione completa...'
-    });
-
     try {
-      console.log('🚀 INIZIO SINCRONIZZAZIONE COMPLETA SHOPIFY...');
-      
-      // Sincronizzazione completa senza limiti temporali
-      const allOrders = await downloadAllOrdersComplete(controller);
-      
-      if (allOrders && allOrders.length > 0) {
-        setMessage(`✅ SINCRONIZZAZIONE COMPLETATA! Scaricati ${allOrders.length} ordini totali`);
-        
-        // Salva gli ordini trovati
-        const convertedOrders = allOrders.map(convertShopifyOrder);
-        await saveOrders(convertedOrders);
-        
-      } else {
-        setMessage('⚠️ SINCRONIZZAZIONE COMPLETATA ma nessun ordine trovato');
-      }
-      
+      const parsedOrders = await loadLargeData('shopify_orders');
+      setOrders(parsedOrders);
+      setMessage(`✅ Caricati ${parsedOrders.length} ordini esistenti`);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        setMessage('❌ Sincronizzazione annullata dall\'utente');
-      } else {
-        console.error('❌ ERRORE SINCRONIZZAZIONE COMPLETA:', err);
-        setError(`Errore sincronizzazione completa: ${err.message}`);
-      }
+      console.error('❌ ERRORE CARICAMENTO ORDINI:', err);
+      setError(`Errore caricamento ordini: ${err.message}`);
     } finally {
       setIsLoading(false);
-      setSyncProgress({
-        isRunning: false,
-        currentPage: 0,
-        totalPages: 0,
-        ordersDownloaded: 0,
-        totalOrders: 0,
-        currentStatus: ''
-      });
-      setAbortController(null);
     }
   };
 
-  // Nuova funzione per sincronizzazione incrementale (ultimi 7 giorni)
-  const handleSyncOrdersIncremental = async () => {
-    setIsLoading(true);
-    setError('');
-    setMessage('');
-    
-    const controller = new AbortController();
-    setAbortController(controller);
 
-    setSyncProgress({
-      isRunning: true,
-      currentPage: 0,
-      totalPages: 0,
-      ordersDownloaded: 0,
-      totalOrders: 0,
-      currentStatus: 'Sincronizzazione incrementale (ultimi 7 giorni)...'
-    });
-
-    try {
-      console.log('🔄 SINCRONIZZAZIONE INCREMENTALE (ultimi 7 giorni)...');
-      
-      // Sincronizzazione solo ultimi 7 giorni
-      const recentOrders = await downloadOrdersWithPeriod(7, controller);
-      
-      if (recentOrders && recentOrders.length > 0) {
-        setMessage(`✅ SINCRONIZZAZIONE INCREMENTALE COMPLETATA! Scaricati ${recentOrders.length} ordini recenti`);
-        
-        // Unisci con ordini esistenti (evita duplicati)
-        const existingOrders = orders || [];
-        const newOrders = recentOrders.filter(newOrder => 
-          !existingOrders.some(existingOrder => existingOrder.id === newOrder.id)
-        );
-        
-        if (newOrders.length > 0) {
-          const allOrders = [...existingOrders, ...newOrders];
-          const convertedOrders = allOrders.map(convertShopifyOrder);
-          await saveOrders(convertedOrders);
-        }
-        
-      } else {
-        setMessage('✅ SINCRONIZZAZIONE INCREMENTALE: nessun ordine nuovo trovato');
-      }
-      
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setMessage('❌ Sincronizzazione incrementale annullata');
-      } else {
-        console.error('❌ ERRORE SINCRONIZZAZIONE INCREMENTALE:', err);
-        setError(`Errore sincronizzazione incrementale: ${err.message}`);
-      }
-    } finally {
-      setIsLoading(false);
-      setSyncProgress({
-        isRunning: false,
-        currentPage: 0,
-        totalPages: 0,
-        ordersDownloaded: 0,
-        totalOrders: 0,
-        currentStatus: ''
-      });
-      setAbortController(null);
-    }
-  };
-
-  // Funzione per scaricare tutti gli ordini senza limiti temporali
-  const downloadAllOrdersComplete = async (controller) => {
-    const allOrders = [];
-    const uniqueOrderIds = new Set(); // Per evitare duplicati
-
-    // Ottieni le credenziali Shopify
-    const credentials = getShopifyCredentials();
-
-    setSyncProgress(prev => ({
-      ...prev,
-      currentStatus: 'Scaricamento ordini per status separati...'
-    }));
-
-    // SOLUZIONE MIGLIORATA: Scarica ordini per status separati con limiti più alti
-    // Questo evita problemi di paginazione e filtri
-    const statusesToDownload = [
-      { status: 'open', description: 'ordini aperti' },
-      { status: 'closed', description: 'ordini chiusi' },
-      { status: 'fulfilled', description: 'ordini evasi' },
-      { status: 'cancelled', description: 'ordini cancellati' },
-      { status: 'refunded', description: 'ordini rimborsati' }
-    ];
-
-    for (const { status, description } of statusesToDownload) {
-      // Controlla se la sincronizzazione è stata annullata
-      if (controller.signal.aborted) {
-        throw new Error('Sincronizzazione annullata');
-      }
-
-      console.log(`🔄 Scaricamento ${description} (status: ${status})...`);
-      
-      setSyncProgress(prev => ({
-        ...prev,
-        currentStatus: `Scaricamento ${description}...`
-      }));
-
-      try {
-        // Prova prima con limite alto, poi con chunking se necessario
-        let ordersForThisStatus = [];
-        let currentLimit = 2500; // Inizia con limite alto
-        
-        while (true) {
-          console.log(`🔄 Tentativo ${description} con limite ${currentLimit}...`);
-          
-          const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              shopDomain: credentials.shopDomain,
-              accessToken: credentials.accessToken,
-              apiVersion: credentials.apiVersion,
-              limit: currentLimit, // Limite dinamico
-              status: status, // Status specifico
-              pageInfo: null, // Nessuna paginazione
-              useChunking: currentLimit > 250, // Abilita chunking per limiti alti
-              daysBack: null // NO filtro temporale
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
-          }
-
-          const data = await response.json();
-          console.log(`📥 Status ${status} con limite ${currentLimit}:`, {
-            success: data.success,
-            ordersCount: data.orders?.length || 0,
-            method: data.method,
-            totalCount: data.totalCount
-          });
-          
-          if (data.success && data.orders && data.orders.length > 0) {
-            console.log(`✅ Status ${status} con limite ${currentLimit}: ${data.orders.length} ordini scaricati`);
-            
-            // Aggiungi ordini alla lista per questo status
-            ordersForThisStatus = data.orders;
-            
-            // Se abbiamo ricevuto esattamente il limite richiesto, probabilmente ce ne sono altri
-            if (data.orders.length === currentLimit) {
-              console.log(`🎯 Limite ${currentLimit} raggiunto per ${status}, provo con limite più alto...`);
-              currentLimit = Math.min(currentLimit * 2, 10000); // Raddoppia il limite fino a 10.000
-              continue; // Prova con il nuovo limite
-            } else {
-              console.log(`✅ Status ${status}: ${data.orders.length} ordini (meno del limite, probabilmente tutti scaricati)`);
-              break; // Abbiamo scaricato tutti gli ordini per questo status
-            }
-          } else {
-            console.log(`⚠️ Status ${status} con limite ${currentLimit}: Nessun ordine trovato`);
-            break; // Nessun ordine per questo status
-          }
-        }
-
-        // Aggiungi ordini di questo status alla lista principale, evitando duplicati
-        if (ordersForThisStatus.length > 0) {
-          let newOrdersCount = 0;
-          let duplicateOrdersCount = 0;
-          
-          for (const order of ordersForThisStatus) {
-            if (order.id && !uniqueOrderIds.has(order.id)) {
-              // Nuovo ordine, aggiungilo
-              allOrders.push(order);
-              uniqueOrderIds.add(order.id);
-              newOrdersCount++;
-            } else {
-              // Ordine duplicato, salta
-              duplicateOrdersCount++;
-            }
-          }
-          
-          console.log(`✅ Status ${status}: ${newOrdersCount} ordini nuovi, ${duplicateOrdersCount} duplicati saltati`);
-          
-          setSyncProgress(prev => ({
-            ...prev,
-            ordersDownloaded: allOrders.length,
-            currentStatus: `Scaricati ${allOrders.length} ordini unici (inclusi ${description}: ${newOrdersCount} nuovi)...`
-          }));
-
-          // Salva progressivamente per evitare problemi di quota
-          if (allOrders.length > 1000) {
-            try {
-              const convertedOrders = allOrders.map(convertShopifyOrder);
-              await saveOrders(convertedOrders);
-              setSyncProgress(prev => ({
-                ...prev,
-                currentStatus: `Scaricati ${allOrders.length} ordini unici... (salvati progressivamente)`
-              }));
-            } catch (saveError) {
-              console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
-              // Continua comunque la sincronizzazione
-            }
-          }
-        }
-
-        // Pausa tra i status per evitare rate limit
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          throw error;
-        }
-        console.error(`❌ Errore per status ${status}:`, error);
-        // Continua con il prossimo status
-      }
-    }
-
-    console.log(`✅ Sincronizzazione completa terminata: ${allOrders.length} ordini unici totali`);
-    console.log(`📊 Riepilogo: ${uniqueOrderIds.size} ID unici, ${allOrders.length} ordini totali`);
-    return allOrders;
-  };
-
-  // Funzione per scaricare ordini con periodo specifico
-  const downloadOrdersWithPeriod = async (daysBack, controller) => {
-    const allOrders = [];
-    let pageCount = 0;
-    const maxPages = 100;
-
-    // Ottieni le credenziali Shopify
-    const credentials = getShopifyCredentials();
-
-    setSyncProgress(prev => ({
-      ...prev,
-      currentStatus: `Scaricamento ordini ultimi ${daysBack} giorni...`
-    }));
-
-    while (pageCount < maxPages) {
-      if (controller.signal.aborted) {
-        throw new Error('Sincronizzazione annullata');
-      }
-
-      pageCount++;
-      setSyncProgress(prev => ({
-        ...prev,
-        currentPage: pageCount,
-        currentStatus: `Scaricamento pagina ${pageCount} (ultimi ${daysBack} giorni)...`
-      }));
-
-      try {
-        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            shopDomain: credentials.shopDomain,
-            accessToken: credentials.accessToken,
-            apiVersion: credentials.apiVersion,
-            limit: 250,
-            status: 'any',
-            pageInfo: null, // Reset per ogni chiamata
-            useChunking: false,
-            daysBack: daysBack // Filtro temporale specifico
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Errore HTTP: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        
-        if (!data.success || !data.orders) {
-          console.log(`⚠️ Pagina ${pageCount} - Response non valida:`, data);
-          break; // Nessuna pagina successiva
-        }
-
-        const shopifyOrders = data.orders;
-        
-        if (shopifyOrders.length === 0) {
-          console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine sincronizzazione`);
-          break; // Nessuna pagina successiva
-        }
-
-        // Aggiungi ordini alla lista
-        allOrders.push(...shopifyOrders);
-        
-        setSyncProgress(prev => ({
-          ...prev,
-          ordersDownloaded: allOrders.length,
-          currentStatus: `Scaricati ${allOrders.length} ordini (ultimi ${daysBack} giorni)...`
-        }));
-
-        // Pausa per evitare rate limit
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          throw error;
-        }
-        console.error(`❌ Errore pagina ${pageCount}:`, error);
-        throw new Error(`Errore pagina ${pageCount}: ${error.message}`);
-      }
-    }
-
-    console.log(`✅ Sincronizzazione periodo ${daysBack} giorni terminata: ${allOrders.length} ordini`);
-    return allOrders;
-  };
-
-  // Funzione per annullare la sincronizzazione
-  const cancelSync = () => {
-    if (abortController) {
-      abortController.abort();
-      setSyncProgress(prev => ({
-        ...prev,
-        currentStatus: 'Sincronizzazione annullata...'
-      }));
-    }
-  };
 
   // Funzione per pulire la cache
   const clearOrdersCache = () => {
@@ -496,14 +126,6 @@ const OrdiniPage = () => {
     }
   };
 
-  // Funzione legacy per compatibilità
-  const handleSyncOrders = async (forceAll = false) => {
-    if (forceAll) {
-      await handleSyncOrdersComplete();
-    } else {
-      await handleSyncOrdersIncremental();
-    }
-  };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('it-IT', {
@@ -777,109 +399,30 @@ const OrdiniPage = () => {
         <div>
           <h1 className="text-2xl font-bold">Ordini</h1>
           <p className="text-muted-foreground">
-            Gestisci e visualizza tutti gli ordini da Shopify
+            Visualizza e gestisci gli ordini esistenti
           </p>
         </div>
         <div className="flex gap-2">
           <Button 
-            onClick={() => handleSyncOrdersComplete()} 
+            onClick={() => handleLoadOrders()} 
             disabled={isLoading}
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'SINCRONIZZAZIONE...' : '🚀 SINCRONIZZA TUTTO'}
+            {isLoading ? 'CARICAMENTO...' : '🔄 RICARICA ORDINI'}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Sincronizzazione Shopify Avanzata</CardTitle>
+          <CardTitle>Gestione Ordini</CardTitle>
           <CardDescription>
-            Importa automaticamente tutti gli ordini dal tuo store Shopify, inclusi quelli archiviati
+            Visualizza e gestisci gli ordini esistenti nel sistema
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Pulsanti principali */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => handleSyncOrdersIncremental()}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                {isLoading ? 'Sincronizzazione...' : '🔄 Sincronizza Recenti (7 giorni)'}
-              </button>
-              
-              <button
-                onClick={() => handleSyncOrdersComplete()}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" />
-                🚀 Sincronizza TUTTI gli Ordini
-              </button>
-
-              <button
-                onClick={() => downloadOrdersWithPeriod(30, new AbortController())}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" />
-                📅 Ultimi 30 Giorni
-              </button>
-
-              <button
-                onClick={() => downloadOrdersWithPeriod(90, new AbortController())}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" />
-                📅 Ultimi 90 Giorni
-              </button>
-            </div>
-
-            {/* Progresso sincronizzazione */}
-            {syncProgress.isRunning && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-blue-800">🔄 Sincronizzazione in corso...</h4>
-                  <button
-                    onClick={cancelSync}
-                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
-                  >
-                    ❌ Annulla
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-sm text-blue-700">
-                    <strong>Stato:</strong> {syncProgress.currentStatus}
-                  </div>
-                  <div className="text-sm text-blue-700">
-                    <strong>Pagina corrente:</strong> {syncProgress.currentPage}
-                  </div>
-                  <div className="text-sm text-blue-700">
-                    <strong>Ordini scaricati:</strong> {syncProgress.ordersDownloaded}
-                  </div>
-                  <div className="w-full bg-blue-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: syncProgress.currentPage > 0 
-                          ? `${Math.min((syncProgress.currentPage / 100) * 100, 100)}%` 
-                          : '0%' 
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Messaggi e errori */}
             {message && (
               <div className="mt-2 text-green-600 font-medium">{message}</div>

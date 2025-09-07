@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { fetchShopifyOrders, convertShopifyOrder } from '../lib/shopifyAPI';
 import { loadMagazzinoData, loadOrdersData } from '../lib/magazzinoStorage';
 import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, RefreshCw, ArrowUpRight, ArrowDownRight, ArrowRight, TruckIcon } from 'lucide-react';
 import { formatPrice } from '../lib/utils';
