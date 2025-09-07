@@ -189,12 +189,19 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
   const allOrders = [];
   const uniqueOrderIds = new Set();
   
+  // Lista completa di tutti i possibili status per essere sicuri di non perdere ordini
   const statuses = [
-    { status: 'any', description: 'tutti gli ordini' },
+    { status: 'any', description: 'tutti gli ordini (completo)' },
     { status: 'open', description: 'ordini aperti' },
-    { status: 'closed', description: 'ordini chiusi' },
+    { status: 'closed', description: 'ordini chiusi/archiviati' },
     { status: 'cancelled', description: 'ordini cancellati' },
-    { status: 'refunded', description: 'ordini rimborsati' }
+    { status: 'refunded', description: 'ordini rimborsati' },
+    { status: 'pending', description: 'ordini in attesa' },
+    { status: 'authorized', description: 'ordini autorizzati' },
+    { status: 'partially_paid', description: 'ordini parzialmente pagati' },
+    { status: 'paid', description: 'ordini pagati' },
+    { status: 'partially_refunded', description: 'ordini parzialmente rimborsati' },
+    { status: 'voided', description: 'ordini annullati' }
   ];
 
   console.log('🚀 INIZIO DOWNLOAD PER STATUS...');
@@ -278,6 +285,103 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
   }
 
   console.log(`✅ DOWNLOAD PER STATUS COMPLETATO: ${allOrders.length} ordini unici totali`);
+  return allOrders;
+};
+
+// Funzione specifica per scaricare SOLO gli ordini archiviati/chiusi
+export const downloadArchivedOrders = async (onProgress = null, abortController = null) => {
+  const allOrders = [];
+  const uniqueOrderIds = new Set();
+  
+  // Focus sugli ordini archiviati che potrebbero essere mancanti
+  const archivedStatuses = [
+    { status: 'closed', description: 'ordini chiusi/archiviati' },
+    { status: 'cancelled', description: 'ordini cancellati' },
+    { status: 'refunded', description: 'ordini rimborsati' },
+    { status: 'voided', description: 'ordini annullati' }
+  ];
+
+  console.log('📦 INIZIO DOWNLOAD ORDINI ARCHIVIATI...');
+
+  for (let statusIndex = 0; statusIndex < archivedStatuses.length; statusIndex++) {
+    const { status, description } = archivedStatuses[statusIndex];
+    
+    if (abortController?.signal?.aborted) {
+      throw new Error('Download annullato dall\'utente');
+    }
+
+    console.log(`🔄 Scaricamento ${description}...`);
+    
+    if (onProgress) {
+      onProgress({
+        currentPage: statusIndex + 1,
+        totalPages: archivedStatuses.length,
+        ordersDownloaded: allOrders.length,
+        currentStatus: `Scaricamento ${description}...`
+      });
+    }
+
+    try {
+      let pageCount = 0;
+      const maxPages = 200; // Limite per status
+      let nextPageInfo = null;
+      
+      while (pageCount < maxPages) {
+        pageCount++;
+        
+        if (onProgress) {
+          onProgress({
+            currentPage: pageCount,
+            totalPages: maxPages,
+            ordersDownloaded: allOrders.length,
+            currentStatus: `Scaricamento ${description} (pagina ${pageCount})...`
+          });
+        }
+
+        const response = await fetchShopifyOrders({
+          limit: 250,
+          status: status,
+          pageInfo: nextPageInfo
+        });
+
+        if (!response.success || !response.orders || response.orders.length === 0) {
+          console.log(`✅ ${description}: nessun ordine trovato`);
+          break;
+        }
+
+        // Aggiungi ordini evitando duplicati
+        let newOrdersCount = 0;
+        for (const order of response.orders) {
+          if (order.id && !uniqueOrderIds.has(order.id.toString())) {
+            allOrders.push(order);
+            uniqueOrderIds.add(order.id.toString());
+            newOrdersCount++;
+          }
+        }
+
+        console.log(`✅ ${description} pagina ${pageCount}: ${newOrdersCount} ordini nuovi`);
+
+        // Aggiorna nextPageInfo per la prossima pagina
+        nextPageInfo = response.pagination?.nextPageInfo;
+        
+        if (!nextPageInfo) {
+          break;
+        }
+
+        // Pausa tra le pagine
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      // Pausa tra i status
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+    } catch (error) {
+      console.error(`❌ Errore per status ${status}:`, error);
+      // Continua con il prossimo status
+    }
+  }
+
+  console.log(`✅ DOWNLOAD ORDINI ARCHIVIATI COMPLETATO: ${allOrders.length} ordini unici totali`);
   return allOrders;
 };
 
