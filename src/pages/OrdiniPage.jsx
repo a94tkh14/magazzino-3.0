@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
+import { 
+  downloadAllShopifyOrders, 
+  downloadOrdersByStatus, 
+  convertShopifyOrder, 
+  getShopifyCredentials 
+} from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css';
@@ -105,6 +111,167 @@ const OrdiniPage = () => {
       setError(`Errore caricamento ordini: ${err.message}`);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Funzione per sincronizzazione MASSIVA di tutti gli ordini
+  const handleMassiveSync = async () => {
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Inizializzazione sincronizzazione massiva...'
+    });
+
+    try {
+      console.log('🚀 INIZIO SINCRONIZZAZIONE MASSIVA SHOPIFY...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Usa il metodo per status (più robusto)
+      const allOrders = await downloadOrdersByStatus(
+        (progress) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ...progress,
+            currentStatus: progress.currentStatus || 'Sincronizzazione in corso...'
+          }));
+        },
+        controller
+      );
+
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ SINCRONIZZAZIONE MASSIVA COMPLETATA! Scaricati ${allOrders.length} ordini totali`);
+        
+        // Converti e salva gli ordini
+        const convertedOrders = allOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+      } else {
+        setMessage('⚠️ SINCRONIZZAZIONE COMPLETATA ma nessun ordine trovato');
+      }
+      
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setMessage('❌ Sincronizzazione annullata dall\'utente');
+      } else {
+        console.error('❌ ERRORE SINCRONIZZAZIONE MASSIVA:', err);
+        setError(`Errore sincronizzazione: ${err.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
+  // Funzione per sincronizzazione con metodo alternativo (paginazione semplice)
+  const handleAlternativeSync = async () => {
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Sincronizzazione con metodo alternativo...'
+    });
+
+    try {
+      console.log('🔄 INIZIO SINCRONIZZAZIONE ALTERNATIVA...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Usa il metodo di paginazione semplice
+      const allOrders = await downloadAllShopifyOrders(
+        (progress) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ...progress,
+            currentStatus: progress.currentStatus || 'Sincronizzazione in corso...'
+          }));
+        },
+        controller
+      );
+
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ SINCRONIZZAZIONE ALTERNATIVA COMPLETATA! Scaricati ${allOrders.length} ordini totali`);
+        
+        // Converti e salva gli ordini
+        const convertedOrders = allOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+      } else {
+        setMessage('⚠️ SINCRONIZZAZIONE COMPLETATA ma nessun ordine trovato');
+      }
+      
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setMessage('❌ Sincronizzazione annullata dall\'utente');
+      } else {
+        console.error('❌ ERRORE SINCRONIZZAZIONE ALTERNATIVA:', err);
+        setError(`Errore sincronizzazione: ${err.message}`);
+      }
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
+  // Funzione per annullare la sincronizzazione
+  const cancelSync = () => {
+    if (abortController) {
+      abortController.abort();
+      setSyncProgress(prev => ({
+        ...prev,
+        currentStatus: 'Sincronizzazione annullata...'
+      }));
     }
   };
 
@@ -411,18 +578,97 @@ const OrdiniPage = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             {isLoading ? 'CARICAMENTO...' : '🔄 RICARICA ORDINI'}
           </Button>
+          
+          <Button 
+            onClick={() => handleMassiveSync()} 
+            disabled={isLoading}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Download className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'SINCRONIZZAZIONE...' : '🚀 SINCRONIZZA TUTTO (4039)'}
+          </Button>
+          
+          <Button 
+            onClick={() => handleAlternativeSync()} 
+            disabled={isLoading}
+            className="bg-orange-600 hover:bg-orange-700 text-white"
+          >
+            <Download className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'SINCRONIZZAZIONE...' : '🔄 METODO ALTERNATIVO'}
+          </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Gestione Ordini</CardTitle>
+          <CardTitle>Sincronizzazione Massiva Shopify</CardTitle>
           <CardDescription>
-            Visualizza e gestisci gli ordini esistenti nel sistema
+            Carica TUTTI i 4039 ordini da Shopify con metodi robusti anti-blocco
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {/* Pulsanti di sincronizzazione */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleMassiveSync()}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {isLoading ? 'Sincronizzazione...' : '🚀 METODO PRINCIPALE (Per Status)'}
+              </button>
+              
+              <button
+                onClick={() => handleAlternativeSync()}
+                disabled={isLoading}
+                className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded font-semibold disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                🔄 METODO ALTERNATIVO (Paginazione)
+              </button>
+            </div>
+
+            {/* Progresso sincronizzazione */}
+            {syncProgress.isRunning && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-blue-800">🔄 Sincronizzazione in corso...</h4>
+                  <button
+                    onClick={cancelSync}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
+                  >
+                    ❌ Annulla
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm text-blue-700">
+                    <strong>Stato:</strong> {syncProgress.currentStatus}
+                  </div>
+                  <div className="text-sm text-blue-700">
+                    <strong>Pagina corrente:</strong> {syncProgress.currentPage}
+                  </div>
+                  <div className="text-sm text-blue-700">
+                    <strong>Ordini scaricati:</strong> {syncProgress.ordersDownloaded}
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: syncProgress.currentPage > 0 
+                          ? `${Math.min((syncProgress.currentPage / 50) * 100, 100)}%` 
+                          : '0%' 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Messaggi e errori */}
             {message && (
               <div className="mt-2 text-green-600 font-medium">{message}</div>
@@ -456,6 +702,16 @@ const OrdiniPage = () => {
               <p className="text-xs text-gray-500 mt-2">
                 💡 La cache viene pulita automaticamente ogni 30 giorni. Usa "Pulisci Cache" solo se necessario.
               </p>
+            </div>
+
+            {/* Informazioni sui metodi */}
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <h4 className="font-medium text-yellow-800 mb-2">📋 Metodi di Sincronizzazione:</h4>
+              <div className="text-sm text-yellow-700 space-y-1">
+                <div><strong>🚀 Metodo Principale:</strong> Scarica ordini per status separati (più robusto, evita duplicati)</div>
+                <div><strong>🔄 Metodo Alternativo:</strong> Paginazione semplice sequenziale (backup se il primo fallisce)</div>
+                <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
+              </div>
             </div>
           </div>
         </CardContent>
