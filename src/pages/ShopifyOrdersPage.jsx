@@ -291,150 +291,189 @@ const ShopifyOrdersPage = () => {
   const downloadAllOrders = async (config, controller, daysBack = null) => {
     const allOrders = [];
     const startTime = Date.now();
-    const maxSyncTime = 5 * 60 * 1000; // Ridotto a 5 minuti per sicurezza
+    const maxSyncTime = 10 * 60 * 1000; // Aumentato a 10 minuti per scaricare tutti gli ordini
 
     setSyncProgress(prev => ({
       ...prev,
       currentStatus: '🚀 Inizializzazione caricamento massivo...'
     }));
 
-    // SOLUZIONE SEMPLICE: Una sola chiamata con limite ragionevole
+    // SOLUZIONE MIGLIORATA: Multiple chiamate per scaricare TUTTI gli ordini
     try {
       setSyncProgress(prev => ({
         ...prev,
-        currentStatus: '📦 Scaricamento TUTTI gli ordini in una singola chiamata...'
+        currentStatus: '📦 Scaricamento TUTTI gli ordini con multiple chiamate...'
       }));
 
-      // Controlli di sicurezza
-      if (controller.signal.aborted) {
-        throw new Error('Sincronizzazione annullata');
-      }
+      let pageInfo = null;
+      let pageCount = 0;
+      const maxPages = 20; // Massimo 20 pagine = 10.000 ordini
+      const ordersPerPage = 500;
 
-      if (Date.now() - startTime > maxSyncTime) {
-        console.log('⏰ Timeout massimo raggiunto (5 minuti)');
+      while (pageCount < maxPages) {
+        // Controlli di sicurezza
+        if (controller.signal.aborted) {
+          throw new Error('Sincronizzazione annullata');
+        }
+
+        if (Date.now() - startTime > maxSyncTime) {
+          console.log('⏰ Timeout massimo raggiunto (10 minuti)');
+          setSyncProgress(prev => ({
+            ...prev,
+            currentStatus: '⏰ Timeout massimo raggiunto - Sincronizzazione interrotta'
+          }));
+          break;
+        }
+
+        pageCount++;
         setSyncProgress(prev => ({
           ...prev,
-          currentStatus: '⏰ Timeout massimo raggiunto - Sincronizzazione interrotta'
+          currentPage: pageCount,
+          totalPages: maxPages,
+          currentStatus: `📦 Pagina ${pageCount}/${maxPages} - Scaricamento ordini...`
         }));
-        return [];
-      }
 
-      setSyncProgress(prev => ({
-        ...prev,
-        currentPage: 1,
-        totalPages: 1,
-        currentStatus: '📦 Chiamata singola per scaricare tutti gli ordini...'
-      }));
+        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            shopDomain: config.shopDomain,
+            accessToken: config.accessToken,
+            apiVersion: config.apiVersion,
+            limit: ordersPerPage,
+            status: 'any',
+            pageInfo: pageInfo, // Usa pageInfo per paginazione corretta
+            useChunking: false,
+            ...(daysBack && { daysBack: daysBack })
+          }),
+          signal: controller.signal
+        });
 
-      const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          shopDomain: config.shopDomain,
-          accessToken: config.accessToken,
-          apiVersion: config.apiVersion,
-          limit: 500, // Ridotto per evitare timeout 504
-          status: 'any',
-          useChunking: false, // Disabilita chunking per evitare duplicati
-          ...(daysBack && { daysBack: daysBack })
-        }),
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Errore HTTP: ${response.status}`;
-        
-        // Gestione specifica per errori 504 (Gateway Timeout)
-        if (response.status === 504) {
-          errorMessage = 'Timeout del server (504). Il server impiega troppo tempo a rispondere. Prova con un numero minore di ordini.';
-        } else if (response.status === 502) {
-          errorMessage = 'Errore del server (502). Il server è temporaneamente non disponibile. Riprova tra qualche minuto.';
-        } else if (response.status === 503) {
-          errorMessage = 'Servizio non disponibile (503). Il server è sovraccarico. Riprova tra qualche minuto.';
-        }
-        
-        try {
-          const errorText = await response.text();
-          if (errorText) {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.error || errorMessage;
+        if (!response.ok) {
+          let errorMessage = `Errore HTTP: ${response.status}`;
+          
+          // Gestione specifica per errori 504 (Gateway Timeout)
+          if (response.status === 504) {
+            errorMessage = 'Timeout del server (504). Il server impiega troppo tempo a rispondere.';
+          } else if (response.status === 502) {
+            errorMessage = 'Errore del server (502). Il server è temporaneamente non disponibile.';
+          } else if (response.status === 503) {
+            errorMessage = 'Servizio non disponibile (503). Il server è sovraccarico.';
           }
-        } catch (parseError) {
-          console.warn('Errore nel parsing della risposta di errore:', parseError);
-          // Non provare a fare response.text() di nuovo se già fallito
+          
+          try {
+            const errorText = await response.text();
+            if (errorText) {
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.error || errorMessage;
+            }
+          } catch (parseError) {
+            console.warn('Errore nel parsing della risposta di errore:', parseError);
+          }
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
-      }
 
-      // Leggi la risposta come testo prima di parsarla
-      const responseText = await response.text();
-      console.log('Risposta ricevuta:', responseText.substring(0, 200) + '...');
+        // Leggi la risposta come testo prima di parsarla
+        const responseText = await response.text();
+        console.log(`Risposta pagina ${pageCount}:`, responseText.substring(0, 200) + '...');
 
-      if (!responseText || responseText.trim() === '') {
-        throw new Error('Risposta vuota dal server');
-      }
+        if (!responseText || responseText.trim() === '') {
+          console.log('❌ Risposta vuota, interrompo');
+          break;
+        }
 
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (jsonError) {
-        console.error('Errore nel parsing JSON:', jsonError);
-        console.error('Risposta ricevuta:', responseText);
-        throw new Error(`Risposta non valida dal server: ${jsonError.message}`);
-      }
-      
-      if (!data.success || !data.orders) {
-        console.log('❌ Nessuna risposta valida');
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error('Errore nel parsing JSON:', jsonError);
+          console.error('Risposta ricevuta:', responseText);
+          throw new Error(`Risposta non valida dal server: ${jsonError.message}`);
+        }
+        
+        if (!data.success || !data.orders) {
+          console.log('❌ Nessuna risposta valida, interrompo');
+          break;
+        }
+
+        // Se non ci sono ordini, abbiamo finito
+        if (data.orders.length === 0) {
+          console.log('✅ Nessun ordine trovato in questa pagina, sincronizzazione completata');
+          setSyncProgress(prev => ({
+            ...prev,
+            currentStatus: '✅ Sincronizzazione completata - Nessun ordine rimanente'
+          }));
+          break;
+        }
+
+        // Aggiungi ordini alla lista
+        allOrders.push(...data.orders);
+
+        // Calcola statistiche
+        const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, pageCount);
+        
         setSyncProgress(prev => ({
           ...prev,
-          currentStatus: '❌ Nessuna risposta valida dall\'API'
+          ordersDownloaded: allOrders.length,
+          currentStatus: `✅ Pagina ${pageCount} completata - ${allOrders.length} ordini totali`,
+          averageSpeed: perfStats.averageSpeed,
+          estimatedTimeRemaining: perfStats.estimatedTimeRemaining,
+          memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024)
         }));
-        return [];
-      }
 
-      // Se non ci sono ordini, abbiamo finito
-      if (data.orders.length === 0) {
-        console.log('✅ Nessun ordine trovato');
+        // Controlla se ci sono più pagine
+        if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
+          pageInfo = data.pagination.next.pageInfo;
+          console.log(`➡️ Prossima pagina disponibile: ${data.pagination.next.pageInfo.substring(0, 20)}...`);
+        } else {
+          console.log('✅ Nessuna pagina successiva, sincronizzazione completata');
+          setSyncProgress(prev => ({
+            ...prev,
+            currentStatus: '✅ Sincronizzazione completata - Tutte le pagine scaricate'
+          }));
+          break;
+        }
+
+        // Salvataggio incrementale ogni 1000 ordini
+        if (allOrders.length % 1000 === 0) {
+          try {
+            await saveOrdersToStorage(allOrders, 'progressivo');
+            setSyncProgress(prev => ({
+              ...prev,
+              currentStatus: `💾 Salvataggio incrementale - ${allOrders.length} ordini salvati`
+            }));
+          } catch (saveError) {
+            console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
+          }
+        }
+
+        // Pausa tra le pagine per evitare rate limit
+        const pauseTime = 1000; // 1 secondo
         setSyncProgress(prev => ({
           ...prev,
-          currentStatus: '✅ Nessun ordine trovato nel store'
+          currentStatus: `⏳ Pausa ${pauseTime/1000}s tra pagine...`
         }));
-        return [];
+        await new Promise(resolve => setTimeout(resolve, pauseTime));
       }
 
-      // Aggiungi ordini alla lista
-      allOrders.push(...data.orders);
-
-      // Calcola statistiche
-      const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, 1);
-      
-      setSyncProgress(prev => ({
-        ...prev,
-        ordersDownloaded: allOrders.length,
-        currentStatus: `✅ Scaricamento completato - ${allOrders.length} ordini totali`,
-        averageSpeed: perfStats.averageSpeed,
-        estimatedTimeRemaining: null,
-        memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024)
-      }));
-
-      // Salvataggio immediato
+      // Salvataggio finale
       try {
         await saveOrdersToStorage(allOrders, 'final');
         setSyncProgress(prev => ({
           ...prev,
-          currentStatus: `💾 Salvataggio completato - ${allOrders.length} ordini salvati`
+          currentStatus: `💾 Salvataggio finale completato - ${allOrders.length} ordini salvati`
         }));
       } catch (saveError) {
-        console.warn('⚠️ Errore nel salvataggio:', saveError);
+        console.warn('⚠️ Errore nel salvataggio finale:', saveError);
         setSyncProgress(prev => ({
           ...prev,
           currentStatus: `⚠️ Salvataggio parziale - ${allOrders.length} ordini scaricati`
         }));
       }
 
-      console.log(`✅ Sincronizzazione completata: ${allOrders.length} ordini in una singola chiamata`);
+      console.log(`✅ Sincronizzazione completata: ${allOrders.length} ordini in ${pageCount} pagine`);
       return allOrders;
 
     } catch (error) {
@@ -957,10 +996,10 @@ const ShopifyOrdersPage = () => {
                   <div>
                     <p className="font-medium text-blue-700 mb-1">🛡️ Controlli di Sicurezza:</p>
                     <ul className="text-blue-600 space-y-1 text-xs">
-                      <li>• Timeout massimo: 5 minuti</li>
-                      <li>• UNA SOLA chiamata API (no duplicati)</li>
-                      <li>• Limite massimo: 500 ordini (anti-timeout)</li>
-                      <li>• Timeout server: 15 secondi</li>
+                      <li>• Timeout massimo: 10 minuti</li>
+                      <li>• Multiple chiamate per scaricare TUTTI gli ordini</li>
+                      <li>• 500 ordini per pagina (anti-timeout)</li>
+                      <li>• Massimo 20 pagine (10.000 ordini totali)</li>
                     </ul>
                   </div>
                 </div>
