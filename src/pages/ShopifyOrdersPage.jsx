@@ -38,7 +38,13 @@ const ShopifyOrdersPage = () => {
     totalPages: 0,
     ordersDownloaded: 0,
     totalOrders: 0,
-    currentStatus: ''
+    currentStatus: '',
+    startTime: null,
+    estimatedTimeRemaining: null,
+    errorsCount: 0,
+    retriesCount: 0,
+    memoryUsage: 0,
+    averageSpeed: 0
   });
 
   // Abort controller per annullare la sincronizzazione
@@ -91,6 +97,24 @@ const ShopifyOrdersPage = () => {
     });
   };
 
+  // Funzione per calcolare statistiche di performance
+  const calculatePerformanceStats = (startTime, ordersDownloaded, currentPage) => {
+    const elapsed = Date.now() - startTime;
+    const minutes = Math.floor(elapsed / 60000);
+    const seconds = Math.floor((elapsed % 60000) / 1000);
+    
+    const averageSpeed = ordersDownloaded > 0 ? Math.round(ordersDownloaded / (elapsed / 1000)) : 0;
+    const estimatedTimeRemaining = averageSpeed > 0 && currentPage > 0 ? 
+      Math.round((1000 - currentPage) * (elapsed / currentPage)) : null;
+    
+    return {
+      elapsed: `${minutes}m ${seconds}s`,
+      averageSpeed,
+      estimatedTimeRemaining: estimatedTimeRemaining ? 
+        `${Math.floor(estimatedTimeRemaining / 60000)}m ${Math.floor((estimatedTimeRemaining % 60000) / 1000)}s` : null
+    };
+  };
+
   const handleSyncOrders = async () => {
     const shopifyConfig = localStorage.getItem('shopify_config');
     if (!shopifyConfig) {
@@ -109,13 +133,20 @@ const ShopifyOrdersPage = () => {
       const controller = new AbortController();
       setAbortController(controller);
 
+      const startTime = Date.now();
       setSyncProgress({
         isRunning: true,
         currentPage: 0,
         totalPages: 0,
         ordersDownloaded: 0,
         totalOrders: 0,
-        currentStatus: 'Inizializzazione sincronizzazione...'
+        currentStatus: '🚀 Inizializzazione caricamento massivo...',
+        startTime,
+        estimatedTimeRemaining: null,
+        errorsCount: 0,
+        retriesCount: 0,
+        memoryUsage: 0,
+        averageSpeed: 0
       });
 
       setError('');
@@ -261,11 +292,14 @@ const ShopifyOrdersPage = () => {
     const allOrders = [];
     let pageInfo = null;
     let pageCount = 0;
-    const maxPages = 500; // Aumentato per store molto grandi
+    const maxPages = 1000; // Aumentato per store molto grandi
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+    let retryDelay = 1000; // Delay iniziale per retry
 
     setSyncProgress(prev => ({
       ...prev,
-      currentStatus: 'Scaricamento ordini attivi (senza limiti temporali)...'
+      currentStatus: '🚀 Inizializzazione caricamento massivo...'
     }));
 
     // Prima scarica tutti gli ordini attivi (senza filtro temporale)
@@ -279,81 +313,150 @@ const ShopifyOrdersPage = () => {
       setSyncProgress(prev => ({
         ...prev,
         currentPage: pageCount,
-        currentStatus: `Scaricamento pagina ${pageCount} (ordini attivi, senza limiti temporali)...`
+        totalPages: Math.min(maxPages, pageCount + 50), // Stima dinamica
+        currentStatus: `📦 Pagina ${pageCount} - Scaricamento ordini attivi...`
       }));
 
-      try {
-        const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            shopDomain: config.shopDomain,
-            accessToken: config.accessToken,
-            apiVersion: config.apiVersion,
-            limit: 250, // Massimo consentito da Shopify
-            status: 'any', // Tutti gli status attivi
-            pageInfo: pageInfo,
-            useChunking: false,
-            // Applica filtro temporale solo se specificato
-            ...(daysBack && { daysBack: daysBack })
-          }),
-          signal: controller.signal
-        });
+      let success = false;
+      let attempts = 0;
+      const maxAttempts = 3;
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
-        }
-
-        const data = await response.json();
+      while (!success && attempts < maxAttempts) {
+        attempts++;
         
-        if (!data.success || !data.orders) {
-          throw new Error('Risposta API non valida');
-        }
+        try {
+          setSyncProgress(prev => ({
+            ...prev,
+            currentStatus: `📦 Pagina ${pageCount} - Tentativo ${attempts}/${maxAttempts}...`
+          }));
 
-        // Aggiungi ordini alla lista
-        allOrders.push(...data.orders);
-        
-        setSyncProgress(prev => ({
-          ...prev,
-          ordersDownloaded: allOrders.length,
-          currentStatus: `Scaricati ${allOrders.length} ordini attivi (senza limiti temporali)...`
-        }));
+          const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              shopDomain: config.shopDomain,
+              accessToken: config.accessToken,
+              apiVersion: config.apiVersion,
+              limit: 250, // Massimo consentito da Shopify
+              status: 'any', // Tutti gli status attivi
+              pageInfo: pageInfo,
+              useChunking: false,
+              // Applica filtro temporale solo se specificato
+              ...(daysBack && { daysBack: daysBack })
+            }),
+            signal: controller.signal
+          });
 
-        // Salva progressivamente per evitare problemi di quota
-        if (allOrders.length % 1000 === 0) {
-          try {
-            await saveOrdersToStorage(allOrders, 'progressivo');
+          if (!response.ok) {
+            const errorData = await response.json();
+            
+            // Gestione errori specifici
+            if (response.status === 429) {
+              // Rate limit - aspetta più a lungo
+              const waitTime = Math.min(retryDelay * Math.pow(2, attempts), 30000);
+              setSyncProgress(prev => ({
+                ...prev,
+                currentStatus: `⏳ Rate limit raggiunto - Attesa ${Math.round(waitTime/1000)}s...`
+              }));
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              retryDelay *= 2;
+              continue;
+            }
+            
+            throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
+          }
+
+          const data = await response.json();
+          
+          if (!data.success || !data.orders) {
+            throw new Error('Risposta API non valida');
+          }
+
+          // Aggiungi ordini alla lista
+          allOrders.push(...data.orders);
+          consecutiveErrors = 0; // Reset errori consecutivi
+          retryDelay = 1000; // Reset delay
+          success = true;
+          
+          // Calcola statistiche di performance
+          const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, pageCount);
+          
+          setSyncProgress(prev => ({
+            ...prev,
+            ordersDownloaded: allOrders.length,
+            currentStatus: `✅ Pagina ${pageCount} completata - ${allOrders.length} ordini totali`,
+            averageSpeed: perfStats.averageSpeed,
+            estimatedTimeRemaining: perfStats.estimatedTimeRemaining,
+            memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024) // KB
+          }));
+
+          // Salvataggio incrementale intelligente
+          if (allOrders.length % 500 === 0) {
+            try {
+              await saveOrdersToStorage(allOrders, 'progressivo');
+              setSyncProgress(prev => ({
+                ...prev,
+                currentStatus: `💾 Salvataggio incrementale - ${allOrders.length} ordini salvati`
+              }));
+            } catch (saveError) {
+              console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
+              // Continua comunque la sincronizzazione
+            }
+          }
+
+          // Controlla se ci sono più pagine
+          if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
+            pageInfo = data.pagination.next.pageInfo;
+          } else {
+            // Nessuna pagina successiva
+            console.log(`✅ Scaricamento ordini attivi completato: ${allOrders.length} ordini`);
+            break;
+          }
+
+          // Pausa intelligente basata sul numero di ordini scaricati
+          const pauseTime = Math.min(1000 + (allOrders.length * 0.1), 5000);
+          setSyncProgress(prev => ({
+            ...prev,
+            currentStatus: `⏳ Pausa intelligente ${Math.round(pauseTime/1000)}s per evitare rate limit...`
+          }));
+          await new Promise(resolve => setTimeout(resolve, pauseTime));
+
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            throw error;
+          }
+          
+          consecutiveErrors++;
+          console.error(`Errore pagina ${pageCount}, tentativo ${attempts}:`, error);
+          
+          // Aggiorna contatori errori e retry
+          setSyncProgress(prev => ({
+            ...prev,
+            errorsCount: prev.errorsCount + 1,
+            retriesCount: prev.retriesCount + 1
+          }));
+          
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            throw new Error(`Troppi errori consecutivi (${consecutiveErrors}). Interrompo la sincronizzazione.`);
+          }
+          
+          if (attempts < maxAttempts) {
+            const waitTime = retryDelay * Math.pow(2, attempts - 1);
             setSyncProgress(prev => ({
               ...prev,
-              currentStatus: `Scaricati ${allOrders.length} ordini attivi... (salvati progressivamente)`
+              currentStatus: `⚠️ Errore pagina ${pageCount} - Retry ${attempts}/${maxAttempts} in ${Math.round(waitTime/1000)}s...`
             }));
-          } catch (saveError) {
-            console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
-            // Continua comunque la sincronizzazione
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          } else {
+            throw new Error(`Errore pagina ${pageCount} dopo ${maxAttempts} tentativi: ${error.message}`);
           }
         }
-
-        // Controlla se ci sono più pagine
-        if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
-          pageInfo = data.pagination.next.pageInfo;
-        } else {
-          // Nessuna pagina successiva
-          console.log(`✅ Scaricamento ordini attivi completato: ${allOrders.length} ordini`);
-          break;
-        }
-
-        // Pausa per evitare rate limit
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          throw error;
-        }
-        console.error(`Errore pagina ${pageCount}:`, error);
-        throw new Error(`Errore pagina ${pageCount}: ${error.message}`);
+      }
+      
+      if (!success) {
+        throw new Error(`Impossibile scaricare pagina ${pageCount} dopo ${maxAttempts} tentativi`);
       }
     }
 
@@ -775,14 +878,15 @@ const ShopifyOrdersPage = () => {
             Gestisci e sincronizza gli ordini dal tuo store Shopify
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button 
             onClick={handleSyncOrders} 
             disabled={syncProgress.isRunning}
             className="bg-blue-600 hover:bg-blue-700"
+            title="Caricamento massivo di TUTTI gli ordini con gestione intelligente degli errori e retry automatico"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${syncProgress.isRunning ? 'animate-spin' : ''}`} />
-            {syncProgress.isRunning ? 'Sincronizzazione...' : 'Sincronizza TUTTI gli Ordini'}
+            {syncProgress.isRunning ? 'Caricamento Massivo...' : '🚀 Caricamento Massivo'}
           </Button>
           
           <Button 
@@ -821,6 +925,58 @@ const ShopifyOrdersPage = () => {
         syncProgress={syncProgress} 
         onCancel={syncProgress.isRunning ? cancelSync : null}
       />
+
+      {/* Informazioni caricamento massivo */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start space-x-3">
+              <div className="bg-blue-100 p-2 rounded-lg">
+                <Database className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                  🚀 Caricamento Massivo Ottimizzato
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="font-medium text-blue-700 mb-1">✨ Nuove Funzionalità:</p>
+                    <ul className="text-blue-600 space-y-1 text-xs">
+                      <li>• Retry automatico con backoff intelligente</li>
+                      <li>• Gestione rate limit avanzata</li>
+                      <li>• Salvataggio incrementale ogni 500 ordini</li>
+                      <li>• Statistiche di performance in tempo reale</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-medium text-blue-700 mb-1">📊 Monitoraggio:</p>
+                    <ul className="text-blue-600 space-y-1 text-xs">
+                      <li>• Velocità di scaricamento (ordini/sec)</li>
+                      <li>• Tempo stimato rimanente</li>
+                      <li>• Utilizzo memoria in tempo reale</li>
+                      <li>• Contatore errori e retry</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="bg-white p-3 rounded-lg border border-blue-200">
+                <p className="text-xs text-blue-600 font-medium">Stato Attuale</p>
+                <p className="text-sm font-bold text-blue-800">
+                  {orders.length > 0 ? `${orders.length.toLocaleString()} ordini` : 'Nessun ordine'}
+                </p>
+                <p className="text-xs text-blue-500">
+                  {localStorage.getItem('shopify_orders_compressed') ? 'Formato compresso' : 'Formato completo'}
+                </p>
+                <p className="text-xs text-blue-500">
+                  Spazio: ~{orders.length > 0 ? Math.round(JSON.stringify(orders).length / 1024) : 0} KB
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Informazioni spazio e cache */}
       {orders.length > 0 && (

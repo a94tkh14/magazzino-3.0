@@ -96,6 +96,9 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
             </div>
             <p className="text-xs text-blue-600 font-medium">Pagina Corrente</p>
             <p className="text-lg font-bold text-blue-800">{syncProgress.currentPage}</p>
+            {syncProgress.totalPages > 0 && (
+              <p className="text-xs text-blue-500">di {syncProgress.totalPages}</p>
+            )}
           </div>
           
           <div className="text-center p-3 bg-white rounded-lg border border-blue-200">
@@ -103,30 +106,43 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
               <TrendingUp className="h-4 w-4 text-green-600" />
             </div>
             <p className="text-xs text-green-600 font-medium">Ordini Scaricati</p>
-            <p className="text-lg font-bold text-green-800">{syncProgress.ordersDownloaded}</p>
-          </div>
-          
-          <div className="text-center p-3 bg-white rounded-lg border border-blue-200">
-            <div className="flex items-center justify-center mb-1">
-              <Archive className="h-4 w-4 text-gray-600" />
-            </div>
-            <p className="text-xs text-gray-600 font-medium">Stato</p>
-            <p className="text-sm font-medium text-gray-800">
-              {syncProgress.currentStatus.includes('attivi') ? 'Attivi' : 
-               syncProgress.currentStatus.includes('archiviati') ? 'Archiviati' : 'In corso'}
-            </p>
+            <p className="text-lg font-bold text-green-800">{syncProgress.ordersDownloaded.toLocaleString()}</p>
+            {syncProgress.averageSpeed > 0 && (
+              <p className="text-xs text-green-500">{syncProgress.averageSpeed}/sec</p>
+            )}
           </div>
           
           <div className="text-center p-3 bg-white rounded-lg border border-blue-200">
             <div className="flex items-center justify-center mb-1">
               <Clock className="h-4 w-4 text-purple-600" />
             </div>
-            <p className="text-xs text-purple-600 font-medium">Tempo Stimato</p>
+            <p className="text-xs text-purple-600 font-medium">Tempo Trascorso</p>
             <p className="text-sm font-medium text-purple-800">
-              {syncProgress.ordersDownloaded > 0 ? 
-                `${Math.ceil(syncProgress.ordersDownloaded / 250)} min` : 
-                'Calcolando...'}
+              {syncProgress.startTime ? 
+                (() => {
+                  const elapsed = Date.now() - syncProgress.startTime;
+                  const minutes = Math.floor(elapsed / 60000);
+                  const seconds = Math.floor((elapsed % 60000) / 1000);
+                  return `${minutes}m ${seconds}s`;
+                })() : 
+                '0m 0s'}
             </p>
+            {syncProgress.estimatedTimeRemaining && (
+              <p className="text-xs text-purple-500">Rimanente: {syncProgress.estimatedTimeRemaining}</p>
+            )}
+          </div>
+          
+          <div className="text-center p-3 bg-white rounded-lg border border-blue-200">
+            <div className="flex items-center justify-center mb-1">
+              <Archive className="h-4 w-4 text-gray-600" />
+            </div>
+            <p className="text-xs text-gray-600 font-medium">Memoria</p>
+            <p className="text-sm font-medium text-gray-800">
+              {syncProgress.memoryUsage > 0 ? `${syncProgress.memoryUsage} KB` : 'Calcolando...'}
+            </p>
+            {syncProgress.errorsCount > 0 && (
+              <p className="text-xs text-red-500">Errori: {syncProgress.errorsCount}</p>
+            )}
           </div>
         </div>
 
