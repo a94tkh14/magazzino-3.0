@@ -344,11 +344,36 @@ const ShopifyOrdersPage = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
+        let errorMessage = `Errore HTTP: ${response.status}`;
+        try {
+          const errorText = await response.text();
+          if (errorText) {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.error || errorMessage;
+          }
+        } catch (parseError) {
+          console.warn('Errore nel parsing della risposta di errore:', parseError);
+          errorMessage = `Errore HTTP ${response.status}: ${await response.text()}`;
+        }
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      // Leggi la risposta come testo prima di parsarla
+      const responseText = await response.text();
+      console.log('Risposta ricevuta:', responseText.substring(0, 200) + '...');
+
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Risposta vuota dal server');
+      }
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error('Errore nel parsing JSON:', jsonError);
+        console.error('Risposta ricevuta:', responseText);
+        throw new Error(`Risposta non valida dal server: ${jsonError.message}`);
+      }
       
       if (!data.success || !data.orders) {
         console.log('❌ Nessuna risposta valida');
@@ -408,12 +433,27 @@ const ShopifyOrdersPage = () => {
       }
       
       console.error('Errore nella sincronizzazione:', error);
+      
+      // Gestione errori specifici
+      let errorMessage = error.message;
+      if (error.message.includes('Unexpected end of JSON input')) {
+        errorMessage = 'Risposta corrotta dal server. Prova a ricaricare la pagina e riprova.';
+      } else if (error.message.includes('Risposta vuota')) {
+        errorMessage = 'Il server non ha restituito dati. Verifica la connessione e riprova.';
+      } else if (error.message.includes('Risposta non valida')) {
+        errorMessage = 'Il server ha restituito dati non validi. Prova a riprova.';
+      }
+      
       setSyncProgress(prev => ({
         ...prev,
         errorsCount: prev.errorsCount + 1,
-        currentStatus: `❌ Errore: ${error.message}`
+        currentStatus: `❌ Errore: ${errorMessage}`
       }));
-      throw error;
+      
+      // Crea un errore più user-friendly
+      const friendlyError = new Error(errorMessage);
+      friendlyError.originalError = error;
+      throw friendlyError;
     }
 
     // Ora scarica gli ordini archiviati (cancelled e refunded)

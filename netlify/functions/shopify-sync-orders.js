@@ -458,11 +458,64 @@ exports.handler = async (event, context) => {
       };
 
       console.log('🎉 Invio risposta finale');
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(result)
-      };
+      
+      // Verifica che il risultato sia valido prima di inviarlo
+      if (!result || typeof result !== 'object') {
+        console.error('❌ Risultato non valido:', result);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ 
+            success: false, 
+            error: 'Risultato non valido generato dal server' 
+          })
+        };
+      }
+
+      try {
+        const responseBody = JSON.stringify(result);
+        console.log(`📦 Dimensione risposta: ${responseBody.length} caratteri`);
+        
+        // Controlla se la risposta è troppo grande (limite Netlify: 6MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB per sicurezza
+        if (responseBody.length > maxSize) {
+          console.warn(`⚠️ Risposta troppo grande: ${responseBody.length} caratteri`);
+          
+          // Riduci il numero di ordini se la risposta è troppo grande
+          if (result.orders && result.orders.length > 1000) {
+            const reducedOrders = result.orders.slice(0, 1000);
+            result.orders = reducedOrders;
+            result.totalCount = reducedOrders.length;
+            result.metadata.ordersCount = reducedOrders.length;
+            result.metadata.warning = 'Risposta ridotta per limiti di dimensione';
+            
+            const reducedResponseBody = JSON.stringify(result);
+            console.log(`📦 Risposta ridotta: ${reducedResponseBody.length} caratteri`);
+            
+            return {
+              statusCode: 200,
+              headers,
+              body: reducedResponseBody
+            };
+          }
+        }
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: responseBody
+        };
+      } catch (stringifyError) {
+        console.error('❌ Errore nel serializzare la risposta:', stringifyError);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ 
+            success: false, 
+            error: 'Errore nel serializzare la risposta del server' 
+          })
+        };
+      }
       
     } catch (fetchError) {
       clearTimeout(timeoutId);
