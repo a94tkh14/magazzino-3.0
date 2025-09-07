@@ -158,10 +158,10 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
 
         {/* Informazioni aggiuntive */}
         <div className="text-xs text-blue-600 space-y-1">
-          <p>• La sincronizzazione scarica tutti gli ordini attivi e archiviati</p>
-          <p>• Gli ordini archiviati includono quelli cancellati e rimborsati</p>
-          <p>• Ogni pagina contiene fino a 250 ordini per ottimizzare le prestazioni</p>
-          <p>• Le pause tra le chiamate evitano di raggiungere i limiti di rate</p>
+          <p>• Nuovo metodo chunking sicuro con since_id</p>
+          <p>• Ogni chunk contiene fino a 1000 ordini per efficienza</p>
+          <p>• Massimo 50 chunk (50.000 ordini) per sicurezza</p>
+          <p>• Timeout di 10 minuti per evitare loop infiniti</p>
         </div>
 
         {/* Pulsante annulla */}
@@ -179,9 +179,10 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
         {/* Informazioni di sicurezza */}
         <div className="text-xs text-blue-600 space-y-1 bg-blue-50 p-3 rounded-lg">
           <p className="font-medium text-blue-700">🛡️ Controlli di Sicurezza Attivi:</p>
-          <p>• Timeout massimo: 30 minuti</p>
-          <p>• Stop automatico dopo 3 pagine vuote consecutive</p>
-          <p>• Limite massimo: 1000 pagine (250.000 ordini)</p>
+          <p>• Timeout massimo: 10 minuti</p>
+          <p>• Stop automatico se nessun ordine trovato</p>
+          <p>• Limite massimo: 50 chunk (50.000 ordini)</p>
+          <p>• Metodo chunking sicuro con since_id</p>
           <p>• Pulsante di emergenza sempre disponibile</p>
         </div>
       </CardContent>

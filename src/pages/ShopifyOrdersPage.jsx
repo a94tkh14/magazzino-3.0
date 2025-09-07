@@ -290,70 +290,60 @@ const ShopifyOrdersPage = () => {
 
   const downloadAllOrders = async (config, controller, daysBack = null) => {
     const allOrders = [];
-    let pageInfo = null;
-    let pageCount = 0;
-    const maxPages = 1000; // Aumentato per store molto grandi
-    let consecutiveErrors = 0;
-    const maxConsecutiveErrors = 3;
-    let retryDelay = 1000; // Delay iniziale per retry
-    let emptyPagesCount = 0; // Contatore per pagine vuote consecutive
-    const maxEmptyPages = 3; // Massimo pagine vuote consecutive prima di fermarsi
     const startTime = Date.now();
-    const maxSyncTime = 30 * 60 * 1000; // 30 minuti massimo
+    const maxSyncTime = 10 * 60 * 1000; // Ridotto a 10 minuti per sicurezza
+    const maxOrders = 50000; // Limite massimo di ordini per sicurezza
 
     setSyncProgress(prev => ({
       ...prev,
       currentStatus: '🚀 Inizializzazione caricamento massivo...'
     }));
 
-    // Prima scarica tutti gli ordini attivi (senza filtro temporale)
-    while (pageCount < maxPages) {
-      // Controlla se la sincronizzazione è stata annullata
-      if (controller.signal.aborted) {
-        throw new Error('Sincronizzazione annullata');
-      }
-
-      // Controlla timeout massimo (30 minuti)
-      if (Date.now() - startTime > maxSyncTime) {
-        console.log('⏰ Timeout massimo raggiunto (30 minuti), interrompo la sincronizzazione');
-        setSyncProgress(prev => ({
-          ...prev,
-          currentStatus: '⏰ Timeout massimo raggiunto (30 minuti) - Sincronizzazione interrotta'
-        }));
-        break;
-      }
-
-      // Controlla se abbiamo troppe pagine vuote consecutive
-      if (emptyPagesCount >= maxEmptyPages) {
-        console.log(`✅ Trovate ${maxEmptyPages} pagine vuote consecutive, sincronizzazione completata`);
-        setSyncProgress(prev => ({
-          ...prev,
-          currentStatus: `✅ Sincronizzazione completata - ${maxEmptyPages} pagine vuote consecutive`
-        }));
-        break;
-      }
-
-      pageCount++;
+    // NUOVO APPROCCIO: Usa chunking con limiti fissi invece di paginazione
+    try {
       setSyncProgress(prev => ({
         ...prev,
-        currentPage: pageCount,
-        totalPages: Math.min(maxPages, pageCount + 50), // Stima dinamica
-        currentStatus: `📦 Pagina ${pageCount} - Scaricamento ordini attivi...`
+        currentStatus: '📦 Scaricamento ordini con metodo chunking sicuro...'
       }));
 
-      let success = false;
-      let attempts = 0;
-      const maxAttempts = 3;
+      // Scarica ordini in chunk di 1000 alla volta con since_id
+      let lastOrderId = 0;
+      let chunkCount = 0;
+      const maxChunks = 50; // Massimo 50 chunk = 50.000 ordini
 
-      while (!success && attempts < maxAttempts) {
-        attempts++;
-        
-        try {
+      while (chunkCount < maxChunks) {
+        // Controlli di sicurezza
+        if (controller.signal.aborted) {
+          throw new Error('Sincronizzazione annullata');
+        }
+
+        if (Date.now() - startTime > maxSyncTime) {
+          console.log('⏰ Timeout massimo raggiunto (10 minuti)');
           setSyncProgress(prev => ({
             ...prev,
-            currentStatus: `📦 Pagina ${pageCount} - Tentativo ${attempts}/${maxAttempts}...`
+            currentStatus: '⏰ Timeout massimo raggiunto - Sincronizzazione interrotta'
           }));
+          break;
+        }
 
+        if (allOrders.length >= maxOrders) {
+          console.log(`📊 Limite massimo ordini raggiunto (${maxOrders})`);
+          setSyncProgress(prev => ({
+            ...prev,
+            currentStatus: `📊 Limite massimo ordini raggiunto (${maxOrders})`
+          }));
+          break;
+        }
+
+        chunkCount++;
+        setSyncProgress(prev => ({
+          ...prev,
+          currentPage: chunkCount,
+          totalPages: maxChunks,
+          currentStatus: `📦 Chunk ${chunkCount}/${maxChunks} - Scaricamento ordini...`
+        }));
+
+        try {
           const response = await fetch('/.netlify/functions/shopify-sync-orders', {
             method: 'POST',
             headers: {
@@ -363,11 +353,10 @@ const ShopifyOrdersPage = () => {
               shopDomain: config.shopDomain,
               accessToken: config.accessToken,
               apiVersion: config.apiVersion,
-              limit: 250, // Massimo consentito da Shopify
-              status: 'any', // Tutti gli status attivi
-              pageInfo: pageInfo,
-              useChunking: false,
-              // Applica filtro temporale solo se specificato
+              limit: 1000, // Chunk più grande
+              status: 'any',
+              sinceId: lastOrderId, // Usa since_id invece di pageInfo
+              useChunking: true, // Forza chunking
               ...(daysBack && { daysBack: daysBack })
             }),
             signal: controller.signal
@@ -375,69 +364,47 @@ const ShopifyOrdersPage = () => {
 
           if (!response.ok) {
             const errorData = await response.json();
-            
-            // Gestione errori specifici
-            if (response.status === 429) {
-              // Rate limit - aspetta più a lungo
-              const waitTime = Math.min(retryDelay * Math.pow(2, attempts), 30000);
-              setSyncProgress(prev => ({
-                ...prev,
-                currentStatus: `⏳ Rate limit raggiunto - Attesa ${Math.round(waitTime/1000)}s...`
-              }));
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-              retryDelay *= 2;
-              continue;
-            }
-            
             throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
           }
 
           const data = await response.json();
           
           if (!data.success || !data.orders) {
-            throw new Error('Risposta API non valida');
+            console.log('❌ Nessuna risposta valida, interrompo');
+            break;
           }
 
-          // Controlla se la pagina è vuota
+          // Se non ci sono ordini, abbiamo finito
           if (data.orders.length === 0) {
-            emptyPagesCount++;
-            console.log(`📄 Pagina ${pageCount} vuota (${emptyPagesCount}/${maxEmptyPages})`);
-            
+            console.log('✅ Nessun ordine trovato, sincronizzazione completata');
             setSyncProgress(prev => ({
               ...prev,
-              currentStatus: `📄 Pagina ${pageCount} vuota (${emptyPagesCount}/${maxEmptyPages}) - Continuo...`
+              currentStatus: '✅ Sincronizzazione completata - Nessun ordine rimanente'
             }));
-            
-            // Se abbiamo troppe pagine vuote consecutive, esci
-            if (emptyPagesCount >= maxEmptyPages) {
-              console.log(`✅ Trovate ${maxEmptyPages} pagine vuote consecutive, sincronizzazione completata`);
-              break;
-            }
-          } else {
-            // Reset contatore pagine vuote se troviamo ordini
-            emptyPagesCount = 0;
+            break;
           }
 
           // Aggiungi ordini alla lista
           allOrders.push(...data.orders);
-          consecutiveErrors = 0; // Reset errori consecutivi
-          retryDelay = 1000; // Reset delay
-          success = true;
           
-          // Calcola statistiche di performance
-          const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, pageCount);
+          // Aggiorna lastOrderId per il prossimo chunk
+          const lastOrder = data.orders[data.orders.length - 1];
+          lastOrderId = lastOrder.id;
+
+          // Calcola statistiche
+          const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, chunkCount);
           
           setSyncProgress(prev => ({
             ...prev,
             ordersDownloaded: allOrders.length,
-            currentStatus: `✅ Pagina ${pageCount} completata - ${allOrders.length} ordini totali`,
+            currentStatus: `✅ Chunk ${chunkCount} completato - ${allOrders.length} ordini totali`,
             averageSpeed: perfStats.averageSpeed,
             estimatedTimeRemaining: perfStats.estimatedTimeRemaining,
-            memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024) // KB
+            memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024)
           }));
 
-          // Salvataggio incrementale intelligente
-          if (allOrders.length % 500 === 0) {
+          // Salvataggio incrementale
+          if (allOrders.length % 2000 === 0) {
             try {
               await saveOrdersToStorage(allOrders, 'progressivo');
               setSyncProgress(prev => ({
@@ -446,29 +413,14 @@ const ShopifyOrdersPage = () => {
               }));
             } catch (saveError) {
               console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
-              // Continua comunque la sincronizzazione
             }
           }
 
-          // Controlla se ci sono più pagine
-          if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
-            pageInfo = data.pagination.next.pageInfo;
-            console.log(`➡️ Prossima pagina disponibile: ${data.pagination.next.pageInfo.substring(0, 20)}...`);
-          } else {
-            // Nessuna pagina successiva
-            console.log(`✅ Scaricamento ordini attivi completato: ${allOrders.length} ordini`);
-            setSyncProgress(prev => ({
-              ...prev,
-              currentStatus: `✅ Scaricamento ordini attivi completato: ${allOrders.length} ordini`
-            }));
-            break;
-          }
-
-          // Pausa intelligente basata sul numero di ordini scaricati
-          const pauseTime = Math.min(1000 + (allOrders.length * 0.1), 5000);
+          // Pausa tra i chunk
+          const pauseTime = Math.min(2000, 5000);
           setSyncProgress(prev => ({
             ...prev,
-            currentStatus: `⏳ Pausa intelligente ${Math.round(pauseTime/1000)}s per evitare rate limit...`
+            currentStatus: `⏳ Pausa ${Math.round(pauseTime/1000)}s tra chunk...`
           }));
           await new Promise(resolve => setTimeout(resolve, pauseTime));
 
@@ -477,36 +429,24 @@ const ShopifyOrdersPage = () => {
             throw error;
           }
           
-          consecutiveErrors++;
-          console.error(`Errore pagina ${pageCount}, tentativo ${attempts}:`, error);
-          
-          // Aggiorna contatori errori e retry
+          console.error(`Errore chunk ${chunkCount}:`, error);
           setSyncProgress(prev => ({
             ...prev,
             errorsCount: prev.errorsCount + 1,
-            retriesCount: prev.retriesCount + 1
+            currentStatus: `⚠️ Errore chunk ${chunkCount} - Interrompo per sicurezza`
           }));
           
-          if (consecutiveErrors >= maxConsecutiveErrors) {
-            throw new Error(`Troppi errori consecutivi (${consecutiveErrors}). Interrompo la sincronizzazione.`);
-          }
-          
-          if (attempts < maxAttempts) {
-            const waitTime = retryDelay * Math.pow(2, attempts - 1);
-            setSyncProgress(prev => ({
-              ...prev,
-              currentStatus: `⚠️ Errore pagina ${pageCount} - Retry ${attempts}/${maxAttempts} in ${Math.round(waitTime/1000)}s...`
-            }));
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-          } else {
-            throw new Error(`Errore pagina ${pageCount} dopo ${maxAttempts} tentativi: ${error.message}`);
-          }
+          // Interrompi al primo errore per evitare loop
+          break;
         }
       }
-      
-      if (!success) {
-        throw new Error(`Impossibile scaricare pagina ${pageCount} dopo ${maxAttempts} tentativi`);
-      }
+
+      console.log(`✅ Sincronizzazione completata: ${allOrders.length} ordini in ${chunkCount} chunk`);
+      return allOrders;
+
+    } catch (error) {
+      console.error('Errore nella sincronizzazione:', error);
+      throw error;
     }
 
     // Ora scarica gli ordini archiviati (cancelled e refunded)
@@ -1000,10 +940,10 @@ const ShopifyOrdersPage = () => {
                   <div>
                     <p className="font-medium text-blue-700 mb-1">🛡️ Controlli di Sicurezza:</p>
                     <ul className="text-blue-600 space-y-1 text-xs">
-                      <li>• Timeout massimo: 30 minuti</li>
-                      <li>• Stop dopo 3 pagine vuote consecutive</li>
-                      <li>• Limite massimo: 1000 pagine</li>
-                      <li>• Pulsante di emergenza sempre attivo</li>
+                      <li>• Timeout massimo: 10 minuti</li>
+                      <li>• Stop automatico se nessun ordine</li>
+                      <li>• Limite massimo: 50 chunk (50.000 ordini)</li>
+                      <li>• Metodo chunking sicuro con since_id</li>
                     </ul>
                   </div>
                 </div>

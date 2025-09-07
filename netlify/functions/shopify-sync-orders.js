@@ -130,6 +130,7 @@ exports.handler = async (event, context) => {
       limit = 50,
       status = 'any',
       pageInfo = null,
+      sinceId = null, // Nuovo parametro per chunking sicuro
       daysBack = null, // RIMOSSO il valore di default per permettere scaricamento completo
       fulfillmentStatus = null,
       financialStatus = null,
@@ -287,6 +288,10 @@ exports.handler = async (event, context) => {
         // Paginazione standard di Shopify
         apiUrl += `&page_info=${pageInfo}`;
       }
+    } else if (sinceId) {
+      // Usa since_id per chunking sicuro
+      console.log(`🔧 Chunking sicuro con since_id: ${sinceId}`);
+      apiUrl += `&since_id=${sinceId}`;
     }
 
     console.log('🔗 URL costruito:', apiUrl);
