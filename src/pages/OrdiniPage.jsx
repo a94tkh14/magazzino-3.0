@@ -10,7 +10,8 @@ import {
   convertShopifyOrder, 
   getShopifyCredentials,
   testShopifyPagination,
-  testAllOrdersCount
+  testAllOrdersCount,
+  testArchivedOrders
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -289,6 +290,29 @@ const OrdiniPage = () => {
     } catch (error) {
       console.error('❌ Errore test conteggio:', error);
       alert(`Errore test conteggio: ${error.message}`);
+    }
+  };
+
+  const handleTestArchivedOrders = async () => {
+    try {
+      console.log('📦 Avvio test ordini archiviati...');
+      const result = await testArchivedOrders();
+      console.log('✅ Test ordini archiviati completato:', result);
+      
+      let message = 'Test ordini archiviati completato!\n\n';
+      for (const [status, data] of Object.entries(result)) {
+        if (data.error) {
+          message += `${status}: ${data.error}\n`;
+        } else {
+          message += `${status}: ${data.count} ordini trovati\n`;
+        }
+      }
+      message += '\nControlla la console per i dettagli completi.';
+      
+      alert(message);
+    } catch (error) {
+      console.error('❌ Errore test ordini archiviati:', error);
+      alert(`Errore test ordini archiviati: ${error.message}`);
     }
   };
 
@@ -790,6 +814,14 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleTestArchivedOrders()} 
+            disabled={isLoading}
+            className="bg-orange-600 hover:bg-orange-700 text-white"
+          >
+            📦 TEST ARCHIVIATI
+          </Button>
+          
+          <Button 
             onClick={() => handleForcedDownload()} 
             disabled={isLoading}
             className="bg-green-600 hover:bg-green-700 text-white"
@@ -921,6 +953,7 @@ const OrdiniPage = () => {
               <div><strong>⚡ Download Forzato:</strong> Bypassa filtri, scarica TUTTI gli ordini senza limitazioni</div>
               <div><strong>📦 Scarica Archiviati:</strong> Focus su ordini chiusi/archiviati che potrebbero mancare</div>
               <div><strong>🔢 Conta Tutti:</strong> Test per verificare quanti ordini sono disponibili</div>
+              <div><strong>📦 Test Archiviati:</strong> Verifica se ci sono ordini archiviati disponibili</div>
               <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
             </div>
             </div>

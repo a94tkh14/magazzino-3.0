@@ -478,6 +478,48 @@ export const testAllOrdersCount = async () => {
 }
 };
 
+// Funzione di test per verificare ordini archiviati specifici
+export const testArchivedOrders = async () => {
+  console.log('📦 TEST ORDINI ARCHIVIATI...');
+  
+  const archivedStatuses = ['closed', 'cancelled', 'refunded', 'voided'];
+  const results = {};
+  
+  for (const status of archivedStatuses) {
+    try {
+      console.log(`🔍 Testando status: ${status}`);
+      
+      const response = await fetchShopifyOrders({
+        limit: 10, // Solo 10 per test
+        status: status,
+        pageInfo: null
+      });
+
+      if (response.success && response.orders) {
+        results[status] = {
+          count: response.orders.length,
+          hasNext: response.pagination?.hasNext,
+          orders: response.orders.map(o => ({ id: o.id, order_number: o.order_number, financial_status: o.financial_status }))
+        };
+        console.log(`✅ Status ${status}: ${response.orders.length} ordini trovati`);
+      } else {
+        results[status] = { count: 0, error: 'Nessun ordine trovato' };
+        console.log(`❌ Status ${status}: Nessun ordine trovato`);
+      }
+      
+      // Pausa tra i test
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+    } catch (error) {
+      console.error(`❌ Errore test status ${status}:`, error);
+      results[status] = { count: 0, error: error.message };
+    }
+  }
+  
+  console.log('📊 RISULTATI TEST ORDINI ARCHIVIATI:', results);
+  return results;
+};
+
 // Funzione per scaricare TUTTI gli ordini senza filtri (forzata)
 export const downloadAllOrdersForced = async (onProgress = null, abortController = null) => {
   const allOrders = [];

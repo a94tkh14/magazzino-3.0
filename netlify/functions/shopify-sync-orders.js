@@ -49,22 +49,26 @@ exports.handler = async (event, context) => {
     }
 
     // Costruisci URL Shopify
-    let url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?limit=${Math.min(limit, 250)}`;
-    
-    // Aggiungi parametri
-    if (status && status !== 'any') {
-      url += `&status=${status}`;
-    }
+    let url;
     
     if (pageInfo) {
-      // Se pageInfo è fornito, usa quello invece di costruire l'URL
+      // Se pageInfo è fornito, usa quello direttamente (già contiene tutti i parametri)
       url = pageInfo;
-    }
-    
-    if (daysBack) {
-      const sinceDate = new Date();
-      sinceDate.setDate(sinceDate.getDate() - daysBack);
-      url += `&created_at_min=${sinceDate.toISOString()}`;
+      console.log(`📄 Using pageInfo URL: ${url}`);
+    } else {
+      // Costruisci URL da zero
+      url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?limit=${Math.min(limit, 250)}`;
+      
+      // Aggiungi parametri solo se non stiamo usando pageInfo
+      if (status && status !== 'any') {
+        url += `&status=${status}`;
+      }
+      
+      if (daysBack) {
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - daysBack);
+        url += `&created_at_min=${sinceDate.toISOString()}`;
+      }
     }
 
     console.log(`🔄 Fetching Shopify orders from: ${url}`);
