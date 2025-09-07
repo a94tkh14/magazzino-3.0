@@ -159,9 +159,9 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
         {/* Informazioni aggiuntive */}
         <div className="text-xs text-blue-600 space-y-1">
           <p>• Metodo semplificato: UNA SOLA chiamata API</p>
-          <p>• Limite di 10.000 ordini per evitare duplicati</p>
+          <p>• Limite di 500 ordini per evitare timeout 504</p>
           <p>• Timeout di 5 minuti per massima sicurezza</p>
-          <p>• Nessun chunking per eliminare duplicati</p>
+          <p>• Timeout server: 15 secondi</p>
         </div>
 
         {/* Pulsante annulla */}
@@ -181,8 +181,8 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
           <p className="font-medium text-blue-700">🛡️ Controlli di Sicurezza Attivi:</p>
           <p>• Timeout massimo: 5 minuti</p>
           <p>• UNA SOLA chiamata API (no duplicati)</p>
-          <p>• Limite massimo: 10.000 ordini</p>
-          <p>• Metodo semplificato e sicuro</p>
+          <p>• Limite massimo: 500 ordini (anti-timeout)</p>
+          <p>• Timeout server: 15 secondi</p>
           <p>• Pulsante di emergenza sempre disponibile</p>
         </div>
       </CardContent>

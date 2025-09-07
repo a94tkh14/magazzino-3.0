@@ -185,9 +185,8 @@ exports.handler = async (event, context) => {
       }
     }
 
-    // Ottimizzazione: usa limit più alto per ridurre il numero di chiamate
-    // RIMOSSO il limite forzato per permettere download completo
-    let optimizedLimit = limit; // Usa il limite richiesto dall'utente
+    // Ottimizzazione: usa limit più basso per evitare timeout 504
+    let optimizedLimit = Math.min(limit, 500); // Massimo 500 ordini per evitare timeout
     
     // Se il limite è molto alto, usa chunking automatico
     if (limit > 250) {
@@ -297,10 +296,10 @@ exports.handler = async (event, context) => {
     console.log('🔗 URL costruito:', apiUrl);
     console.log(`📊 Limit utilizzato: ${optimizedLimit} (richiesto: ${limit})`);
 
-    // Chiamata a Shopify con timeout più lungo
+    // Chiamata a Shopify con timeout ridotto per evitare 504
     console.log('📡 Chiamata a Shopify...');
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 secondi di timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 secondi di timeout per evitare 504
     
     try {
       const response = await fetch(apiUrl, {

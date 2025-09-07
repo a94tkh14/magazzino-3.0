@@ -335,7 +335,7 @@ const ShopifyOrdersPage = () => {
           shopDomain: config.shopDomain,
           accessToken: config.accessToken,
           apiVersion: config.apiVersion,
-          limit: 10000, // Limite alto ma ragionevole per evitare duplicati
+          limit: 500, // Ridotto per evitare timeout 504
           status: 'any',
           useChunking: false, // Disabilita chunking per evitare duplicati
           ...(daysBack && { daysBack: daysBack })
@@ -345,6 +345,16 @@ const ShopifyOrdersPage = () => {
 
       if (!response.ok) {
         let errorMessage = `Errore HTTP: ${response.status}`;
+        
+        // Gestione specifica per errori 504 (Gateway Timeout)
+        if (response.status === 504) {
+          errorMessage = 'Timeout del server (504). Il server impiega troppo tempo a rispondere. Prova con un numero minore di ordini.';
+        } else if (response.status === 502) {
+          errorMessage = 'Errore del server (502). Il server è temporaneamente non disponibile. Riprova tra qualche minuto.';
+        } else if (response.status === 503) {
+          errorMessage = 'Servizio non disponibile (503). Il server è sovraccarico. Riprova tra qualche minuto.';
+        }
+        
         try {
           const errorText = await response.text();
           if (errorText) {
@@ -353,7 +363,7 @@ const ShopifyOrdersPage = () => {
           }
         } catch (parseError) {
           console.warn('Errore nel parsing della risposta di errore:', parseError);
-          errorMessage = `Errore HTTP ${response.status}: ${await response.text()}`;
+          // Non provare a fare response.text() di nuovo se già fallito
         }
         throw new Error(errorMessage);
       }
@@ -949,8 +959,8 @@ const ShopifyOrdersPage = () => {
                     <ul className="text-blue-600 space-y-1 text-xs">
                       <li>• Timeout massimo: 5 minuti</li>
                       <li>• UNA SOLA chiamata API (no duplicati)</li>
-                      <li>• Limite massimo: 10.000 ordini</li>
-                      <li>• Metodo semplificato e sicuro</li>
+                      <li>• Limite massimo: 500 ordini (anti-timeout)</li>
+                      <li>• Timeout server: 15 secondi</li>
                     </ul>
                   </div>
                 </div>
