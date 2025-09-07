@@ -385,6 +385,118 @@ export const downloadArchivedOrders = async (onProgress = null, abortController 
   return allOrders;
 };
 
+// Funzione per scaricare TUTTI gli ordini con tutti i possibili status
+export const downloadAllOrdersComplete = async (onProgress = null, abortController = null) => {
+  const allOrders = [];
+  const uniqueOrderIds = new Set();
+  
+  // Lista completa di TUTTI i possibili status per essere sicuri di non perdere ordini
+  const allStatuses = [
+    { status: 'any', description: 'tutti gli ordini (completo)' },
+    { status: 'open', description: 'ordini aperti' },
+    { status: 'closed', description: 'ordini chiusi/archiviati' },
+    { status: 'cancelled', description: 'ordini cancellati' },
+    { status: 'refunded', description: 'ordini rimborsati' },
+    { status: 'pending', description: 'ordini in attesa' },
+    { status: 'authorized', description: 'ordini autorizzati' },
+    { status: 'partially_paid', description: 'ordini parzialmente pagati' },
+    { status: 'paid', description: 'ordini pagati' },
+    { status: 'partially_refunded', description: 'ordini parzialmente rimborsati' },
+    { status: 'voided', description: 'ordini annullati' },
+    { status: 'fulfilled', description: 'ordini evasi' },
+    { status: 'unfulfilled', description: 'ordini non evasi' },
+    { status: 'partial', description: 'ordini parzialmente evasi' }
+  ];
+
+  console.log('🚀 INIZIO DOWNLOAD COMPLETO TUTTI GLI ORDINI...');
+
+  for (let statusIndex = 0; statusIndex < allStatuses.length; statusIndex++) {
+    const { status, description } = allStatuses[statusIndex];
+    
+    if (abortController?.signal?.aborted) {
+      throw new Error('Download annullato dall\'utente');
+    }
+
+    console.log(`🔄 Scaricamento ${description}...`);
+    
+    if (onProgress) {
+      onProgress({
+        currentPage: statusIndex + 1,
+        totalPages: allStatuses.length,
+        ordersDownloaded: allOrders.length,
+        currentStatus: `Scaricamento ${description}...`
+      });
+    }
+
+    try {
+      let pageCount = 0;
+      const maxPages = 100; // Limite per status
+      let nextPageInfo = null;
+      let statusOrdersCount = 0;
+      
+      while (pageCount < maxPages) {
+        pageCount++;
+        
+        if (onProgress) {
+          onProgress({
+            currentPage: pageCount,
+            totalPages: maxPages,
+            ordersDownloaded: allOrders.length,
+            currentStatus: `Scaricamento ${description} (pagina ${pageCount})...`
+          });
+        }
+
+        const response = await fetchShopifyOrders({
+          limit: 250,
+          status: status,
+          pageInfo: nextPageInfo
+        });
+
+        if (!response.success || !response.orders || response.orders.length === 0) {
+          console.log(`✅ ${description}: nessun ordine trovato`);
+          break;
+        }
+
+        // Aggiungi ordini evitando duplicati
+        let newOrdersCount = 0;
+        for (const order of response.orders) {
+          if (order.id && !uniqueOrderIds.has(order.id.toString())) {
+            allOrders.push(order);
+            uniqueOrderIds.add(order.id.toString());
+            newOrdersCount++;
+            statusOrdersCount++;
+          }
+        }
+
+        console.log(`✅ ${description} pagina ${pageCount}: ${newOrdersCount} ordini nuovi (totale status: ${statusOrdersCount})`);
+
+        // Aggiorna nextPageInfo per la prossima pagina
+        nextPageInfo = response.pagination?.nextPageInfo;
+        
+        if (!nextPageInfo) {
+          console.log(`✅ ${description}: fine paginazione dopo ${pageCount} pagine (${statusOrdersCount} ordini totali)`);
+          break;
+        }
+
+        // Pausa tra le pagine
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      console.log(`📊 ${description}: ${statusOrdersCount} ordini scaricati`);
+
+      // Pausa tra i status
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+    } catch (error) {
+      console.error(`❌ Errore per status ${status}:`, error);
+      // Continua con il prossimo status
+    }
+  }
+
+  console.log(`🎉 DOWNLOAD COMPLETO TERMINATO: ${allOrders.length} ordini unici totali`);
+  return allOrders;
+};
+
 // Funzione di test per verificare la paginazione
 export const testShopifyPagination = async () => {
   console.log('🧪 TEST PAGINAZIONE SHOPIFY...');

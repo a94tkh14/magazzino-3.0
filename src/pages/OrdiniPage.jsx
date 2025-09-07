@@ -8,6 +8,7 @@ import {
   downloadArchivedOrders,
   downloadAllOrdersForced,
   downloadAllOrdersNoStatus,
+  downloadAllOrdersComplete,
   convertShopifyOrder, 
   getShopifyCredentials,
   testShopifyPagination,
@@ -415,6 +416,80 @@ const OrdiniPage = () => {
     } catch (err) {
       console.error('❌ ERRORE DOWNLOAD SENZA FILTRI:', err);
       setError(`Errore download senza filtri: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
+  const handleDownloadComplete = async () => {
+    if (!window.confirm('Vuoi avviare il download COMPLETO di TUTTI gli ordini con TUTTI i possibili status? Questo scaricherà tutti gli ordini disponibili.')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Download completo in corso...'
+    });
+
+    try {
+      console.log('🚀 INIZIO DOWNLOAD COMPLETO...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Usa il metodo completo
+      const allOrders = await downloadAllOrdersComplete(
+        (progress) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ...progress,
+            currentStatus: progress.currentStatus || 'Download completo in corso...'
+          }));
+        },
+        controller
+      );
+
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ DOWNLOAD COMPLETO TERMINATO! Scaricati ${allOrders.length} ordini totali`);
+        
+        // Converti e salva gli ordini
+        const convertedOrders = allOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+      } else {
+        setMessage('ℹ️ Nessun ordine trovato con il download completo');
+      }
+
+    } catch (err) {
+      console.error('❌ ERRORE DOWNLOAD COMPLETO:', err);
+      setError(`Errore download completo: ${err.message}`);
     } finally {
       setIsLoading(false);
       setSyncProgress({
@@ -959,6 +1034,14 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleDownloadComplete()} 
+            disabled={isLoading}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            🎯 DOWNLOAD COMPLETO
+          </Button>
+          
+          <Button 
             onClick={() => handleForcedDownload()} 
             disabled={isLoading}
             className="bg-green-600 hover:bg-green-700 text-white"
@@ -1087,6 +1170,7 @@ const OrdiniPage = () => {
             <div className="text-sm text-yellow-700 space-y-1">
               <div><strong>🚀 Metodo Principale:</strong> Scarica ordini per status separati (più robusto, evita duplicati)</div>
               <div><strong>🔄 Metodo Alternativo:</strong> Paginazione semplice sequenziale (backup se il primo fallisce)</div>
+              <div><strong>🎯 Download Completo:</strong> Scarica TUTTI gli ordini con TUTTI i possibili status (14 status diversi)</div>
               <div><strong>⚡ Download Forzato:</strong> Bypassa filtri, scarica TUTTI gli ordini senza limitazioni</div>
               <div><strong>🚫 Senza Filtri:</strong> Download senza filtri di status (approccio alternativo)</div>
               <div><strong>📦 Scarica Archiviati:</strong> Focus su ordini chiusi/archiviati che potrebbero mancare</div>
