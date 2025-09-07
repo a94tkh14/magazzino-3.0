@@ -566,7 +566,7 @@ const OrdiniPage = () => {
         <div>
           <h1 className="text-2xl font-bold">Ordini</h1>
           <p className="text-muted-foreground">
-            Visualizza e gestisci gli ordini esistenti
+            Sincronizza e gestisci tutti gli ordini Shopify (4039 totali)
           </p>
         </div>
         <div className="flex gap-2">
@@ -711,6 +711,17 @@ const OrdiniPage = () => {
                 <div><strong>🚀 Metodo Principale:</strong> Scarica ordini per status separati (più robusto, evita duplicati)</div>
                 <div><strong>🔄 Metodo Alternativo:</strong> Paginazione semplice sequenziale (backup se il primo fallisce)</div>
                 <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
+              </div>
+            </div>
+
+            {/* Istruzioni per configurare credenziali */}
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="font-medium text-blue-800 mb-2">🔧 Configurazione Richiesta:</h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                <div><strong>1.</strong> Vai nella sezione <strong>Impostazioni</strong> → <strong>Integrazioni</strong></div>
+                <div><strong>2.</strong> Configura le credenziali Shopify (Dominio Shop + Access Token)</div>
+                <div><strong>3.</strong> Testa la connessione con il pulsante "🔍 Test Connessione"</div>
+                <div><strong>4.</strong> Torna qui e clicca "🚀 SINCRONIZZA TUTTO (4039)"</div>
               </div>
             </div>
           </div>

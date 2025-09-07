@@ -1,8 +1,8 @@
 // Funzioni per gestire la sincronizzazione con Shopify
 export const getShopifyCredentials = () => {
-  const credentials = localStorage.getItem('shopify_credentials');
+  const credentials = localStorage.getItem('shopify_config');
   if (!credentials) {
-    throw new Error('Credenziali Shopify non configurate');
+    throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
   }
   return JSON.parse(credentials);
 };
