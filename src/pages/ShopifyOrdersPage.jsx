@@ -291,161 +291,128 @@ const ShopifyOrdersPage = () => {
   const downloadAllOrders = async (config, controller, daysBack = null) => {
     const allOrders = [];
     const startTime = Date.now();
-    const maxSyncTime = 10 * 60 * 1000; // Ridotto a 10 minuti per sicurezza
-    const maxOrders = 50000; // Limite massimo di ordini per sicurezza
+    const maxSyncTime = 5 * 60 * 1000; // Ridotto a 5 minuti per sicurezza
 
     setSyncProgress(prev => ({
       ...prev,
       currentStatus: '🚀 Inizializzazione caricamento massivo...'
     }));
 
-    // NUOVO APPROCCIO: Usa chunking con limiti fissi invece di paginazione
+    // SOLUZIONE SEMPLICE: Una sola chiamata con limite ragionevole
     try {
       setSyncProgress(prev => ({
         ...prev,
-        currentStatus: '📦 Scaricamento ordini con metodo chunking sicuro...'
+        currentStatus: '📦 Scaricamento TUTTI gli ordini in una singola chiamata...'
       }));
 
-      // Scarica ordini in chunk di 1000 alla volta con since_id
-      let lastOrderId = 0;
-      let chunkCount = 0;
-      const maxChunks = 50; // Massimo 50 chunk = 50.000 ordini
-
-      while (chunkCount < maxChunks) {
-        // Controlli di sicurezza
-        if (controller.signal.aborted) {
-          throw new Error('Sincronizzazione annullata');
-        }
-
-        if (Date.now() - startTime > maxSyncTime) {
-          console.log('⏰ Timeout massimo raggiunto (10 minuti)');
-          setSyncProgress(prev => ({
-            ...prev,
-            currentStatus: '⏰ Timeout massimo raggiunto - Sincronizzazione interrotta'
-          }));
-          break;
-        }
-
-        if (allOrders.length >= maxOrders) {
-          console.log(`📊 Limite massimo ordini raggiunto (${maxOrders})`);
-          setSyncProgress(prev => ({
-            ...prev,
-            currentStatus: `📊 Limite massimo ordini raggiunto (${maxOrders})`
-          }));
-          break;
-        }
-
-        chunkCount++;
-        setSyncProgress(prev => ({
-          ...prev,
-          currentPage: chunkCount,
-          totalPages: maxChunks,
-          currentStatus: `📦 Chunk ${chunkCount}/${maxChunks} - Scaricamento ordini...`
-        }));
-
-        try {
-          const response = await fetch('/.netlify/functions/shopify-sync-orders', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              shopDomain: config.shopDomain,
-              accessToken: config.accessToken,
-              apiVersion: config.apiVersion,
-              limit: 1000, // Chunk più grande
-              status: 'any',
-              sinceId: lastOrderId, // Usa since_id invece di pageInfo
-              useChunking: true, // Forza chunking
-              ...(daysBack && { daysBack: daysBack })
-            }),
-            signal: controller.signal
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
-          }
-
-          const data = await response.json();
-          
-          if (!data.success || !data.orders) {
-            console.log('❌ Nessuna risposta valida, interrompo');
-            break;
-          }
-
-          // Se non ci sono ordini, abbiamo finito
-          if (data.orders.length === 0) {
-            console.log('✅ Nessun ordine trovato, sincronizzazione completata');
-            setSyncProgress(prev => ({
-              ...prev,
-              currentStatus: '✅ Sincronizzazione completata - Nessun ordine rimanente'
-            }));
-            break;
-          }
-
-          // Aggiungi ordini alla lista
-          allOrders.push(...data.orders);
-          
-          // Aggiorna lastOrderId per il prossimo chunk
-          const lastOrder = data.orders[data.orders.length - 1];
-          lastOrderId = lastOrder.id;
-
-          // Calcola statistiche
-          const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, chunkCount);
-          
-          setSyncProgress(prev => ({
-            ...prev,
-            ordersDownloaded: allOrders.length,
-            currentStatus: `✅ Chunk ${chunkCount} completato - ${allOrders.length} ordini totali`,
-            averageSpeed: perfStats.averageSpeed,
-            estimatedTimeRemaining: perfStats.estimatedTimeRemaining,
-            memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024)
-          }));
-
-          // Salvataggio incrementale
-          if (allOrders.length % 2000 === 0) {
-            try {
-              await saveOrdersToStorage(allOrders, 'progressivo');
-              setSyncProgress(prev => ({
-                ...prev,
-                currentStatus: `💾 Salvataggio incrementale - ${allOrders.length} ordini salvati`
-              }));
-            } catch (saveError) {
-              console.warn('⚠️ Errore nel salvataggio progressivo:', saveError);
-            }
-          }
-
-          // Pausa tra i chunk
-          const pauseTime = Math.min(2000, 5000);
-          setSyncProgress(prev => ({
-            ...prev,
-            currentStatus: `⏳ Pausa ${Math.round(pauseTime/1000)}s tra chunk...`
-          }));
-          await new Promise(resolve => setTimeout(resolve, pauseTime));
-
-        } catch (error) {
-          if (error.name === 'AbortError') {
-            throw error;
-          }
-          
-          console.error(`Errore chunk ${chunkCount}:`, error);
-          setSyncProgress(prev => ({
-            ...prev,
-            errorsCount: prev.errorsCount + 1,
-            currentStatus: `⚠️ Errore chunk ${chunkCount} - Interrompo per sicurezza`
-          }));
-          
-          // Interrompi al primo errore per evitare loop
-          break;
-        }
+      // Controlli di sicurezza
+      if (controller.signal.aborted) {
+        throw new Error('Sincronizzazione annullata');
       }
 
-      console.log(`✅ Sincronizzazione completata: ${allOrders.length} ordini in ${chunkCount} chunk`);
+      if (Date.now() - startTime > maxSyncTime) {
+        console.log('⏰ Timeout massimo raggiunto (5 minuti)');
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: '⏰ Timeout massimo raggiunto - Sincronizzazione interrotta'
+        }));
+        return [];
+      }
+
+      setSyncProgress(prev => ({
+        ...prev,
+        currentPage: 1,
+        totalPages: 1,
+        currentStatus: '📦 Chiamata singola per scaricare tutti gli ordini...'
+      }));
+
+      const response = await fetch('/.netlify/functions/shopify-sync-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          shopDomain: config.shopDomain,
+          accessToken: config.accessToken,
+          apiVersion: config.apiVersion,
+          limit: 10000, // Limite alto ma ragionevole per evitare duplicati
+          status: 'any',
+          useChunking: false, // Disabilita chunking per evitare duplicati
+          ...(daysBack && { daysBack: daysBack })
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Errore HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success || !data.orders) {
+        console.log('❌ Nessuna risposta valida');
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: '❌ Nessuna risposta valida dall\'API'
+        }));
+        return [];
+      }
+
+      // Se non ci sono ordini, abbiamo finito
+      if (data.orders.length === 0) {
+        console.log('✅ Nessun ordine trovato');
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: '✅ Nessun ordine trovato nel store'
+        }));
+        return [];
+      }
+
+      // Aggiungi ordini alla lista
+      allOrders.push(...data.orders);
+
+      // Calcola statistiche
+      const perfStats = calculatePerformanceStats(syncProgress.startTime, allOrders.length, 1);
+      
+      setSyncProgress(prev => ({
+        ...prev,
+        ordersDownloaded: allOrders.length,
+        currentStatus: `✅ Scaricamento completato - ${allOrders.length} ordini totali`,
+        averageSpeed: perfStats.averageSpeed,
+        estimatedTimeRemaining: null,
+        memoryUsage: Math.round(JSON.stringify(allOrders).length / 1024)
+      }));
+
+      // Salvataggio immediato
+      try {
+        await saveOrdersToStorage(allOrders, 'final');
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: `💾 Salvataggio completato - ${allOrders.length} ordini salvati`
+        }));
+      } catch (saveError) {
+        console.warn('⚠️ Errore nel salvataggio:', saveError);
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: `⚠️ Salvataggio parziale - ${allOrders.length} ordini scaricati`
+        }));
+      }
+
+      console.log(`✅ Sincronizzazione completata: ${allOrders.length} ordini in una singola chiamata`);
       return allOrders;
 
     } catch (error) {
+      if (error.name === 'AbortError') {
+        throw error;
+      }
+      
       console.error('Errore nella sincronizzazione:', error);
+      setSyncProgress(prev => ({
+        ...prev,
+        errorsCount: prev.errorsCount + 1,
+        currentStatus: `❌ Errore: ${error.message}`
+      }));
       throw error;
     }
 
@@ -940,10 +907,10 @@ const ShopifyOrdersPage = () => {
                   <div>
                     <p className="font-medium text-blue-700 mb-1">🛡️ Controlli di Sicurezza:</p>
                     <ul className="text-blue-600 space-y-1 text-xs">
-                      <li>• Timeout massimo: 10 minuti</li>
-                      <li>• Stop automatico se nessun ordine</li>
-                      <li>• Limite massimo: 50 chunk (50.000 ordini)</li>
-                      <li>• Metodo chunking sicuro con since_id</li>
+                      <li>• Timeout massimo: 5 minuti</li>
+                      <li>• UNA SOLA chiamata API (no duplicati)</li>
+                      <li>• Limite massimo: 10.000 ordini</li>
+                      <li>• Metodo semplificato e sicuro</li>
                     </ul>
                   </div>
                 </div>

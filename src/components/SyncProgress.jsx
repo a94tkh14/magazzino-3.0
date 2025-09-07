@@ -158,10 +158,10 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
 
         {/* Informazioni aggiuntive */}
         <div className="text-xs text-blue-600 space-y-1">
-          <p>• Nuovo metodo chunking sicuro con since_id</p>
-          <p>• Ogni chunk contiene fino a 1000 ordini per efficienza</p>
-          <p>• Massimo 50 chunk (50.000 ordini) per sicurezza</p>
-          <p>• Timeout di 10 minuti per evitare loop infiniti</p>
+          <p>• Metodo semplificato: UNA SOLA chiamata API</p>
+          <p>• Limite di 10.000 ordini per evitare duplicati</p>
+          <p>• Timeout di 5 minuti per massima sicurezza</p>
+          <p>• Nessun chunking per eliminare duplicati</p>
         </div>
 
         {/* Pulsante annulla */}
@@ -179,10 +179,10 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
         {/* Informazioni di sicurezza */}
         <div className="text-xs text-blue-600 space-y-1 bg-blue-50 p-3 rounded-lg">
           <p className="font-medium text-blue-700">🛡️ Controlli di Sicurezza Attivi:</p>
-          <p>• Timeout massimo: 10 minuti</p>
-          <p>• Stop automatico se nessun ordine trovato</p>
-          <p>• Limite massimo: 50 chunk (50.000 ordini)</p>
-          <p>• Metodo chunking sicuro con since_id</p>
+          <p>• Timeout massimo: 5 minuti</p>
+          <p>• UNA SOLA chiamata API (no duplicati)</p>
+          <p>• Limite massimo: 10.000 ordini</p>
+          <p>• Metodo semplificato e sicuro</p>
           <p>• Pulsante di emergenza sempre disponibile</p>
         </div>
       </CardContent>
