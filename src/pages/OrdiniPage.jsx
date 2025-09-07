@@ -6,7 +6,8 @@ import {
   downloadAllShopifyOrders, 
   downloadOrdersByStatus, 
   convertShopifyOrder, 
-  getShopifyCredentials 
+  getShopifyCredentials,
+  testShopifyPagination
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -261,6 +262,18 @@ const OrdiniPage = () => {
         currentStatus: ''
       });
       setAbortController(null);
+    }
+  };
+
+  const handleTestPagination = async () => {
+    try {
+      console.log('🧪 Avvio test paginazione...');
+      const result = await testShopifyPagination();
+      console.log('✅ Test completato:', result);
+      alert('Test paginazione completato! Controlla la console per i dettagli.');
+    } catch (error) {
+      console.error('❌ Errore test paginazione:', error);
+      alert(`Errore test paginazione: ${error.message}`);
     }
   };
 
@@ -595,6 +608,14 @@ const OrdiniPage = () => {
           >
             <Download className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             {isLoading ? 'SINCRONIZZAZIONE...' : '🔄 METODO ALTERNATIVO'}
+          </Button>
+          
+          <Button 
+            onClick={() => handleTestPagination()} 
+            disabled={isLoading}
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            🧪 TEST PAGINAZIONE
           </Button>
         </div>
       </div>

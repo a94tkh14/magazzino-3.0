@@ -57,7 +57,8 @@ exports.handler = async (event, context) => {
     }
     
     if (pageInfo) {
-      url += `&page_info=${encodeURIComponent(pageInfo)}`;
+      // Se pageInfo è fornito, usa quello invece di costruire l'URL
+      url = pageInfo;
     }
     
     if (daysBack) {
@@ -67,6 +68,7 @@ exports.handler = async (event, context) => {
     }
 
     console.log(`🔄 Fetching Shopify orders from: ${url}`);
+    console.log(`📊 Parameters: limit=${limit}, status=${status}, pageInfo=${pageInfo ? 'provided' : 'none'}`);
 
     // Timeout di 30 secondi per chiamate lunghe
     const controller = new AbortController();
@@ -122,6 +124,7 @@ exports.handler = async (event, context) => {
     }
 
     console.log(`✅ Successfully fetched ${orders.length} orders`);
+    console.log(`📄 Pagination info: hasNext=${!!nextPageInfo}, hasPrev=${!!prevPageInfo}`);
 
     return {
       statusCode: 200,

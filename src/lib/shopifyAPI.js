@@ -72,13 +72,14 @@ export const fetchShopifyOrders = async (params = {}) => {
   return await response.json();
 };
 
-// Funzione per scaricare TUTTI gli ordini con gestione robusta
+// Funzione per scaricare TUTTI gli ordini con paginazione corretta
 export const downloadAllShopifyOrders = async (onProgress = null, abortController = null) => {
   const allOrders = [];
   const uniqueOrderIds = new Set();
   let pageCount = 0;
   const maxPages = 1000; // Limite di sicurezza
   const ordersPerPage = 250;
+  let nextPageInfo = null;
   
   console.log('🚀 INIZIO DOWNLOAD MASSIVO ORDINI SHOPIFY...');
   
@@ -107,7 +108,7 @@ export const downloadAllShopifyOrders = async (onProgress = null, abortControlle
         const response = await fetchShopifyOrders({
           limit: ordersPerPage,
           status: 'any',
-          pageInfo: pageCount === 1 ? null : undefined // Prima pagina senza pageInfo
+          pageInfo: nextPageInfo // Usa il pageInfo della pagina precedente
         });
 
         if (!response.success) {
@@ -143,8 +144,11 @@ export const downloadAllShopifyOrders = async (onProgress = null, abortControlle
           });
         }
 
+        // Aggiorna nextPageInfo per la prossima iterazione
+        nextPageInfo = response.pagination?.nextPageInfo;
+        
         // Controlla se c'è una pagina successiva
-        if (!response.pagination?.hasNext) {
+        if (!nextPageInfo) {
           console.log(`✅ Pagina ${pageCount} - Ultima pagina raggiunta`);
           break;
         }
@@ -170,7 +174,8 @@ export const downloadAllShopifyOrders = async (onProgress = null, abortControlle
       }
     }
 
-    console.log(`✅ DOWNLOAD COMPLETATO: ${allOrders.length} ordini unici totali`);
+    console.log(`🎉 DOWNLOAD COMPLETATO: ${allOrders.length} ordini totali scaricati`);
+    
     return allOrders;
 
   } catch (error) {
@@ -194,7 +199,9 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
 
   console.log('🚀 INIZIO DOWNLOAD PER STATUS...');
 
-  for (const { status, description } of statuses) {
+  for (let statusIndex = 0; statusIndex < statuses.length; statusIndex++) {
+    const { status, description } = statuses[statusIndex];
+    
     if (abortController?.signal?.aborted) {
       throw new Error('Download annullato dall\'utente');
     }
@@ -203,7 +210,7 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
     
     if (onProgress) {
       onProgress({
-        currentPage: 0,
+        currentPage: statusIndex + 1,
         totalPages: statuses.length,
         ordersDownloaded: allOrders.length,
         currentStatus: `Scaricamento ${description}...`
@@ -213,6 +220,7 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
     try {
       let pageCount = 0;
       const maxPages = 200; // Limite per status
+      let nextPageInfo = null;
       
       while (pageCount < maxPages) {
         pageCount++;
@@ -229,7 +237,7 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
         const response = await fetchShopifyOrders({
           limit: 250,
           status: status,
-          pageInfo: pageCount === 1 ? null : undefined
+          pageInfo: nextPageInfo
         });
 
         if (!response.success || !response.orders || response.orders.length === 0) {
@@ -249,7 +257,10 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
 
         console.log(`✅ ${description} pagina ${pageCount}: ${newOrdersCount} ordini nuovi`);
 
-        if (!response.pagination?.hasNext) {
+        // Aggiorna nextPageInfo per la prossima pagina
+        nextPageInfo = response.pagination?.nextPageInfo;
+        
+        if (!nextPageInfo) {
           break;
         }
 
@@ -268,4 +279,46 @@ export const downloadOrdersByStatus = async (onProgress = null, abortController 
 
   console.log(`✅ DOWNLOAD PER STATUS COMPLETATO: ${allOrders.length} ordini unici totali`);
   return allOrders;
+};
+
+// Funzione di test per verificare la paginazione
+export const testShopifyPagination = async () => {
+  console.log('🧪 TEST PAGINAZIONE SHOPIFY...');
+  
+  try {
+    const response = await fetchShopifyOrders({
+      limit: 250,
+      status: 'any',
+      pageInfo: null
+    });
+
+    console.log('📊 Risposta prima pagina:', {
+      success: response.success,
+      ordersCount: response.orders?.length || 0,
+      hasNext: response.pagination?.hasNext,
+      nextPageInfo: response.pagination?.nextPageInfo ? 'presente' : 'assente'
+    });
+
+    if (response.pagination?.nextPageInfo) {
+      console.log('🔄 Testando seconda pagina...');
+      
+      const response2 = await fetchShopifyOrders({
+        limit: 250,
+        status: 'any',
+        pageInfo: response.pagination.nextPageInfo
+      });
+
+      console.log('📊 Risposta seconda pagina:', {
+        success: response2.success,
+        ordersCount: response2.orders?.length || 0,
+        hasNext: response2.pagination?.hasNext,
+        nextPageInfo: response2.pagination?.nextPageInfo ? 'presente' : 'assente'
+      });
+    }
+
+    return response;
+  } catch (error) {
+    console.error('❌ Errore test paginazione:', error);
+    throw error;
+  }
 };
