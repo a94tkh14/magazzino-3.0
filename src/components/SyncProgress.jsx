@@ -169,12 +169,21 @@ const SyncProgress = ({ syncProgress, onCancel }) => {
           <div className="flex justify-center pt-2">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-sm font-medium text-red-700 bg-red-100 border border-red-300 rounded-md hover:bg-red-200 transition-colors"
+              className="px-6 py-3 text-sm font-medium text-red-700 bg-red-100 border border-red-300 rounded-md hover:bg-red-200 transition-colors shadow-sm"
             >
-              Annulla Sincronizzazione
+              🛑 Ferma Sincronizzazione
             </button>
           </div>
         )}
+
+        {/* Informazioni di sicurezza */}
+        <div className="text-xs text-blue-600 space-y-1 bg-blue-50 p-3 rounded-lg">
+          <p className="font-medium text-blue-700">🛡️ Controlli di Sicurezza Attivi:</p>
+          <p>• Timeout massimo: 30 minuti</p>
+          <p>• Stop automatico dopo 3 pagine vuote consecutive</p>
+          <p>• Limite massimo: 1000 pagine (250.000 ordini)</p>
+          <p>• Pulsante di emergenza sempre disponibile</p>
+        </div>
       </CardContent>
     </Card>
   );

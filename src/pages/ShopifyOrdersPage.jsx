@@ -296,6 +296,10 @@ const ShopifyOrdersPage = () => {
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
     let retryDelay = 1000; // Delay iniziale per retry
+    let emptyPagesCount = 0; // Contatore per pagine vuote consecutive
+    const maxEmptyPages = 3; // Massimo pagine vuote consecutive prima di fermarsi
+    const startTime = Date.now();
+    const maxSyncTime = 30 * 60 * 1000; // 30 minuti massimo
 
     setSyncProgress(prev => ({
       ...prev,
@@ -307,6 +311,26 @@ const ShopifyOrdersPage = () => {
       // Controlla se la sincronizzazione è stata annullata
       if (controller.signal.aborted) {
         throw new Error('Sincronizzazione annullata');
+      }
+
+      // Controlla timeout massimo (30 minuti)
+      if (Date.now() - startTime > maxSyncTime) {
+        console.log('⏰ Timeout massimo raggiunto (30 minuti), interrompo la sincronizzazione');
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: '⏰ Timeout massimo raggiunto (30 minuti) - Sincronizzazione interrotta'
+        }));
+        break;
+      }
+
+      // Controlla se abbiamo troppe pagine vuote consecutive
+      if (emptyPagesCount >= maxEmptyPages) {
+        console.log(`✅ Trovate ${maxEmptyPages} pagine vuote consecutive, sincronizzazione completata`);
+        setSyncProgress(prev => ({
+          ...prev,
+          currentStatus: `✅ Sincronizzazione completata - ${maxEmptyPages} pagine vuote consecutive`
+        }));
+        break;
       }
 
       pageCount++;
@@ -374,6 +398,26 @@ const ShopifyOrdersPage = () => {
             throw new Error('Risposta API non valida');
           }
 
+          // Controlla se la pagina è vuota
+          if (data.orders.length === 0) {
+            emptyPagesCount++;
+            console.log(`📄 Pagina ${pageCount} vuota (${emptyPagesCount}/${maxEmptyPages})`);
+            
+            setSyncProgress(prev => ({
+              ...prev,
+              currentStatus: `📄 Pagina ${pageCount} vuota (${emptyPagesCount}/${maxEmptyPages}) - Continuo...`
+            }));
+            
+            // Se abbiamo troppe pagine vuote consecutive, esci
+            if (emptyPagesCount >= maxEmptyPages) {
+              console.log(`✅ Trovate ${maxEmptyPages} pagine vuote consecutive, sincronizzazione completata`);
+              break;
+            }
+          } else {
+            // Reset contatore pagine vuote se troviamo ordini
+            emptyPagesCount = 0;
+          }
+
           // Aggiungi ordini alla lista
           allOrders.push(...data.orders);
           consecutiveErrors = 0; // Reset errori consecutivi
@@ -409,9 +453,14 @@ const ShopifyOrdersPage = () => {
           // Controlla se ci sono più pagine
           if (data.pagination && data.pagination.next && data.pagination.next.pageInfo) {
             pageInfo = data.pagination.next.pageInfo;
+            console.log(`➡️ Prossima pagina disponibile: ${data.pagination.next.pageInfo.substring(0, 20)}...`);
           } else {
             // Nessuna pagina successiva
             console.log(`✅ Scaricamento ordini attivi completato: ${allOrders.length} ordini`);
+            setSyncProgress(prev => ({
+              ...prev,
+              currentStatus: `✅ Scaricamento ordini attivi completato: ${allOrders.length} ordini`
+            }));
             break;
           }
 
@@ -949,12 +998,12 @@ const ShopifyOrdersPage = () => {
                     </ul>
                   </div>
                   <div>
-                    <p className="font-medium text-blue-700 mb-1">📊 Monitoraggio:</p>
+                    <p className="font-medium text-blue-700 mb-1">🛡️ Controlli di Sicurezza:</p>
                     <ul className="text-blue-600 space-y-1 text-xs">
-                      <li>• Velocità di scaricamento (ordini/sec)</li>
-                      <li>• Tempo stimato rimanente</li>
-                      <li>• Utilizzo memoria in tempo reale</li>
-                      <li>• Contatore errori e retry</li>
+                      <li>• Timeout massimo: 30 minuti</li>
+                      <li>• Stop dopo 3 pagine vuote consecutive</li>
+                      <li>• Limite massimo: 1000 pagine</li>
+                      <li>• Pulsante di emergenza sempre attivo</li>
                     </ul>
                   </div>
                 </div>
