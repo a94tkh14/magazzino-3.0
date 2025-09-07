@@ -52,8 +52,13 @@ exports.handler = async (event, context) => {
     let url;
     
     if (pageInfo) {
-      // Se pageInfo è fornito, usa quello direttamente (già contiene tutti i parametri)
-      url = pageInfo;
+      // Se pageInfo è fornito, assicurati che sia un URL assoluto
+      if (pageInfo.startsWith('http')) {
+        url = pageInfo;
+      } else {
+        // Se è relativo, costruisci l'URL completo
+        url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?${pageInfo}`;
+      }
       console.log(`📄 Using pageInfo URL: ${url}`);
     } else {
       // Costruisci URL da zero
@@ -73,6 +78,11 @@ exports.handler = async (event, context) => {
 
     console.log(`🔄 Fetching Shopify orders from: ${url}`);
     console.log(`📊 Parameters: limit=${limit}, status=${status}, pageInfo=${pageInfo ? 'provided' : 'none'}`);
+    if (pageInfo) {
+      console.log(`🔍 pageInfo value: ${pageInfo}`);
+      console.log(`🔍 pageInfo type: ${typeof pageInfo}`);
+      console.log(`🔍 pageInfo starts with http: ${pageInfo.startsWith('http')}`);
+    }
 
     // Timeout di 30 secondi per chiamate lunghe
     const controller = new AbortController();

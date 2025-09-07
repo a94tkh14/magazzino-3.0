@@ -13,7 +13,8 @@ import {
   testShopifyPagination,
   testAllOrdersCount,
   testArchivedOrders,
-  debugPaginationDetailed
+  debugPaginationDetailed,
+  testPageInfo
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -339,6 +340,18 @@ const OrdiniPage = () => {
     } catch (error) {
       console.error('❌ Errore debug paginazione:', error);
       alert(`Errore debug paginazione: ${error.message}`);
+    }
+  };
+
+  const handleTestPageInfo = async () => {
+    try {
+      console.log('🔍 Avvio test pageInfo...');
+      const result = await testPageInfo();
+      console.log('✅ Test pageInfo completato:', result);
+      alert('Test pageInfo completato! Controlla la console per i dettagli.');
+    } catch (error) {
+      console.error('❌ Errore test pageInfo:', error);
+      alert(`Errore test pageInfo: ${error.message}`);
     }
   };
 
@@ -927,6 +940,14 @@ const OrdiniPage = () => {
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
             🔍 DEBUG DETTAGLIATO
+          </Button>
+          
+          <Button 
+            onClick={() => handleTestPageInfo()} 
+            disabled={isLoading}
+            className="bg-pink-600 hover:bg-pink-700 text-white"
+          >
+            🔗 TEST PAGEINFO
           </Button>
           
           <Button 

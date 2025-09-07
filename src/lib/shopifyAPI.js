@@ -591,6 +591,62 @@ export const debugPaginationDetailed = async () => {
 }
 };
 
+// Funzione di test per verificare il pageInfo
+export const testPageInfo = async () => {
+  console.log('🔍 TEST PAGEINFO...');
+  
+  try {
+    // Prima pagina
+    console.log('📄 Test prima pagina...');
+    const response1 = await fetchShopifyOrders({
+      limit: 10,
+      status: 'closed',
+      pageInfo: null
+    });
+
+    if (!response1.success) {
+      throw new Error('Errore prima pagina');
+    }
+
+    console.log('✅ Prima pagina OK:', {
+      ordersCount: response1.orders?.length || 0,
+      hasNext: response1.pagination?.hasNext,
+      nextPageInfo: response1.pagination?.nextPageInfo
+    });
+
+    if (response1.pagination?.nextPageInfo) {
+      console.log('📄 Test seconda pagina con pageInfo...');
+      console.log('🔍 pageInfo value:', response1.pagination.nextPageInfo);
+      console.log('🔍 pageInfo type:', typeof response1.pagination.nextPageInfo);
+      console.log('🔍 pageInfo starts with http:', response1.pagination.nextPageInfo.startsWith('http'));
+      
+      const response2 = await fetchShopifyOrders({
+        limit: 10,
+        status: 'closed',
+        pageInfo: response1.pagination.nextPageInfo
+      });
+
+      if (response2.success) {
+        console.log('✅ Seconda pagina OK:', {
+          ordersCount: response2.orders?.length || 0,
+          hasNext: response2.pagination?.hasNext,
+          nextPageInfo: response2.pagination?.nextPageInfo
+        });
+      } else {
+        console.error('❌ Errore seconda pagina:', response2);
+      }
+    } else {
+      console.log('ℹ️ Nessuna seconda pagina disponibile');
+    }
+
+    return { success: true, message: 'Test pageInfo completato' };
+    
+  } catch (error) {
+    console.error('❌ Errore test pageInfo:', error);
+    throw error;
+  }
+};
+
 // Funzione per scaricare senza filtri di status (approccio alternativo)
 export const downloadAllOrdersNoStatus = async (onProgress = null, abortController = null) => {
   const allOrders = [];
