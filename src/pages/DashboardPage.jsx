@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { loadMagazzinoData, loadOrdersData } from '../lib/magazzinoStorage';
+import { loadLargeData } from '../lib/dataManager';
 import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, RefreshCw, ArrowUpRight, ArrowDownRight, ArrowRight, TruckIcon } from 'lucide-react';
 import { formatPrice } from '../lib/utils';
 import DateTimeRangePicker from '../components/DateTimeRangePicker';
@@ -11,6 +12,7 @@ import { getSupplierOrders, ORDER_STATUS } from '../lib/supplierOrders';
 
 const DashboardPage = () => {
   const [orders, setOrders] = useState([]);
+  const [csvOrders, setCsvOrders] = useState([]);
   const [magazzinoData, setMagazzinoData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [topProducts, setTopProducts] = useState([]);
@@ -19,6 +21,15 @@ const DashboardPage = () => {
     totalRevenue: 0,
     totalProducts: 0,
     lowStockCount: 0
+  });
+  
+  // Statistiche ordini CSV
+  const [csvStats, setCsvStats] = useState({
+    totalOrders: 0,
+    totalValue: 0,
+    totalShippingPaid: 0,
+    totalDiscounts: 0,
+    totalGeneral: 0
   });
   
   // Periodo principale
@@ -119,10 +130,38 @@ const DashboardPage = () => {
     });
   };
 
+  // Funzione per filtrare ordini per data
+  const filterOrdersByDateRange = (orders, startDate, endDate) => {
+    return orders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+  };
+
   // Carica gli ordini dal database
   useEffect(() => {
     const loadOrders = async () => {
       try {
+        // Carica ordini CSV
+        const csvOrdersData = await loadLargeData('shopify_orders');
+        setCsvOrders(csvOrdersData || []);
+        
+        // Calcola statistiche ordini CSV
+        if (csvOrdersData && csvOrdersData.length > 0) {
+          const filteredCsvOrders = filterOrdersByDateRange(csvOrdersData, mainDateRange.startDate, mainDateRange.endDate);
+          
+          const csvStatsData = {
+            totalOrders: filteredCsvOrders.length,
+            totalValue: filteredCsvOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
+            totalShippingPaid: filteredCsvOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
+            totalDiscounts: filteredCsvOrders.reduce((sum, order) => sum + (order.discount_amount || 0), 0),
+            totalGeneral: 0
+          };
+          
+          csvStatsData.totalGeneral = csvStatsData.totalValue + csvStatsData.totalShippingPaid - csvStatsData.totalDiscounts;
+          setCsvStats(csvStatsData);
+        }
+        
         // Carica dal database
         // const dbOrders = await loadOrdersData();
         // if (dbOrders && dbOrders.length > 0) {
@@ -210,6 +249,24 @@ const DashboardPage = () => {
     };
     loadTipologie();
   }, []);
+
+  // Aggiorna statistiche CSV quando cambia il periodo
+  useEffect(() => {
+    if (csvOrders.length > 0) {
+      const filteredCsvOrders = filterOrdersByDateRange(csvOrders, mainDateRange.startDate, mainDateRange.endDate);
+      
+      const csvStatsData = {
+        totalOrders: filteredCsvOrders.length,
+        totalValue: filteredCsvOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
+        totalShippingPaid: filteredCsvOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
+        totalDiscounts: filteredCsvOrders.reduce((sum, order) => sum + (order.discount_amount || 0), 0),
+        totalGeneral: 0
+      };
+      
+      csvStatsData.totalGeneral = csvStatsData.totalValue + csvStatsData.totalShippingPaid - csvStatsData.totalDiscounts;
+      setCsvStats(csvStatsData);
+    }
+  }, [csvOrders, mainDateRange]);
 
   // Gestione filtri rapidi per periodo principale
   useEffect(() => {
@@ -890,6 +947,107 @@ const DashboardPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sezione Statistiche Ordini CSV */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5" />
+            Statistiche Ordini CSV
+          </CardTitle>
+          <CardDescription>
+            Dati degli ordini importati dal CSV per il periodo selezionato
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Totale Ordini</CardTitle>
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{csvStats.totalOrders}</div>
+                <p className="text-xs text-muted-foreground">
+                  Ordini nel periodo
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Valore Totale</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{new Intl.NumberFormat('it-IT', {
+                  style: 'currency',
+                  currency: 'EUR',
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }).format(csvStats.totalValue)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Somma ordini
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Spedizioni Pagate</CardTitle>
+                <TruckIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{new Intl.NumberFormat('it-IT', {
+                  style: 'currency',
+                  currency: 'EUR',
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }).format(csvStats.totalShippingPaid)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Costi spedizione
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Sconti Eseguiti</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{new Intl.NumberFormat('it-IT', {
+                  style: 'currency',
+                  currency: 'EUR',
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }).format(csvStats.totalDiscounts)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Sconti applicati
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Totale Generale</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">{new Intl.NumberFormat('it-IT', {
+                  style: 'currency',
+                  currency: 'EUR',
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }).format(csvStats.totalGeneral)}</div>
+                <p className="text-xs text-muted-foreground">
+                  Valore + Spedizione - Sconti
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Statistiche Ordini Fornitori */}
       <Card>
