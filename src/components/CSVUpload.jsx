@@ -2,6 +2,16 @@ import React, { useState } from 'react';
 import { saveLargeData, loadLargeData } from '../lib/dataManager';
 import { Upload, FileText, CheckCircle, AlertCircle, RefreshCw, Database } from 'lucide-react';
 
+// Funzione per formattare i numeri in italiano (con virgola)
+const formatPrice = (price) => {
+  return new Intl.NumberFormat('it-IT', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(price);
+};
+
 const CSVUpload = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -131,43 +141,105 @@ const CSVUpload = () => {
         const group = orderGroups[orderName];
         const orderData = group.orderData;
 
-        // Converti in formato compatibile con il sistema (versione compressa)
+        // Converti in formato completo con tutti i campi richiesti
         const convertedOrder = {
+          // A - Numero ordine (raggruppato)
           id: orderData['Id'] || `csv_${index}`,
           order_number: orderData['Name'] || orderData['name'] || index,
+          
+          // B - Email cliente
           email: orderData['Email'] || orderData['email'] || '',
-          total_price: parseFloat(orderData['Total'] || orderData['total'] || '0'),
-          currency: orderData['Currency'] || orderData['currency'] || 'EUR',
+          
+          // C - Status pagamento (paid = pagato)
           financial_status: orderData['Financial Status'] || orderData['financial_status'] || 'paid',
-          fulfillment_status: orderData['Fulfillment Status'] || orderData['fulfillment_status'] || 'unfulfilled',
+          is_paid: (orderData['Financial Status'] || '').toLowerCase() === 'paid',
+          
+          // D - Data e orario acquisto
           created_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
-          updated_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
+          paid_at: orderData['Paid at'] || null,
+          
+          // E - Se è stato spedito o no
+          fulfillment_status: orderData['Fulfillment Status'] || orderData['fulfillment_status'] || 'unfulfilled',
+          is_shipped: (orderData['Fulfillment Status'] || '').toLowerCase() === 'fulfilled',
+          fulfilled_at: orderData['Fulfilled at'] || null,
+          
+          // I - Sub totale
+          subtotal: parseFloat(orderData['Subtotal'] || '0'),
+          
+          // J - Costo spedizione (se import = 0 vuol dire che non l'ha pagata)
+          shipping_cost: parseFloat(orderData['Shipping'] || '0'),
+          is_free_shipping: parseFloat(orderData['Shipping'] || '0') === 0,
+          shipping_method: orderData['Shipping Method'] || '',
+          
+          // L - Totale che ha pagato
+          total_price: parseFloat(orderData['Total'] || '0'),
+          
+          // M - Codice sconto utilizzato
+          discount_code: orderData['Discount Code'] || '',
+          
+          // N - Quanto sconto ha ottenuto
+          discount_amount: parseFloat(orderData['Discount Amount'] || '0'),
+          
+          // Altre informazioni
+          currency: orderData['Currency'] || 'EUR',
+          taxes: parseFloat(orderData['Taxes'] || '0'),
+          payment_method: orderData['Payment Method'] || '',
+          payment_reference: orderData['Payment Reference'] || '',
           source: 'csv',
-          // Dati cliente compressi
+          
+          // Dati cliente
           customer: {
             id: orderData['Id'] || orderData['id'] || null,
             email: orderData['Email'] || orderData['email'] || '',
             name: orderData['Billing Name'] || orderData['billing_name'] || ''
           },
-          // Indirizzi compressi (solo se non vuoti)
+          
+          // Indirizzo fatturazione (Y,Z,AA,AB,AD,AE,AF,AG,AH,AI,AJ)
           billing: orderData['Billing Address1'] ? {
             name: orderData['Billing Name'] || '',
-            address: orderData['Billing Address1'] || '',
+            street: orderData['Billing Street'] || '',
+            address1: orderData['Billing Address1'] || '',
+            address2: orderData['Billing Address2'] || '',
+            company: orderData['Billing Company'] || '',
             city: orderData['Billing City'] || '',
             zip: orderData['Billing Zip'] || '',
+            province: orderData['Billing Province'] || '',
             country: orderData['Billing Country'] || '',
             phone: orderData['Billing Phone'] || ''
           } : null,
+          
+          // Indirizzo spedizione (Y,Z,AA,AB,AD,AE,AF,AG,AH,AI,AJ)
           shipping: orderData['Shipping Address1'] ? {
             name: orderData['Shipping Name'] || '',
-            address: orderData['Shipping Address1'] || '',
+            street: orderData['Shipping Street'] || '',
+            address1: orderData['Shipping Address1'] || '',
+            address2: orderData['Shipping Address2'] || '',
+            company: orderData['Shipping Company'] || '',
             city: orderData['Shipping City'] || '',
             zip: orderData['Shipping Zip'] || '',
+            province: orderData['Shipping Province'] || '',
             country: orderData['Shipping Country'] || '',
             phone: orderData['Shipping Phone'] || ''
           } : null,
-          // Prodotti raggruppati
-          products: group.products
+          
+          // Prodotti con tutti i dettagli (Q,R,S,U)
+          products: group.products.map(product => ({
+            // Q - Quantità dei prodotti
+            quantity: product.qty,
+            // R - Nome del prodotto
+            name: product.name,
+            // S - Prezzo del prodotto
+            price: product.price,
+            // U - SKU code del prodotto
+            sku: product.sku,
+            // Altri dettagli
+            vendor: product.vendor,
+            compare_at_price: parseFloat(orderData['Lineitem compare at price'] || '0'),
+            requires_shipping: orderData['Lineitem requires shipping'] === 'true',
+            taxable: orderData['Lineitem taxable'] === 'true',
+            fulfillment_status: orderData['Lineitem fulfillment status'] || 'pending',
+            discount: parseFloat(orderData['Lineitem discount'] || '0')
+          }))
         };
 
         orders.push(convertedOrder);

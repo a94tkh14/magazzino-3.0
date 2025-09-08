@@ -362,15 +362,18 @@ const OrdiniPage = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Cliente
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Data
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Totale
-                    </th>
+                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                       Data
+                     </th>
+                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                       Status
+                     </th>
+                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                       Spedizione
+                     </th>
+                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                       Totale
+                     </th>
                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                        Prodotti
                      </th>
@@ -412,8 +415,33 @@ const OrdiniPage = () => {
                            {ordine.financial_status}
                          </span>
                        </td>
+                       <td className="px-6 py-4 whitespace-nowrap">
+                         <div className="text-sm">
+                           <div className={`font-medium ${
+                             ordine.is_shipped ? 'text-green-600' : 'text-orange-600'
+                           }`}>
+                             {ordine.is_shipped ? 'SPEDITO' : 'NON SPEDITO'}
+                           </div>
+                           {ordine.shipping_cost !== undefined && (
+                             <div className="text-xs text-gray-500">
+                               {ordine.is_free_shipping ? 'GRATUITA' : 
+                                 new Intl.NumberFormat('it-IT', {
+                                   style: 'currency',
+                                   currency: 'EUR',
+                                   minimumFractionDigits: 2,
+                                   maximumFractionDigits: 2
+                                 }).format(parseFloat(ordine.shipping_cost || 0))}
+                             </div>
+                           )}
+                         </div>
+                       </td>
                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                         €{parseFloat(ordine.total_price || 0).toFixed(2)}
+                         {new Intl.NumberFormat('it-IT', {
+                           style: 'currency',
+                           currency: 'EUR',
+                           minimumFractionDigits: 2,
+                           maximumFractionDigits: 2
+                         }).format(parseFloat(ordine.total_price || 0))}
                        </td>
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                          {ordine.products?.length || ordine.line_items?.length || 0} prodotti

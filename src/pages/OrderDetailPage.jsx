@@ -74,6 +74,13 @@ const OrderDetailPage = ({ orderId, onBack }) => {
     }).format(parseFloat(price || 0));
   };
 
+  const formatNumber = (number) => {
+    return new Intl.NumberFormat('it-IT', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(parseFloat(number || 0));
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('it-IT', {
       year: 'numeric',
@@ -277,39 +284,82 @@ const OrderDetailPage = ({ orderId, onBack }) => {
         )}
       </div>
 
-      {/* Prodotti */}
+      {/* Prodotti Dettagliati */}
       {order.products && order.products.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
               <Package className="w-5 h-5 mr-2" />
-              Prodotti ({order.products.length})
+              Prodotti Dettagliati ({order.products.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {order.products.map((item, index) => (
-                <div key={index} className="border rounded-lg p-4">
+                <div key={index} className="border rounded-lg p-4 bg-gray-50">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{item.name}</h4>
-                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                      <h4 className="font-medium text-gray-900 text-lg">{item.name}</h4>
+                      <div className="mt-3 space-y-2 text-sm">
                         <div className="flex items-center">
-                          <Tag className="w-4 h-4 mr-2" />
-                          <span>SKU: {item.sku || 'N/A'}</span>
+                          <Tag className="w-4 h-4 mr-2 text-blue-600" />
+                          <span className="font-medium">SKU: {item.sku || 'N/A'}</span>
                         </div>
-                        <div>Quantità: {item.qty}</div>
-                        <div>Prezzo unitario: {formatPrice(item.price)}</div>
-                        {item.vendor && <div>Vendor: {item.vendor}</div>}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-gray-600">Quantità:</span>
+                            <span className="ml-2 font-medium">{item.quantity}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Prezzo unitario:</span>
+                            <span className="ml-2 font-medium">{formatPrice(item.price)}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Vendor:</span>
+                            <span className="ml-2 font-medium">{item.vendor || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Prezzo confronto:</span>
+                            <span className="ml-2 font-medium">{formatPrice(item.compare_at_price)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4 mt-2">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            item.requires_shipping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {item.requires_shipping ? 'Richiede spedizione' : 'Non richiede spedizione'}
+                          </span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            item.taxable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {item.taxable ? 'Tassabile' : 'Non tassabile'}
+                          </span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            item.fulfillment_status === 'fulfilled' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {item.fulfillment_status || 'Pending'}
+                          </span>
+                        </div>
+                        {item.discount > 0 && (
+                          <div className="text-green-600">
+                            <span className="text-gray-600">Sconto prodotto:</span>
+                            <span className="ml-2 font-medium">-{formatPrice(item.discount)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="text-right ml-4">
-                      <div className="text-lg font-semibold text-gray-900">
-                        {formatPrice(item.price * item.qty)}
+                      <div className="text-xl font-bold text-gray-900">
+                        {formatPrice(item.price * item.quantity)}
                       </div>
                       <div className="text-sm text-gray-600">
-                        {item.qty} × {formatPrice(item.price)}
+                        {item.quantity} × {formatPrice(item.price)}
                       </div>
+                      {item.compare_at_price > item.price && (
+                        <div className="text-xs text-green-600 mt-1">
+                          Risparmio: {formatPrice(item.compare_at_price - item.price)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -361,24 +411,70 @@ const OrderDetailPage = ({ orderId, onBack }) => {
         </Card>
       )}
 
-      {/* Riepilogo Finanziario */}
+      {/* Riepilogo Finanziario Dettagliato */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
             <CreditCard className="w-5 h-5 mr-2" />
-            Riepilogo Finanziario
+            Riepilogo Finanziario Dettagliato
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="flex justify-between text-lg">
-              <span className="font-medium">Totale Ordine:</span>
-              <span className="font-bold text-xl">{formatPrice(order.total_price)}</span>
+          <div className="space-y-4">
+            {/* Sub Totale */}
+            <div className="flex justify-between">
+              <span className="text-gray-600">Sub Totale:</span>
+              <span className="font-medium">{formatPrice(order.subtotal)}</span>
             </div>
-            <div className="text-sm text-gray-600">
+            
+            {/* Costo Spedizione */}
+            <div className="flex justify-between">
+              <span className="text-gray-600">Costo Spedizione:</span>
+              <span className={`font-medium ${order.is_free_shipping ? 'text-green-600' : ''}`}>
+                {order.is_free_shipping ? 'GRATUITA' : formatPrice(order.shipping_cost)}
+              </span>
+            </div>
+            
+            {/* Metodo Spedizione */}
+            {order.shipping_method && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Metodo Spedizione:</span>
+                <span className="font-medium">{order.shipping_method}</span>
+              </div>
+            )}
+            
+            {/* Sconto */}
+            {order.discount_amount > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Sconto ({order.discount_code || 'Codice sconto'}):</span>
+                <span className="font-medium">-{formatPrice(order.discount_amount)}</span>
+              </div>
+            )}
+            
+            {/* Tasse */}
+            {order.taxes > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Tasse:</span>
+                <span className="font-medium">{formatPrice(order.taxes)}</span>
+              </div>
+            )}
+            
+            {/* Separatore */}
+            <div className="border-t pt-2"></div>
+            
+            {/* Totale Finale */}
+            <div className="flex justify-between text-lg font-bold">
+              <span>Totale Pagato:</span>
+              <span className="text-xl">{formatPrice(order.total_price)}</span>
+            </div>
+            
+            {/* Informazioni Pagamento */}
+            <div className="text-sm text-gray-600 space-y-1">
               <div>Valuta: {order.currency || 'EUR'}</div>
               <div>Status Pagamento: {getStatusLabel(order.financial_status)}</div>
-              <div>Status Fulfillment: {order.fulfillment_status || 'N/A'}</div>
+              <div>Status Spedizione: {order.is_shipped ? 'SPEDITO' : 'NON SPEDITO'}</div>
+              {order.payment_method && <div>Metodo Pagamento: {order.payment_method}</div>}
+              {order.payment_reference && <div>Riferimento Pagamento: {order.payment_reference}</div>}
             </div>
           </div>
         </CardContent>
