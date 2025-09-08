@@ -10,6 +10,7 @@ import {
   downloadAllOrdersNoStatus,
   downloadAllOrdersComplete,
   downloadAllOrdersSimple,
+  downloadAllOrdersWithSinceId,
   convertShopifyOrder, 
   getShopifyCredentials,
   testShopifyPagination,
@@ -558,8 +559,8 @@ const OrdiniPage = () => {
       // Usa il metodo semplice
       const allOrders = await downloadAllOrdersSimple(
         (progress) => {
-    setSyncProgress(prev => ({
-      ...prev,
+          setSyncProgress(prev => ({
+            ...prev,
             ...progress,
             currentStatus: progress.currentStatus || 'Download semplice in corso...'
           }));
@@ -584,6 +585,80 @@ const OrdiniPage = () => {
     } catch (err) {
       console.error('❌ ERRORE DOWNLOAD SEMPLICE:', err);
       setError(`Errore download semplice: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
+  const handleDownloadWithSinceId = async () => {
+    if (!window.confirm('Vuoi avviare il download con SINCE_ID? Questo usa since_id per paginazione (alternativa al pageInfo).')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Download con since_id in corso...'
+    });
+
+    try {
+      console.log('🚀 INIZIO DOWNLOAD CON SINCE_ID...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Usa il metodo con since_id
+      const allOrders = await downloadAllOrdersWithSinceId(
+        (progress) => {
+          setSyncProgress(prev => ({
+            ...prev,
+            ...progress,
+            currentStatus: progress.currentStatus || 'Download con since_id in corso...'
+          }));
+        },
+        controller
+      );
+
+      if (allOrders && allOrders.length > 0) {
+        setMessage(`✅ DOWNLOAD CON SINCE_ID COMPLETATO! Scaricati ${allOrders.length} ordini totali`);
+        
+        // Converti e salva gli ordini
+        const convertedOrders = allOrders.map(convertShopifyOrder);
+        await saveOrders(convertedOrders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+      } else {
+        setMessage('ℹ️ Nessun ordine trovato con il download con since_id');
+      }
+
+    } catch (err) {
+      console.error('❌ ERRORE DOWNLOAD CON SINCE_ID:', err);
+      setError(`Errore download con since_id: ${err.message}`);
     } finally {
       setIsLoading(false);
       setSyncProgress({
@@ -1152,6 +1227,14 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleDownloadWithSinceId()} 
+            disabled={isLoading}
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            🔄 DOWNLOAD SINCE_ID
+          </Button>
+          
+          <Button 
             onClick={() => handleForcedDownload()} 
             disabled={isLoading}
             className="bg-green-600 hover:bg-green-700 text-white"
@@ -1282,6 +1365,7 @@ const OrdiniPage = () => {
               <div><strong>🔄 Metodo Alternativo:</strong> Paginazione semplice sequenziale (backup se il primo fallisce)</div>
               <div><strong>🎯 Download Completo:</strong> Scarica TUTTI gli ordini con TUTTI i possibili status (14 status diversi)</div>
               <div><strong>🚀 Download Semplice:</strong> Usa solo status "any" per scaricare tutto (approccio diretto)</div>
+              <div><strong>🔄 Download Since_ID:</strong> Usa since_id per paginazione (alternativa al pageInfo)</div>
               <div><strong>⚡ Download Forzato:</strong> Bypassa filtri, scarica TUTTI gli ordini senza limitazioni</div>
               <div><strong>🚫 Senza Filtri:</strong> Download senza filtri di status (approccio alternativo)</div>
               <div><strong>📦 Scarica Archiviati:</strong> Focus su ordini chiusi/archiviati che potrebbero mancare</div>

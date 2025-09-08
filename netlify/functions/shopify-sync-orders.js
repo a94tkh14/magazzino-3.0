@@ -34,6 +34,7 @@ exports.handler = async (event, context) => {
       limit = 250,
       status = 'any',
       pageInfo = null,
+      since_id = null,
       daysBack = null
     } = JSON.parse(event.body);
 
@@ -69,6 +70,10 @@ exports.handler = async (event, context) => {
         url += `&status=${status}`;
       }
       
+      if (since_id) {
+        url += `&since_id=${since_id}`;
+      }
+      
       if (daysBack) {
         const sinceDate = new Date();
         sinceDate.setDate(sinceDate.getDate() - daysBack);
@@ -77,11 +82,14 @@ exports.handler = async (event, context) => {
     }
 
     console.log(`🔄 Fetching Shopify orders from: ${url}`);
-    console.log(`📊 Parameters: limit=${limit}, status=${status}, pageInfo=${pageInfo ? 'provided' : 'none'}`);
+    console.log(`📊 Parameters: limit=${limit}, status=${status}, pageInfo=${pageInfo ? 'provided' : 'none'}, since_id=${since_id || 'none'}`);
     if (pageInfo) {
       console.log(`🔍 pageInfo value: ${pageInfo}`);
       console.log(`🔍 pageInfo type: ${typeof pageInfo}`);
       console.log(`🔍 pageInfo starts with http: ${pageInfo.startsWith('http')}`);
+    }
+    if (since_id) {
+      console.log(`🔍 since_id value: ${since_id}`);
     }
 
     // Timeout di 30 secondi per chiamate lunghe

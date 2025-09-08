@@ -587,6 +587,106 @@ export const downloadAllOrdersSimple = async (onProgress = null, abortController
   }
 };
 
+// Funzione per scaricare TUTTI gli ordini usando since_id (alternativa al pageInfo)
+export const downloadAllOrdersWithSinceId = async (onProgress = null, abortController = null) => {
+  const allOrders = [];
+  const uniqueOrderIds = new Set();
+  let pageCount = 0;
+  const maxPages = 100; // Limite di sicurezza
+  let lastOrderId = null;
+  
+  console.log('🚀 INIZIO DOWNLOAD CON SINCE_ID...');
+  console.log('📋 Usando since_id per paginazione (alternativa al pageInfo)');
+
+  try {
+    while (pageCount < maxPages) {
+      if (abortController?.signal?.aborted) {
+        throw new Error('Download annullato dall\'utente');
+      }
+
+      pageCount++;
+      
+      if (onProgress) {
+        onProgress({
+          currentPage: pageCount,
+          totalPages: maxPages,
+          ordersDownloaded: allOrders.length,
+          currentStatus: `Scaricamento pagina ${pageCount} (since_id: ${lastOrderId || 'nessuno'})...`
+        });
+      }
+
+      console.log(`📄 Scaricamento pagina ${pageCount} (since_id: ${lastOrderId || 'nessuno'})...`);
+
+      // Costruisci i parametri per la chiamata
+      const params = {
+        limit: 250,
+        status: 'any'
+      };
+      
+      if (lastOrderId) {
+        params.since_id = lastOrderId;
+      }
+
+      const response = await fetchShopifyOrders(params);
+
+      if (!response.success) {
+        console.error(`❌ Errore pagina ${pageCount}:`, response);
+        throw new Error(response.error || 'Errore nella risposta API');
+      }
+
+      const orders = response.orders || [];
+      
+      if (orders.length === 0) {
+        console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine download`);
+        break;
+      }
+
+      // Aggiungi ordini evitando duplicati
+      let newOrdersCount = 0;
+      for (const order of orders) {
+        if (order.id && !uniqueOrderIds.has(order.id.toString())) {
+          allOrders.push(order);
+          uniqueOrderIds.add(order.id.toString());
+          newOrdersCount++;
+        }
+      }
+
+      // Aggiorna lastOrderId con l'ID dell'ultimo ordine della pagina
+      if (orders.length > 0) {
+        lastOrderId = orders[orders.length - 1].id;
+      }
+
+      console.log(`✅ Pagina ${pageCount}: ${newOrdersCount} ordini nuovi, ${orders.length - newOrdersCount} duplicati saltati (totale: ${allOrders.length})`);
+      console.log(`🔍 Last Order ID: ${lastOrderId}`);
+
+      if (onProgress) {
+        onProgress({
+          currentPage: pageCount,
+          totalPages: maxPages,
+          ordersDownloaded: allOrders.length,
+          currentStatus: `Scaricati ${allOrders.length} ordini unici (pagina ${pageCount})...`
+        });
+      }
+
+      // Se abbiamo meno ordini del limite, probabilmente siamo arrivati alla fine
+      if (orders.length < 250) {
+        console.log(`✅ Pagina ${pageCount} - Meno di 250 ordini, probabilmente fine`);
+        break;
+      }
+
+      // Pausa tra le pagine
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    console.log(`🎉 DOWNLOAD CON SINCE_ID COMPLETATO: ${allOrders.length} ordini unici totali`);
+    return allOrders;
+
+  } catch (error) {
+    console.error('❌ ERRORE DOWNLOAD CON SINCE_ID:', error);
+    throw error;
+  }
+};
+
 // Funzione di test per verificare la paginazione
 export const testShopifyPagination = async () => {
   console.log('🧪 TEST PAGINAZIONE SHOPIFY...');
