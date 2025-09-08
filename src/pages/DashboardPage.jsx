@@ -650,6 +650,220 @@ const DashboardPage = () => {
         </CardContent>
       </Card>
 
+      {/* Grafici */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Grafico Vendite */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Grafico Vendite
+            </CardTitle>
+            <CardDescription>
+              Andamento vendite per periodo selezionato
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SalesChart 
+              orders={csvOrders}
+              startDate={mainDateRange.startDate}
+              endDate={mainDateRange.endDate}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Grafico Prodotti Più Venduti */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Top Prodotti
+            </CardTitle>
+            <CardDescription>
+              Prodotti più venduti nel periodo
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {csvOrders.length > 0 ? (() => {
+                // Calcola prodotti più venduti dai dati CSV
+                const productSales = {};
+                csvOrders.forEach(order => {
+                  if (order.products && order.products.length > 0) {
+                    order.products.forEach(product => {
+                      if (product.name) {
+                        if (productSales[product.name]) {
+                          productSales[product.name] += product.quantity || 0;
+                        } else {
+                          productSales[product.name] = product.quantity || 0;
+                        }
+                      }
+                    });
+                  }
+                });
+                
+                const topProductsArray = Object.entries(productSales)
+                  .map(([name, quantity]) => ({ name, quantity }))
+                  .sort((a, b) => b.quantity - a.quantity)
+                  .slice(0, 10);
+                
+                return topProductsArray.length > 0 ? topProductsArray.map((product, index) => (
+                  <div key={product.name} className="flex items-center justify-between p-3 border rounded">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <div className="font-medium">{product.name}</div>
+                        <div className="text-sm text-muted-foreground">SKU: {product.sku || 'N/A'}</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold">{product.quantity} pz</div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatPrice(product.revenue || 0)}
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Nessun prodotto venduto nel periodo
+                  </div>
+                );
+              })() : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Carica i dati CSV per vedere i prodotti più venduti
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Grafico Confronto Periodi */}
+      {showComparison && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Confronto Periodi
+            </CardTitle>
+            <CardDescription>
+              Confronto tra periodo principale e periodo di confronto
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Periodo Principale */}
+              <div>
+                <h4 className="font-semibold text-lg mb-4 text-blue-600">
+                  Periodo Principale
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
+                    <span className="text-sm font-medium">Ordini:</span>
+                    <span className="font-bold text-blue-600">{csvStats.totalOrders}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
+                    <span className="text-sm font-medium">Valore:</span>
+                    <span className="font-bold text-blue-600">
+                      {new Intl.NumberFormat('it-IT', {
+                        style: 'currency',
+                        currency: 'EUR',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      }).format(csvStats.totalValue)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
+                    <span className="text-sm font-medium">Spedizioni:</span>
+                    <span className="font-bold text-blue-600">
+                      {new Intl.NumberFormat('it-IT', {
+                        style: 'currency',
+                        currency: 'EUR',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      }).format(csvStats.totalShippingPaid)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
+                    <span className="text-sm font-medium">Sconti:</span>
+                    <span className="font-bold text-green-600">
+                      {new Intl.NumberFormat('it-IT', {
+                        style: 'currency',
+                        currency: 'EUR',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      }).format(csvStats.totalDiscounts)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Periodo Confronto */}
+              <div>
+                <h4 className="font-semibold text-lg mb-4 text-orange-600">
+                  Periodo Confronto
+                </h4>
+                <div className="space-y-3">
+                  {(() => {
+                    const comparisonOrders = filterOrdersByDateRange(csvOrders, comparisonDateRange.startDate, comparisonDateRange.endDate);
+                    const comparisonStats = {
+                      totalOrders: comparisonOrders.length,
+                      totalValue: comparisonOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
+                      totalShippingPaid: comparisonOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
+                      totalDiscounts: comparisonOrders.reduce((sum, order) => sum + (order.discount_amount || 0), 0),
+                    };
+
+                    return (
+                      <>
+                        <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
+                          <span className="text-sm font-medium">Ordini:</span>
+                          <span className="font-bold text-orange-600">{comparisonStats.totalOrders}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
+                          <span className="text-sm font-medium">Valore:</span>
+                          <span className="font-bold text-orange-600">
+                            {new Intl.NumberFormat('it-IT', {
+                              style: 'currency',
+                              currency: 'EUR',
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            }).format(comparisonStats.totalValue)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
+                          <span className="text-sm font-medium">Spedizioni:</span>
+                          <span className="font-bold text-orange-600">
+                            {new Intl.NumberFormat('it-IT', {
+                              style: 'currency',
+                              currency: 'EUR',
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            }).format(comparisonStats.totalShippingPaid)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
+                          <span className="text-sm font-medium">Sconti:</span>
+                          <span className="font-bold text-green-600">
+                            {new Intl.NumberFormat('it-IT', {
+                              style: 'currency',
+                              currency: 'EUR',
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            }).format(comparisonStats.totalDiscounts)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sezione Inferiore */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Scorte Basse */}
