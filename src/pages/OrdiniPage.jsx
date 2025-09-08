@@ -18,7 +18,8 @@ import {
   testArchivedOrders,
   debugPaginationDetailed,
   testPageInfo,
-  testPaginationAny
+  testPaginationAny,
+  testPaginationSinceId
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -374,6 +375,24 @@ const OrdiniPage = () => {
     } catch (error) {
       console.error('❌ Errore test paginazione:', error);
       alert(`Errore test paginazione: ${error.message}`);
+    }
+  };
+
+  const handleTestPaginationSinceId = async () => {
+    try {
+      console.log('🔍 Avvio test paginazione con since_id...');
+      const result = await testPaginationSinceId();
+      console.log('✅ Test paginazione since_id completato:', result);
+      
+      let message = `Test paginazione since_id completato!\n\n`;
+      message += `Totale ordini: ${result.totalOrders}\n`;
+      message += `Pagine testate: ${result.pageCount}\n\n`;
+      message += 'Controlla la console per i dettagli completi.';
+      
+      alert(message);
+    } catch (error) {
+      console.error('❌ Errore test paginazione since_id:', error);
+      alert(`Errore test paginazione since_id: ${error.message}`);
     }
   };
 
@@ -1203,6 +1222,14 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleTestPaginationSinceId()} 
+            disabled={isLoading}
+            className="bg-slate-600 hover:bg-slate-700 text-white"
+          >
+            🔄 TEST SINCE_ID
+          </Button>
+          
+          <Button 
             onClick={() => handleDownloadNoStatus()} 
             disabled={isLoading}
             className="bg-teal-600 hover:bg-teal-700 text-white"
@@ -1373,6 +1400,7 @@ const OrdiniPage = () => {
               <div><strong>📦 Test Archiviati:</strong> Verifica se ci sono ordini archiviati disponibili</div>
               <div><strong>🔍 Debug Dettagliato:</strong> Analisi dettagliata della paginazione per identificare problemi</div>
               <div><strong>📄 Test Paginazione:</strong> Test specifico per verificare la paginazione con status "any"</div>
+              <div><strong>🔄 Test Since_ID:</strong> Test specifico per verificare la paginazione con since_id</div>
               <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
             </div>
             </div>

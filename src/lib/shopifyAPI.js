@@ -668,9 +668,10 @@ export const downloadAllOrdersWithSinceId = async (onProgress = null, abortContr
         });
       }
 
-      // Se abbiamo meno ordini del limite, probabilmente siamo arrivati alla fine
-      if (orders.length < 250) {
-        console.log(`✅ Pagina ${pageCount} - Meno di 250 ordini, probabilmente fine`);
+      // Non fermarci se abbiamo meno di 250 ordini - potrebbero esserci più pagine
+      // Continua fino a quando non riceviamo 0 ordini
+      if (orders.length === 0) {
+        console.log(`✅ Pagina ${pageCount} - Nessun ordine, fine download`);
         break;
       }
 
@@ -999,6 +1000,68 @@ export const testPaginationAny = async () => {
     
   } catch (error) {
     console.error('❌ Errore test paginazione:', error);
+    throw error;
+  }
+};
+
+// Funzione di test per verificare la paginazione con since_id
+export const testPaginationSinceId = async () => {
+  console.log('🔍 TEST PAGINAZIONE CON SINCE_ID...');
+  
+  try {
+    let pageCount = 0;
+    let totalOrders = 0;
+    let lastOrderId = null;
+    const maxPages = 5; // Limite per test
+    
+    while (pageCount < maxPages) {
+      pageCount++;
+      
+      console.log(`\n📄 === PAGINA ${pageCount} ===`);
+      
+      const params = {
+        limit: 50,
+        status: 'any'
+      };
+      
+      if (lastOrderId) {
+        params.since_id = lastOrderId;
+      }
+      
+      console.log(`🔍 Parametri: ${JSON.stringify(params)}`);
+      
+      const response = await fetchShopifyOrders(params);
+
+      if (!response.success) {
+        console.error(`❌ Errore pagina ${pageCount}:`, response);
+        break;
+      }
+
+      const ordersCount = response.orders?.length || 0;
+      totalOrders += ordersCount;
+      
+      console.log(`✅ Pagina ${pageCount}: ${ordersCount} ordini (totale: ${totalOrders})`);
+      
+      if (ordersCount > 0) {
+        const firstOrderId = response.orders[0].id;
+        const lastOrderIdNew = response.orders[ordersCount - 1].id;
+        console.log(`🔍 Primo Order ID: ${firstOrderId}`);
+        console.log(`🔍 Ultimo Order ID: ${lastOrderIdNew}`);
+        lastOrderId = lastOrderIdNew;
+      } else {
+        console.log(`✅ Nessun ordine, fine paginazione`);
+        break;
+      }
+      
+      // Pausa tra le pagine
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    console.log(`\n🎯 RISULTATO FINALE: ${totalOrders} ordini in ${pageCount} pagine`);
+    return { totalOrders, pageCount, success: true };
+    
+  } catch (error) {
+    console.error('❌ Errore test paginazione since_id:', error);
     throw error;
   }
 };
