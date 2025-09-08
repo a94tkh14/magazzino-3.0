@@ -7,6 +7,7 @@ import { Label } from '../components/ui/label';
 import MagazzinoReset from '../components/MagazzinoReset';
 import ShopifyConfig from '../components/ShopifyConfig';
 import ShopifyDebug from '../components/ShopifyDebug';
+import CSVUpload from '../components/CSVUpload';
 import { 
   Settings, 
   Database, 
@@ -197,10 +198,14 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="integrations" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="integrations" className="flex items-center space-x-2">
             <Globe className="h-4 w-4" />
             <span>Integrazioni</span>
+          </TabsTrigger>
+          <TabsTrigger value="csv" className="flex items-center space-x-2">
+            <Upload className="h-4 w-4" />
+            <span>CSV Ordini</span>
           </TabsTrigger>
           <TabsTrigger value="database" className="flex items-center space-x-2">
             <Database className="h-4 w-4" />
@@ -322,6 +327,10 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="csv" className="space-y-6">
+          <CSVUpload />
         </TabsContent>
 
         <TabsContent value="database" className="space-y-6">
