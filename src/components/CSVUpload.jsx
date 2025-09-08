@@ -110,16 +110,29 @@ const CSVUpload = () => {
               orderData: orderData,
               products: []
             };
+          } else {
+            // Se è una riga successiva, aggiorna solo i campi che non sono vuoti
+            // per mantenere i dati completi della prima riga
+            Object.keys(orderData).forEach(key => {
+              if (orderData[key] && orderData[key] !== '' && !orderGroups[orderName].orderData[key]) {
+                orderGroups[orderName].orderData[key] = orderData[key];
+              }
+            });
           }
 
           // Aggiungi il prodotto a questo ordine
           if (orderData['Lineitem name']) {
             orderGroups[orderName].products.push({
               name: orderData['Lineitem name'] || '',
-              price: parseFloat(orderData['Lineitem price'] || '0'),
+              price: parseFloat((orderData['Lineitem price'] || '0').toString().replace(/"/g, '')),
               qty: parseInt(orderData['Lineitem quantity'] || '1'),
               sku: orderData['Lineitem sku'] || '',
-              vendor: orderData['Vendor'] || ''
+              vendor: orderData['Vendor'] || '',
+              compare_at_price: parseFloat((orderData['Lineitem compare at price'] || '0').toString().replace(/"/g, '')),
+              requires_shipping: orderData['Lineitem requires shipping'] === 'true',
+              taxable: orderData['Lineitem taxable'] === 'true',
+              fulfillment_status: orderData['Lineitem fulfillment status'] || 'pending',
+              discount: parseFloat((orderData['Lineitem discount'] || '0').toString().replace(/"/g, ''))
             });
           }
 
@@ -164,25 +177,25 @@ const CSVUpload = () => {
           fulfilled_at: orderData['Fulfilled at'] || null,
           
           // I - Sub totale
-          subtotal: parseFloat(orderData['Subtotal'] || '0'),
+          subtotal: parseFloat((orderData['Subtotal'] || '0').toString().replace(/"/g, '')),
           
           // J - Costo spedizione (se import = 0 vuol dire che non l'ha pagata)
-          shipping_cost: parseFloat(orderData['Shipping'] || '0'),
-          is_free_shipping: parseFloat(orderData['Shipping'] || '0') === 0,
+          shipping_cost: parseFloat((orderData['Shipping'] || '0').toString().replace(/"/g, '')),
+          is_free_shipping: parseFloat((orderData['Shipping'] || '0').toString().replace(/"/g, '')) === 0,
           shipping_method: orderData['Shipping Method'] || '',
           
           // L - Totale che ha pagato
-          total_price: parseFloat(orderData['Total'] || '0'),
+          total_price: parseFloat((orderData['Total'] || '0').toString().replace(/"/g, '')),
           
           // M - Codice sconto utilizzato
           discount_code: orderData['Discount Code'] || '',
           
           // N - Quanto sconto ha ottenuto
-          discount_amount: parseFloat(orderData['Discount Amount'] || '0'),
+          discount_amount: parseFloat((orderData['Discount Amount'] || '0').toString().replace(/"/g, '')),
           
           // Altre informazioni
           currency: orderData['Currency'] || 'EUR',
-          taxes: parseFloat(orderData['Taxes'] || '0'),
+          taxes: parseFloat((orderData['Taxes'] || '0').toString().replace(/"/g, '')),
           payment_method: orderData['Payment Method'] || '',
           payment_reference: orderData['Payment Reference'] || '',
           source: 'csv',
@@ -247,6 +260,8 @@ const CSVUpload = () => {
 
       console.log(`✅ CSV processato: ${processedCount} righe, ${Object.keys(orderGroups).length} ordini unici, ${errorCount} errori`);
       console.log('📊 Esempio ordine:', orders[0]);
+      console.log('📊 Ordine #5056:', orders.find(o => o.order_number === '#5056'));
+      console.log('📊 Ordine #5058:', orders.find(o => o.order_number === '#5058'));
 
       if (orders.length > 0) {
         try {
