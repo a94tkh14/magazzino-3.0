@@ -849,6 +849,60 @@ export const testPageInfo = async () => {
   }
 };
 
+// Funzione di test per verificare la paginazione con status "any"
+export const testPaginationAny = async () => {
+  console.log('🔍 TEST PAGINAZIONE CON STATUS ANY...');
+  
+  try {
+    let pageCount = 0;
+    let totalOrders = 0;
+    let nextPageInfo = null;
+    const maxPages = 5; // Limite per test
+    
+    while (pageCount < maxPages) {
+      pageCount++;
+      
+      console.log(`\n📄 === PAGINA ${pageCount} ===`);
+      
+      const response = await fetchShopifyOrders({
+        limit: 50,
+        status: 'any',
+        pageInfo: nextPageInfo
+      });
+
+      if (!response.success) {
+        console.error(`❌ Errore pagina ${pageCount}:`, response);
+        break;
+      }
+
+      const ordersCount = response.orders?.length || 0;
+      totalOrders += ordersCount;
+      
+      console.log(`✅ Pagina ${pageCount}: ${ordersCount} ordini (totale: ${totalOrders})`);
+      console.log(`📊 hasNext: ${response.pagination?.hasNext}`);
+      console.log(`📊 nextPageInfo: ${response.pagination?.nextPageInfo ? 'presente' : 'assente'}`);
+      
+      if (response.pagination?.nextPageInfo) {
+        console.log(`🔍 nextPageInfo value: ${response.pagination.nextPageInfo}`);
+        nextPageInfo = response.pagination.nextPageInfo;
+      } else {
+        console.log(`✅ Fine paginazione dopo ${pageCount} pagine`);
+        break;
+      }
+      
+      // Pausa tra le pagine
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    console.log(`\n🎯 RISULTATO FINALE: ${totalOrders} ordini in ${pageCount} pagine`);
+    return { totalOrders, pageCount, success: true };
+    
+  } catch (error) {
+    console.error('❌ Errore test paginazione:', error);
+    throw error;
+  }
+};
+
 // Funzione per scaricare senza filtri di status (approccio alternativo)
 export const downloadAllOrdersNoStatus = async (onProgress = null, abortController = null) => {
   const allOrders = [];

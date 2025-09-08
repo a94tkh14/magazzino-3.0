@@ -16,7 +16,8 @@ import {
   testAllOrdersCount,
   testArchivedOrders,
   debugPaginationDetailed,
-  testPageInfo
+  testPageInfo,
+  testPaginationAny
 } from '../lib/shopifyAPI';
 import { Download, RefreshCw, AlertCircle, Filter, TrendingUp, Clock, Database, Archive } from 'lucide-react';
 import { DateRange } from 'react-date-range';
@@ -163,7 +164,7 @@ const OrdiniPage = () => {
         },
         controller
       );
-
+      
       if (allOrders && allOrders.length > 0) {
         setMessage(`✅ SINCRONIZZAZIONE MASSIVA COMPLETATA! Scaricati ${allOrders.length} ordini totali`);
         
@@ -243,8 +244,8 @@ const OrdiniPage = () => {
         setMessage(`✅ SINCRONIZZAZIONE ALTERNATIVA COMPLETATA! Scaricati ${allOrders.length} ordini totali`);
         
         // Converti e salva gli ordini
-        const convertedOrders = allOrders.map(convertShopifyOrder);
-        await saveOrders(convertedOrders);
+          const convertedOrders = allOrders.map(convertShopifyOrder);
+          await saveOrders(convertedOrders);
         
         // Pulisci dati vecchi
         await cleanupOldData('shopify_orders', 30);
@@ -357,6 +358,24 @@ const OrdiniPage = () => {
     }
   };
 
+  const handleTestPaginationAny = async () => {
+    try {
+      console.log('🔍 Avvio test paginazione con status any...');
+      const result = await testPaginationAny();
+      console.log('✅ Test paginazione completato:', result);
+      
+      let message = `Test paginazione completato!\n\n`;
+      message += `Totale ordini: ${result.totalOrders}\n`;
+      message += `Pagine testate: ${result.pageCount}\n\n`;
+      message += 'Controlla la console per i dettagli completi.';
+      
+      alert(message);
+    } catch (error) {
+      console.error('❌ Errore test paginazione:', error);
+      alert(`Errore test paginazione: ${error.message}`);
+    }
+  };
+
   const handleDownloadNoStatus = async () => {
     if (!window.confirm('Vuoi avviare il download SENZA filtri di status? Questo dovrebbe scaricare tutti gli ordini disponibili.')) {
       return;
@@ -410,7 +429,7 @@ const OrdiniPage = () => {
         // Pulisci dati vecchi
         await cleanupOldData('shopify_orders', 30);
         
-      } else {
+            } else {
         setMessage('ℹ️ Nessun ordine trovato con il download senza filtri');
       }
 
@@ -478,8 +497,8 @@ const OrdiniPage = () => {
         setMessage(`✅ DOWNLOAD COMPLETO TERMINATO! Scaricati ${allOrders.length} ordini totali`);
         
         // Converti e salva gli ordini
-        const convertedOrders = allOrders.map(convertShopifyOrder);
-        await saveOrders(convertedOrders);
+              const convertedOrders = allOrders.map(convertShopifyOrder);
+              await saveOrders(convertedOrders);
         
         // Pulisci dati vecchi
         await cleanupOldData('shopify_orders', 30);
@@ -539,8 +558,8 @@ const OrdiniPage = () => {
       // Usa il metodo semplice
       const allOrders = await downloadAllOrdersSimple(
         (progress) => {
-          setSyncProgress(prev => ({
-            ...prev,
+    setSyncProgress(prev => ({
+      ...prev,
             ...progress,
             currentStatus: progress.currentStatus || 'Download semplice in corso...'
           }));
@@ -613,8 +632,8 @@ const OrdiniPage = () => {
       // Usa il metodo forzato
       const allOrders = await downloadAllOrdersForced(
         (progress) => {
-          setSyncProgress(prev => ({
-            ...prev,
+      setSyncProgress(prev => ({
+        ...prev,
             ...progress,
             currentStatus: progress.currentStatus || 'Download forzato in corso...'
           }));
@@ -687,8 +706,8 @@ const OrdiniPage = () => {
       // Scarica solo gli ordini archiviati
       const archivedOrders = await downloadArchivedOrders(
         (progress) => {
-          setSyncProgress(prev => ({
-            ...prev,
+        setSyncProgress(prev => ({
+          ...prev,
             ...progress,
             currentStatus: progress.currentStatus || 'Scaricamento ordini archiviati...'
           }));
@@ -1101,6 +1120,14 @@ const OrdiniPage = () => {
           </Button>
           
           <Button 
+            onClick={() => handleTestPaginationAny()} 
+            disabled={isLoading}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            📄 TEST PAGINAZIONE
+          </Button>
+          
+          <Button 
             onClick={() => handleDownloadNoStatus()} 
             disabled={isLoading}
             className="bg-teal-600 hover:bg-teal-700 text-white"
@@ -1261,6 +1288,7 @@ const OrdiniPage = () => {
               <div><strong>🔢 Conta Tutti:</strong> Test per verificare quanti ordini sono disponibili</div>
               <div><strong>📦 Test Archiviati:</strong> Verifica se ci sono ordini archiviati disponibili</div>
               <div><strong>🔍 Debug Dettagliato:</strong> Analisi dettagliata della paginazione per identificare problemi</div>
+              <div><strong>📄 Test Paginazione:</strong> Test specifico per verificare la paginazione con status "any"</div>
               <div><strong>⚡ Caratteristiche:</strong> Rate limiting automatico, retry su errori, salvataggio progressivo</div>
             </div>
             </div>

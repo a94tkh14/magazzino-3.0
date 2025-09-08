@@ -122,23 +122,42 @@ exports.handler = async (event, context) => {
     let nextPageInfo = null;
     let prevPageInfo = null;
     
+    console.log(`🔍 Link Header: ${linkHeader}`);
+    
     if (linkHeader) {
       const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
       const prevMatch = linkHeader.match(/<([^>]+)>;\s*rel="previous"/);
       
+      console.log(`🔍 Next Match: ${nextMatch ? nextMatch[1] : 'none'}`);
+      console.log(`🔍 Prev Match: ${prevMatch ? prevMatch[1] : 'none'}`);
+      
       if (nextMatch) {
-        const nextUrl = new URL(nextMatch[1]);
-        nextPageInfo = nextUrl.searchParams.get('page_info');
+        try {
+          const nextUrl = new URL(nextMatch[1]);
+          nextPageInfo = nextUrl.searchParams.get('page_info');
+          console.log(`🔍 Next PageInfo: ${nextPageInfo}`);
+        } catch (error) {
+          console.error(`❌ Errore parsing next URL: ${error.message}`);
+        }
       }
       
       if (prevMatch) {
-        const prevUrl = new URL(prevMatch[1]);
-        prevPageInfo = prevUrl.searchParams.get('page_info');
+        try {
+          const prevUrl = new URL(prevMatch[1]);
+          prevPageInfo = prevUrl.searchParams.get('page_info');
+          console.log(`🔍 Prev PageInfo: ${prevPageInfo}`);
+        } catch (error) {
+          console.error(`❌ Errore parsing prev URL: ${error.message}`);
+        }
       }
+    } else {
+      console.log(`⚠️ Nessun Link Header trovato`);
     }
 
     console.log(`✅ Successfully fetched ${orders.length} orders`);
     console.log(`📄 Pagination info: hasNext=${!!nextPageInfo}, hasPrev=${!!prevPageInfo}`);
+    console.log(`📄 NextPageInfo value: ${nextPageInfo}`);
+    console.log(`📄 PrevPageInfo value: ${prevPageInfo}`);
 
     return {
       statusCode: 200,
