@@ -1,12 +1,51 @@
 import React, { useState } from 'react';
 import { saveLargeData, loadLargeData } from '../lib/dataManager';
-import { Upload, FileText, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, RefreshCw, Database } from 'lucide-react';
 
 const CSVUpload = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [storageInfo, setStorageInfo] = useState(null);
+
+  // Carica informazioni storage al mount
+  React.useEffect(() => {
+    loadStorageInfo();
+  }, []);
+
+  const loadStorageInfo = async () => {
+    try {
+      const orders = await loadLargeData('shopify_orders') || [];
+      const dataSize = JSON.stringify(orders).length;
+      const dataSizeMB = Math.round(dataSize / (1024 * 1024) * 100) / 100;
+      
+      setStorageInfo({
+        orderCount: orders.length,
+        dataSizeMB: dataSizeMB,
+        estimatedQuota: Math.round((dataSize / (5 * 1024 * 1024)) * 100) // 5MB è il limite tipico
+      });
+    } catch (error) {
+      console.error('Errore caricamento info storage:', error);
+    }
+  };
+
+  const clearStorage = async () => {
+    if (!window.confirm('Sei sicuro di voler pulire tutti gli ordini? Questa azione non può essere annullata.')) {
+      return;
+    }
+
+    try {
+      localStorage.removeItem('shopify_orders');
+      localStorage.removeItem('shopify_orders_compressed');
+      localStorage.removeItem('shopify_orders_count');
+      setStorageInfo({ orderCount: 0, dataSizeMB: 0, estimatedQuota: 0 });
+      setMessage('✅ Cache pulita con successo!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (error) {
+      setError('Errore nella pulizia della cache');
+    }
+  };
 
   const handleCSVUpload = async (event) => {
     const file = event.target.files[0];
@@ -51,61 +90,51 @@ const CSVUpload = () => {
             orderData[header] = values[index];
           });
 
-          // Converti in formato compatibile con il sistema
+          // Converti in formato compatibile con il sistema (versione compressa)
           const convertedOrder = {
             id: orderData['Id'] || orderData['id'] || `csv_${i}`,
             order_number: orderData['Name'] || orderData['name'] || i,
             email: orderData['Email'] || orderData['email'] || '',
-            total_price: orderData['Total'] || orderData['total'] || '0',
+            total_price: parseFloat(orderData['Total'] || orderData['total'] || '0'),
             currency: orderData['Currency'] || orderData['currency'] || 'EUR',
             financial_status: orderData['Financial Status'] || orderData['financial_status'] || 'paid',
             fulfillment_status: orderData['Fulfillment Status'] || orderData['fulfillment_status'] || 'unfulfilled',
             created_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
             updated_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
-            source: 'csv_manual',
-            line_items: [],
+            source: 'csv',
+            // Dati cliente compressi
             customer: {
               id: orderData['Id'] || orderData['id'] || null,
               email: orderData['Email'] || orderData['email'] || '',
-              first_name: orderData['Billing Name'] || orderData['billing_name'] || '',
-              last_name: ''
+              name: orderData['Billing Name'] || orderData['billing_name'] || ''
             },
-            billing_address: {
-              first_name: orderData['Billing Name'] || orderData['billing_name'] || '',
-              last_name: '',
-              address1: orderData['Billing Address1'] || orderData['billing_address1'] || '',
-              address2: orderData['Billing Address2'] || orderData['billing_address2'] || '',
-              city: orderData['Billing City'] || orderData['billing_city'] || '',
-              zip: orderData['Billing Zip'] || orderData['billing_zip'] || '',
-              province: orderData['Billing Province'] || orderData['billing_province'] || '',
-              country: orderData['Billing Country'] || orderData['billing_country'] || '',
-              phone: orderData['Billing Phone'] || orderData['billing_phone'] || ''
-            },
-            shipping_address: {
-              first_name: orderData['Shipping Name'] || orderData['shipping_name'] || '',
-              last_name: '',
-              address1: orderData['Shipping Address1'] || orderData['shipping_address1'] || '',
-              address2: orderData['Shipping Address2'] || orderData['shipping_address2'] || '',
-              city: orderData['Shipping City'] || orderData['shipping_city'] || '',
-              zip: orderData['Shipping Zip'] || orderData['shipping_zip'] || '',
-              province: orderData['Shipping Province'] || orderData['shipping_province'] || '',
-              country: orderData['Shipping Country'] || orderData['shipping_country'] || '',
-              phone: orderData['Shipping Phone'] || orderData['shipping_phone'] || ''
-            }
+            // Indirizzi compressi (solo se non vuoti)
+            billing: orderData['Billing Address1'] ? {
+              name: orderData['Billing Name'] || '',
+              address: orderData['Billing Address1'] || '',
+              city: orderData['Billing City'] || '',
+              zip: orderData['Billing Zip'] || '',
+              country: orderData['Billing Country'] || '',
+              phone: orderData['Billing Phone'] || ''
+            } : null,
+            shipping: orderData['Shipping Address1'] ? {
+              name: orderData['Shipping Name'] || '',
+              address: orderData['Shipping Address1'] || '',
+              city: orderData['Shipping City'] || '',
+              zip: orderData['Shipping Zip'] || '',
+              country: orderData['Shipping Country'] || '',
+              phone: orderData['Shipping Phone'] || ''
+            } : null
           };
 
-          // Aggiungi prodotti se presenti
+          // Aggiungi prodotti se presenti (versione compressa)
           if (orderData['Lineitem name']) {
-            convertedOrder.line_items = [{
-              id: orderData['Id'] || `line_${i}`,
+            convertedOrder.products = [{
               name: orderData['Lineitem name'] || '',
-              price: orderData['Lineitem price'] || '0',
-              quantity: orderData['Lineitem quantity'] || 1,
+              price: parseFloat(orderData['Lineitem price'] || '0'),
+              qty: parseInt(orderData['Lineitem quantity'] || '1'),
               sku: orderData['Lineitem sku'] || '',
-              vendor: orderData['Vendor'] || '',
-              requires_shipping: orderData['Lineitem requires shipping'] === 'true',
-              taxable: orderData['Lineitem taxable'] === 'true',
-              fulfillment_status: orderData['Lineitem fulfillment status'] || 'pending'
+              vendor: orderData['Vendor'] || ''
             }];
           }
 
@@ -125,10 +154,24 @@ const CSVUpload = () => {
       console.log(`✅ CSV processato: ${processedCount} ordini, ${errorCount} errori`);
 
       if (orders.length > 0) {
-        // Salva gli ordini
-        await saveLargeData('shopify_orders', orders);
-        
-        setMessage(`✅ CSV caricato con successo! ${orders.length} ordini importati`);
+        try {
+          // Salva gli ordini con gestione della quota
+          await saveLargeData('shopify_orders', orders);
+          
+          // Calcola la dimensione approssimativa
+          const dataSize = JSON.stringify(orders).length;
+          const dataSizeKB = Math.round(dataSize / 1024);
+          const dataSizeMB = Math.round(dataSize / (1024 * 1024) * 100) / 100;
+          
+          setMessage(`✅ CSV caricato con successo! ${orders.length} ordini importati (${dataSizeMB}MB)`);
+          await loadStorageInfo(); // Aggiorna info storage
+        } catch (storageError) {
+          if (storageError.message.includes('quota')) {
+            setError(`Errore: Troppi dati per il browser. Dimensione: ${Math.round(JSON.stringify(orders).length / (1024 * 1024) * 100) / 100}MB. Prova a caricare un CSV più piccolo o pulisci la cache del browser.`);
+          } else {
+            setError(`Errore salvataggio: ${storageError.message}`);
+          }
+        }
       } else {
         setError('Nessun ordine valido trovato nel CSV');
       }
@@ -198,6 +241,34 @@ const CSVUpload = () => {
           </div>
         )}
 
+        {/* Informazioni Storage */}
+        {storageInfo && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-blue-800 flex items-center">
+                <Database className="w-4 h-4 mr-2" />
+                Storage Attuale
+              </h4>
+              <button
+                onClick={clearStorage}
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
+              >
+                Pulisci Cache
+              </button>
+            </div>
+            <div className="text-sm text-blue-700 space-y-1">
+              <div>Ordini caricati: <strong>{storageInfo.orderCount}</strong></div>
+              <div>Dimensione dati: <strong>{storageInfo.dataSizeMB}MB</strong></div>
+              <div>Quota utilizzata: <strong>{storageInfo.estimatedQuota}%</strong></div>
+              {storageInfo.estimatedQuota > 80 && (
+                <div className="text-red-600 font-medium">
+                  ⚠️ Quota quasi piena! Considera di pulire la cache.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="text-sm text-gray-600 space-y-2">
           <p><strong>Istruzioni:</strong></p>
           <ul className="list-disc list-inside space-y-1">
@@ -205,6 +276,7 @@ const CSVUpload = () => {
             <li>Il file deve essere in formato CSV con le colonne standard di Shopify</li>
             <li>Questo sostituirà tutti gli ordini esistenti nel sistema</li>
             <li>Dopo il caricamento, usa "Sincronizza Recenti" per aggiornamenti automatici</li>
+            <li><strong>Nota:</strong> Se ricevi errori di quota, pulisci la cache prima di caricare</li>
           </ul>
         </div>
       </div>

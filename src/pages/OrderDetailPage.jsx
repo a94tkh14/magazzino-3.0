@@ -210,7 +210,7 @@ const OrderDetailPage = ({ orderId, onBack }) => {
               <div className="flex justify-between">
                 <span className="text-gray-600">Nome:</span>
                 <span className="font-medium">
-                  {order.customer?.first_name} {order.customer?.last_name}
+                  {order.customer?.first_name} {order.customer?.last_name} {order.customer?.name}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -228,7 +228,7 @@ const OrderDetailPage = ({ orderId, onBack }) => {
 
       {/* Indirizzi */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {order.billing_address && (
+        {order.billing && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -238,25 +238,21 @@ const OrderDetailPage = ({ orderId, onBack }) => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <div className="font-medium">
-                  {order.billing_address.first_name} {order.billing_address.last_name}
-                </div>
-                <div>{order.billing_address.address1}</div>
-                {order.billing_address.address2 && <div>{order.billing_address.address2}</div>}
+                <div className="font-medium">{order.billing.name}</div>
+                <div>{order.billing.address}</div>
                 <div>
-                  {order.billing_address.zip} {order.billing_address.city}
+                  {order.billing.zip} {order.billing.city}
                 </div>
-                <div>{order.billing_address.province}</div>
-                <div>{order.billing_address.country}</div>
-                {order.billing_address.phone && (
-                  <div className="text-blue-600">{order.billing_address.phone}</div>
+                <div>{order.billing.country}</div>
+                {order.billing.phone && (
+                  <div className="text-blue-600">{order.billing.phone}</div>
                 )}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {order.shipping_address && (
+        {order.shipping && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -266,18 +262,14 @@ const OrderDetailPage = ({ orderId, onBack }) => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <div className="font-medium">
-                  {order.shipping_address.first_name} {order.shipping_address.last_name}
-                </div>
-                <div>{order.shipping_address.address1}</div>
-                {order.shipping_address.address2 && <div>{order.shipping_address.address2}</div>}
+                <div className="font-medium">{order.shipping.name}</div>
+                <div>{order.shipping.address}</div>
                 <div>
-                  {order.shipping_address.zip} {order.shipping_address.city}
+                  {order.shipping.zip} {order.shipping.city}
                 </div>
-                <div>{order.shipping_address.province}</div>
-                <div>{order.shipping_address.country}</div>
-                {order.shipping_address.phone && (
-                  <div className="text-blue-600">{order.shipping_address.phone}</div>
+                <div>{order.shipping.country}</div>
+                {order.shipping.phone && (
+                  <div className="text-blue-600">{order.shipping.phone}</div>
                 )}
               </div>
             </CardContent>
@@ -286,6 +278,48 @@ const OrderDetailPage = ({ orderId, onBack }) => {
       </div>
 
       {/* Prodotti */}
+      {order.products && order.products.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Package className="w-5 h-5 mr-2" />
+              Prodotti ({order.products.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {order.products.map((item, index) => (
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900">{item.name}</h4>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <Tag className="w-4 h-4 mr-2" />
+                          <span>SKU: {item.sku || 'N/A'}</span>
+                        </div>
+                        <div>Quantità: {item.qty}</div>
+                        <div>Prezzo unitario: {formatPrice(item.price)}</div>
+                        {item.vendor && <div>Vendor: {item.vendor}</div>}
+                      </div>
+                    </div>
+                    <div className="text-right ml-4">
+                      <div className="text-lg font-semibold text-gray-900">
+                        {formatPrice(item.price * item.qty)}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {item.qty} × {formatPrice(item.price)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Prodotti (formato legacy) */}
       {order.line_items && order.line_items.length > 0 && (
         <Card>
           <CardHeader>
@@ -309,23 +343,6 @@ const OrderDetailPage = ({ orderId, onBack }) => {
                         <div>Quantità: {item.quantity}</div>
                         <div>Prezzo unitario: {formatPrice(item.price)}</div>
                         {item.vendor && <div>Vendor: {item.vendor}</div>}
-                        <div className="flex items-center space-x-4">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            item.requires_shipping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {item.requires_shipping ? 'Richiede spedizione' : 'Non richiede spedizione'}
-                          </span>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            item.taxable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {item.taxable ? 'Tassabile' : 'Non tassabile'}
-                          </span>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            item.fulfillment_status === 'fulfilled' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {item.fulfillment_status || 'Pending'}
-                          </span>
-                        </div>
                       </div>
                     </div>
                     <div className="text-right ml-4">
