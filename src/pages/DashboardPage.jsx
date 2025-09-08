@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { loadMagazzinoData } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
 import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { formatPrice } from '../lib/utils';
 import { addDays, startOfDay, endOfDay, subDays, subMonths, subYears, format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -26,6 +27,9 @@ const DashboardPage = () => {
     totalDiscounts: 0,
     totalGeneral: 0
   });
+  
+  // Dati per il grafico
+  const [chartData, setChartData] = useState([]);
   
   // Periodo principale
   const [startDate, setStartDate] = useState(startOfDay(addDays(new Date(), -30)));
@@ -63,6 +67,39 @@ const DashboardPage = () => {
     });
   };
 
+  // Funzione per calcolare dati del grafico
+  const calculateChartData = (orders, startDate, endDate) => {
+    if (!orders || orders.length === 0) return [];
+
+    const days = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      const dayKey = format(currentDate, 'yyyy-MM-dd');
+      const dayOrders = orders.filter(order => {
+        const orderDate = new Date(order.created_at);
+        return format(orderDate, 'yyyy-MM-dd') === dayKey;
+      });
+
+      const dayStats = {
+        date: format(currentDate, 'dd/MM'),
+        orders: dayOrders.length,
+        revenue: dayOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
+        products: dayOrders.reduce((sum, order) => {
+          if (order.products && order.products.length > 0) {
+            return sum + order.products.reduce((prodSum, product) => prodSum + (product.quantity || 0), 0);
+          }
+          return sum;
+        }, 0)
+      };
+
+      days.push(dayStats);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return days;
+  };
+
   // Carica gli ordini CSV
   useEffect(() => {
     const loadOrders = async () => {
@@ -85,6 +122,10 @@ const DashboardPage = () => {
           
           csvStatsData.totalGeneral = csvStatsData.totalValue + csvStatsData.totalShippingPaid - csvStatsData.totalDiscounts;
           setCsvStats(csvStatsData);
+          
+          // Calcola dati per il grafico
+          const chartData = calculateChartData(filteredCsvOrders, mainDateRange.startDate, mainDateRange.endDate);
+          setChartData(chartData);
         }
       } catch (error) {
         console.error('Errore nel caricare ordini CSV:', error);
@@ -167,6 +208,10 @@ const DashboardPage = () => {
       
       csvStatsData.totalGeneral = csvStatsData.totalValue + csvStatsData.totalShippingPaid - csvStatsData.totalDiscounts;
       setCsvStats(csvStatsData);
+      
+      // Aggiorna dati del grafico
+      const chartData = calculateChartData(filteredCsvOrders, mainDateRange.startDate, mainDateRange.endDate);
+      setChartData(chartData);
     }
   }, [csvOrders, mainDateRange]);
 
@@ -664,26 +709,71 @@ const DashboardPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-80 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-600 mb-2">
-                  {csvStats.totalOrders} Ordini
+            <div className="h-80">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip 
+                      formatter={(value, name) => {
+                        if (name === 'revenue') {
+                          return [new Intl.NumberFormat('it-IT', {
+                            style: 'currency',
+                            currency: 'EUR',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          }).format(value), 'Fatturato'];
+                        }
+                        return [value, name === 'orders' ? 'Ordini' : 'Prodotti'];
+                      }}
+                      labelFormatter={(label) => `Data: ${label}`}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stroke="#10b981" 
+                      strokeWidth={2}
+                      dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                      name="Fatturato"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="orders" 
+                      stroke="#3b82f6" 
+                      strokeWidth={2}
+                      dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+                      name="Ordini"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-600 mb-2">
+                      {csvStats.totalOrders} Ordini
+                    </div>
+                    <div className="text-sm text-gray-500 mb-4">
+                      Nel periodo selezionato
+                    </div>
+                    <div className="text-lg font-semibold text-green-600">
+                      {new Intl.NumberFormat('it-IT', {
+                        style: 'currency',
+                        currency: 'EUR',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      }).format(csvStats.totalValue)}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Fatturato totale
+                    </div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-500 mb-4">
-                  Nel periodo selezionato
-                </div>
-                <div className="text-lg font-semibold text-green-600">
-                  {new Intl.NumberFormat('it-IT', {
-                    style: 'currency',
-                    currency: 'EUR',
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  }).format(csvStats.totalValue)}
-                </div>
-                <div className="text-sm text-gray-500">
-                  Fatturato totale
-                </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
