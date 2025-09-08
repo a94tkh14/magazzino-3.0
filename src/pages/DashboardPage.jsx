@@ -664,11 +664,27 @@ const DashboardPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SalesChart 
-              orders={csvOrders}
-              startDate={mainDateRange.startDate}
-              endDate={mainDateRange.endDate}
-            />
+            <div className="h-80 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600 mb-2">
+                  {csvStats.totalOrders} Ordini
+                </div>
+                <div className="text-sm text-gray-500 mb-4">
+                  Nel periodo selezionato
+                </div>
+                <div className="text-lg font-semibold text-green-600">
+                  {new Intl.NumberFormat('it-IT', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }).format(csvStats.totalValue)}
+                </div>
+                <div className="text-sm text-gray-500">
+                  Fatturato totale
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
