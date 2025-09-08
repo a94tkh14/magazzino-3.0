@@ -416,7 +416,7 @@ const OrdiniPage = () => {
                          €{parseFloat(ordine.total_price || 0).toFixed(2)}
                        </td>
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                         {ordine.line_items?.length || 0} prodotti
+                         {ordine.products?.length || ordine.line_items?.length || 0} prodotti
                        </td>
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                          <button

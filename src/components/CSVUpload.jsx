@@ -74,7 +74,8 @@ const CSVUpload = () => {
       
       console.log('📊 Headers CSV:', headers);
       
-      const orders = [];
+      // Raggruppa le righe per ordine (Name)
+      const orderGroups = {};
       let processedCount = 0;
       let errorCount = 0;
 
@@ -90,55 +91,28 @@ const CSVUpload = () => {
             orderData[header] = values[index];
           });
 
-          // Converti in formato compatibile con il sistema (versione compressa)
-          const convertedOrder = {
-            id: orderData['Id'] || orderData['id'] || `csv_${i}`,
-            order_number: orderData['Name'] || orderData['name'] || i,
-            email: orderData['Email'] || orderData['email'] || '',
-            total_price: parseFloat(orderData['Total'] || orderData['total'] || '0'),
-            currency: orderData['Currency'] || orderData['currency'] || 'EUR',
-            financial_status: orderData['Financial Status'] || orderData['financial_status'] || 'paid',
-            fulfillment_status: orderData['Fulfillment Status'] || orderData['fulfillment_status'] || 'unfulfilled',
-            created_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
-            updated_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
-            source: 'csv',
-            // Dati cliente compressi
-            customer: {
-              id: orderData['Id'] || orderData['id'] || null,
-              email: orderData['Email'] || orderData['email'] || '',
-              name: orderData['Billing Name'] || orderData['billing_name'] || ''
-            },
-            // Indirizzi compressi (solo se non vuoti)
-            billing: orderData['Billing Address1'] ? {
-              name: orderData['Billing Name'] || '',
-              address: orderData['Billing Address1'] || '',
-              city: orderData['Billing City'] || '',
-              zip: orderData['Billing Zip'] || '',
-              country: orderData['Billing Country'] || '',
-              phone: orderData['Billing Phone'] || ''
-            } : null,
-            shipping: orderData['Shipping Address1'] ? {
-              name: orderData['Shipping Name'] || '',
-              address: orderData['Shipping Address1'] || '',
-              city: orderData['Shipping City'] || '',
-              zip: orderData['Shipping Zip'] || '',
-              country: orderData['Shipping Country'] || '',
-              phone: orderData['Shipping Phone'] || ''
-            } : null
-          };
+          const orderName = orderData['Name'];
+          if (!orderName) continue;
 
-          // Aggiungi prodotti se presenti (versione compressa)
+          // Se è la prima volta che vediamo questo ordine, crea il gruppo
+          if (!orderGroups[orderName]) {
+            orderGroups[orderName] = {
+              orderData: orderData,
+              products: []
+            };
+          }
+
+          // Aggiungi il prodotto a questo ordine
           if (orderData['Lineitem name']) {
-            convertedOrder.products = [{
+            orderGroups[orderName].products.push({
               name: orderData['Lineitem name'] || '',
               price: parseFloat(orderData['Lineitem price'] || '0'),
               qty: parseInt(orderData['Lineitem quantity'] || '1'),
               sku: orderData['Lineitem sku'] || '',
               vendor: orderData['Vendor'] || ''
-            }];
+            });
           }
 
-          orders.push(convertedOrder);
           processedCount++;
 
           // Aggiorna progresso
@@ -151,7 +125,56 @@ const CSVUpload = () => {
         }
       }
 
-      console.log(`✅ CSV processato: ${processedCount} ordini, ${errorCount} errori`);
+      // Converti i gruppi in ordini
+      const orders = [];
+      Object.keys(orderGroups).forEach((orderName, index) => {
+        const group = orderGroups[orderName];
+        const orderData = group.orderData;
+
+        // Converti in formato compatibile con il sistema (versione compressa)
+        const convertedOrder = {
+          id: orderData['Id'] || `csv_${index}`,
+          order_number: orderData['Name'] || orderData['name'] || index,
+          email: orderData['Email'] || orderData['email'] || '',
+          total_price: parseFloat(orderData['Total'] || orderData['total'] || '0'),
+          currency: orderData['Currency'] || orderData['currency'] || 'EUR',
+          financial_status: orderData['Financial Status'] || orderData['financial_status'] || 'paid',
+          fulfillment_status: orderData['Fulfillment Status'] || orderData['fulfillment_status'] || 'unfulfilled',
+          created_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
+          updated_at: orderData['Created at'] || orderData['created_at'] || new Date().toISOString(),
+          source: 'csv',
+          // Dati cliente compressi
+          customer: {
+            id: orderData['Id'] || orderData['id'] || null,
+            email: orderData['Email'] || orderData['email'] || '',
+            name: orderData['Billing Name'] || orderData['billing_name'] || ''
+          },
+          // Indirizzi compressi (solo se non vuoti)
+          billing: orderData['Billing Address1'] ? {
+            name: orderData['Billing Name'] || '',
+            address: orderData['Billing Address1'] || '',
+            city: orderData['Billing City'] || '',
+            zip: orderData['Billing Zip'] || '',
+            country: orderData['Billing Country'] || '',
+            phone: orderData['Billing Phone'] || ''
+          } : null,
+          shipping: orderData['Shipping Address1'] ? {
+            name: orderData['Shipping Name'] || '',
+            address: orderData['Shipping Address1'] || '',
+            city: orderData['Shipping City'] || '',
+            zip: orderData['Shipping Zip'] || '',
+            country: orderData['Shipping Country'] || '',
+            phone: orderData['Shipping Phone'] || ''
+          } : null,
+          // Prodotti raggruppati
+          products: group.products
+        };
+
+        orders.push(convertedOrder);
+      });
+
+      console.log(`✅ CSV processato: ${processedCount} righe, ${Object.keys(orderGroups).length} ordini unici, ${errorCount} errori`);
+      console.log('📊 Esempio ordine:', orders[0]);
 
       if (orders.length > 0) {
         try {
