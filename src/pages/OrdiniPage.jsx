@@ -396,6 +396,194 @@ const OrdiniPage = () => {
     }
   };
 
+  // Funzione per caricare CSV manuale
+  const handleCSVUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      alert('Per favore seleziona un file CSV');
+      return;
+    }
+
+    if (!window.confirm(`Vuoi caricare il file CSV "${file.name}"? Questo sostituirà tutti gli ordini esistenti.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+
+    try {
+      console.log('📁 Caricamento CSV manuale...');
+      
+      const text = await file.text();
+      const lines = text.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      
+      console.log('📊 Headers CSV:', headers);
+      
+      const orders = [];
+      let processedCount = 0;
+      let errorCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === '') continue;
+        
+        try {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          if (values.length !== headers.length) continue;
+
+          const orderData = {};
+          headers.forEach((header, index) => {
+            orderData[header] = values[index];
+          });
+
+          // Converti in formato compatibile con il sistema
+          const convertedOrder = {
+            id: orderData['Order ID'] || orderData['id'] || `csv_${i}`,
+            order_number: orderData['Order Number'] || orderData['order_number'] || i,
+            email: orderData['Email'] || orderData['email'] || '',
+            total_price: orderData['Total'] || orderData['total_price'] || '0',
+            currency: orderData['Currency'] || orderData['currency'] || 'EUR',
+            financial_status: orderData['Financial Status'] || orderData['financial_status'] || 'paid',
+            fulfillment_status: orderData['Fulfillment Status'] || orderData['fulfillment_status'] || 'fulfilled',
+            created_at: orderData['Created At'] || orderData['created_at'] || new Date().toISOString(),
+            updated_at: orderData['Updated At'] || orderData['updated_at'] || new Date().toISOString(),
+            source: 'csv_manual',
+            line_items: [],
+            customer: {
+              id: orderData['Customer ID'] || orderData['customer_id'] || null,
+              email: orderData['Email'] || orderData['email'] || '',
+              first_name: orderData['First Name'] || orderData['first_name'] || '',
+              last_name: orderData['Last Name'] || orderData['last_name'] || ''
+            }
+          };
+
+          orders.push(convertedOrder);
+          processedCount++;
+
+        } catch (error) {
+          console.error(`❌ Errore riga ${i}:`, error);
+          errorCount++;
+        }
+      }
+
+      console.log(`✅ CSV processato: ${processedCount} ordini, ${errorCount} errori`);
+
+      if (orders.length > 0) {
+        // Salva gli ordini
+        await saveOrders(orders);
+        
+        // Pulisci dati vecchi
+        await cleanupOldData('shopify_orders', 30);
+        
+        setMessage(`✅ CSV caricato con successo! ${orders.length} ordini importati`);
+          } else {
+        setError('Nessun ordine valido trovato nel CSV');
+      }
+
+    } catch (error) {
+      console.error('❌ Errore caricamento CSV:', error);
+      setError(`Errore caricamento CSV: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+      // Reset del file input
+      event.target.value = '';
+    }
+  };
+
+  // Funzione per sincronizzare solo ordini nuovi
+  const handleSyncNewOrders = async () => {
+    if (!window.confirm('Vuoi sincronizzare solo gli ordini NUOVI? Questo scaricherà solo gli ordini più recenti.')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+    setMessage('');
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setSyncProgress({
+      isRunning: true,
+      currentPage: 0,
+      totalPages: 0,
+      ordersDownloaded: 0,
+      totalOrders: 0,
+      currentStatus: 'Sincronizzazione ordini nuovi...'
+    });
+
+    try {
+      console.log('🔄 INIZIO SINCRONIZZAZIONE ORDINI NUOVI...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Carica ordini esistenti per trovare l'ultimo
+      const existingOrders = await loadLargeData('shopify_orders') || [];
+      const lastOrderDate = existingOrders.length > 0 
+        ? new Date(Math.max(...existingOrders.map(o => new Date(o.created_at).getTime())))
+        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 giorni fa
+
+      console.log(`📅 Ultimo ordine esistente: ${lastOrderDate.toISOString()}`);
+
+      // Scarica solo ordini più recenti
+      const response = await fetchShopifyOrders({
+        limit: 250,
+        status: 'any',
+        daysBack: 7 // Solo ultimi 7 giorni
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Errore nella risposta API');
+      }
+
+      const newOrders = response.orders || [];
+      const existingOrderIds = new Set(existingOrders.map(o => o.id.toString()));
+      
+      // Filtra solo ordini nuovi
+      const trulyNewOrders = newOrders.filter(order => 
+        !existingOrderIds.has(order.id.toString()) &&
+        new Date(order.created_at) > lastOrderDate
+      );
+
+      console.log(`📊 Ordini ricevuti: ${newOrders.length}, Nuovi: ${trulyNewOrders.length}`);
+
+      if (trulyNewOrders.length > 0) {
+        // Converti e salva solo gli ordini nuovi
+        const convertedOrders = trulyNewOrders.map(convertShopifyOrder);
+        const allOrders = [...existingOrders, ...convertedOrders];
+        
+        await saveOrders(allOrders);
+        
+        setMessage(`✅ Sincronizzazione completata! ${trulyNewOrders.length} ordini nuovi aggiunti`);
+            } else {
+        setMessage('ℹ️ Nessun ordine nuovo trovato');
+      }
+
+    } catch (err) {
+      console.error('❌ ERRORE SINCRONIZZAZIONE:', err);
+      setError(`Errore sincronizzazione: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+      setSyncProgress({
+        isRunning: false,
+        currentPage: 0,
+        totalPages: 0,
+        ordersDownloaded: 0,
+        totalOrders: 0,
+        currentStatus: ''
+      });
+      setAbortController(null);
+    }
+  };
+
   const handleDownloadNoStatus = async () => {
     if (!window.confirm('Vuoi avviare il download SENZA filtri di status? Questo dovrebbe scaricare tutti gli ordini disponibili.')) {
       return;
@@ -443,8 +631,8 @@ const OrdiniPage = () => {
         setMessage(`✅ DOWNLOAD SENZA FILTRI COMPLETATO! Scaricati ${allOrders.length} ordini totali`);
         
         // Converti e salva gli ordini
-        const convertedOrders = allOrders.map(convertShopifyOrder);
-        await saveOrders(convertedOrders);
+              const convertedOrders = allOrders.map(convertShopifyOrder);
+              await saveOrders(convertedOrders);
         
         // Pulisci dati vecchi
         await cleanupOldData('shopify_orders', 30);
@@ -504,8 +692,8 @@ const OrdiniPage = () => {
       // Usa il metodo completo
       const allOrders = await downloadAllOrdersComplete(
         (progress) => {
-          setSyncProgress(prev => ({
-            ...prev,
+              setSyncProgress(prev => ({
+                ...prev,
             ...progress,
             currentStatus: progress.currentStatus || 'Download completo in corso...'
           }));
@@ -652,8 +840,8 @@ const OrdiniPage = () => {
       // Usa il metodo con since_id
       const allOrders = await downloadAllOrdersWithSinceId(
         (progress) => {
-          setSyncProgress(prev => ({
-            ...prev,
+    setSyncProgress(prev => ({
+      ...prev,
             ...progress,
             currentStatus: progress.currentStatus || 'Download con since_id in corso...'
           }));
@@ -1229,6 +1417,22 @@ const OrdiniPage = () => {
             🔄 TEST SINCE_ID
           </Button>
           
+          <div className="relative">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCSVUpload}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              disabled={isLoading}
+            />
+            <Button 
+              disabled={isLoading}
+              className="bg-orange-600 hover:bg-orange-700 text-white w-full"
+            >
+              📁 CARICA CSV MANUALE
+            </Button>
+          </div>
+          
           <Button 
             onClick={() => handleDownloadNoStatus()} 
             disabled={isLoading}
@@ -1259,6 +1463,14 @@ const OrdiniPage = () => {
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             🔄 DOWNLOAD SINCE_ID
+          </Button>
+          
+          <Button 
+            onClick={() => handleSyncNewOrders()} 
+            disabled={isLoading}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            🆕 SINCRONIZZA NUOVI
           </Button>
           
           <Button 
@@ -1393,6 +1605,8 @@ const OrdiniPage = () => {
               <div><strong>🎯 Download Completo:</strong> Scarica TUTTI gli ordini con TUTTI i possibili status (14 status diversi)</div>
               <div><strong>🚀 Download Semplice:</strong> Usa solo status "any" per scaricare tutto (approccio diretto)</div>
               <div><strong>🔄 Download Since_ID:</strong> Usa since_id per paginazione (alternativa al pageInfo)</div>
+              <div><strong>🆕 Sincronizza Nuovi:</strong> Scarica solo gli ordini nuovi (ultimi 7 giorni)</div>
+              <div><strong>📁 Carica CSV Manuale:</strong> Carica manualmente il CSV completo di Shopify</div>
               <div><strong>⚡ Download Forzato:</strong> Bypassa filtri, scarica TUTTI gli ordini senza limitazioni</div>
               <div><strong>🚫 Senza Filtri:</strong> Download senza filtri di status (approccio alternativo)</div>
               <div><strong>📦 Scarica Archiviati:</strong> Focus su ordini chiusi/archiviati che potrebbero mancare</div>
@@ -1413,6 +1627,19 @@ const OrdiniPage = () => {
                 <div><strong>2.</strong> Configura le credenziali Shopify (Dominio Shop + Access Token)</div>
                 <div><strong>3.</strong> Testa la connessione con il pulsante "🔍 Test Connessione"</div>
                 <div><strong>4.</strong> Torna qui e clicca "🚀 SINCRONIZZA TUTTO (4039)"</div>
+              </div>
+            </div>
+
+            {/* Istruzioni per CSV manuale */}
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h4 className="font-medium text-green-800 mb-2">📁 Caricamento CSV Manuale:</h4>
+              <div className="text-sm text-green-700 space-y-1">
+                <div><strong>Metodo Ibrido Consigliato:</strong></div>
+                <div>1. Esporta il CSV completo da Shopify (tutti i 4039 ordini)</div>
+                <div>2. Clicca "📁 CARICA CSV MANUALE" e seleziona il file</div>
+                <div>3. Il sistema caricherà tutti gli ordini dal CSV</div>
+                <div>4. Usa "🆕 SINCRONIZZA NUOVI" per aggiornamenti automatici</div>
+                <div><strong>Vantaggi:</strong> Caricamento completo + sincronizzazione automatica</div>
               </div>
             </div>
           </div>
