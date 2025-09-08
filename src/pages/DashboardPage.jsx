@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { loadMagazzinoData } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
-import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw } from 'lucide-react';
 import { formatPrice } from '../lib/utils';
 import { addDays, startOfDay, endOfDay, subDays, subMonths, subYears, format } from 'date-fns';
 import { it } from 'date-fns/locale';
