@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { loadLargeData, saveLargeData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
 import { convertShopifyOrder, getShopifyCredentials } from '../lib/shopifyAPI';
-import { RefreshCw, AlertCircle, Database, TrendingUp, Clock, Archive, Eye } from 'lucide-react';
-import OrderDetailPage from './OrderDetailPage';
+import { RefreshCw, AlertCircle, Database, TrendingUp, Clock, Archive } from 'lucide-react';
 
 // Componenti UI semplificati
 const Card = ({ children, className = '' }) => (
@@ -57,7 +56,6 @@ const OrdiniPage = () => {
   const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedOrderId, setSelectedOrderId] = useState(null);
 
   // Carica ordini al mount
   useEffect(() => {
@@ -187,25 +185,11 @@ const OrdiniPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  // Funzioni per gestire la visualizzazione dei dettagli
-  const handleViewOrder = (orderId) => {
-    setSelectedOrderId(orderId);
-  };
-
-  const handleBackToList = () => {
-    setSelectedOrderId(null);
-  };
-
   // Statistiche
   const totalValue = filteredOrdini.reduce((sum, ordine) => sum + parseFloat(ordine.total_price || 0), 0);
   const totalOrders = filteredOrdini.length;
   const paidOrders = filteredOrdini.filter(o => o.financial_status === 'paid').length;
   const pendingOrders = filteredOrdini.filter(o => o.financial_status === 'pending').length;
-
-  // Se è selezionato un ordine, mostra la pagina di dettaglio
-  if (selectedOrderId) {
-    return <OrderDetailPage orderId={selectedOrderId} onBack={handleBackToList} />;
-  }
 
   return (
     <div className="space-y-6">
@@ -332,14 +316,11 @@ const OrdiniPage = () => {
         </CardContent>
       </Card>
 
-       {/* Lista Ordini */}
-       <Card>
-         <CardHeader>
-           <CardTitle>Lista Ordini ({filteredOrdini.length})</CardTitle>
-           <p className="text-sm text-gray-600 mt-1">
-             Clicca su una riga o sul pulsante "Dettagli" per vedere tutte le informazioni dell'ordine
-           </p>
-         </CardHeader>
+      {/* Lista Ordini */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Lista Ordini ({filteredOrdini.length})</CardTitle>
+        </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex justify-center items-center py-8">
@@ -371,67 +352,52 @@ const OrdiniPage = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Totale
                     </th>
-                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                       Prodotti
-                     </th>
-                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                       Azioni
-                     </th>
-                   </tr>
-                 </thead>
-                 <tbody className="bg-white divide-y divide-gray-200">
-                   {filteredOrdini.map((ordine) => (
-                     <tr key={ordine.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewOrder(ordine.id)}>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <div className="text-sm font-medium text-gray-900">
-                           #{ordine.order_number}
-                         </div>
-                         <div className="text-sm text-gray-500">
-                           {ordine.id}
-                         </div>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <div className="text-sm font-medium text-gray-900">
-                           {ordine.customer?.first_name} {ordine.customer?.last_name}
-                         </div>
-                         <div className="text-sm text-gray-500">
-                           {ordine.email}
-                         </div>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                         {new Date(ordine.created_at).toLocaleDateString('it-IT')}
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                           ordine.financial_status === 'paid' 
-                             ? 'bg-green-100 text-green-800'
-                             : ordine.financial_status === 'pending'
-                             ? 'bg-yellow-100 text-yellow-800'
-                             : 'bg-red-100 text-red-800'
-                         }`}>
-                           {ordine.financial_status}
-                         </span>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                         €{parseFloat(ordine.total_price || 0).toFixed(2)}
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                         {ordine.line_items?.length || 0} prodotti
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                         <button
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             handleViewOrder(ordine.id);
-                           }}
-                           className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
-                         >
-                           <Eye className="w-4 h-4 mr-1" />
-                           Dettagli
-                         </button>
-                       </td>
-                     </tr>
-                   ))}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Prodotti
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredOrdini.map((ordine) => (
+                    <tr key={ordine.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          #{ordine.order_number}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {ordine.id}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {ordine.customer?.first_name} {ordine.customer?.last_name}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {ordine.email}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(ordine.created_at).toLocaleDateString('it-IT')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          ordine.financial_status === 'paid' 
+                            ? 'bg-green-100 text-green-800'
+                            : ordine.financial_status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {ordine.financial_status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        €{parseFloat(ordine.total_price || 0).toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {ordine.line_items?.length || 0} prodotti
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

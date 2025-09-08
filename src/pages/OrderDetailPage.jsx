@@ -1,72 +1,68 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import Button from '../components/ui/button';
-import { ArrowLeft, Package, User, Truck as TruckIcon, Download } from 'lucide-react';
-import { format } from 'date-fns';
-import { it } from 'date-fns/locale';
+import { loadLargeData } from '../lib/dataManager';
+import { ArrowLeft, Package, User, MapPin, CreditCard, Calendar, Tag, Truck } from 'lucide-react';
 
-const OrderDetailPage = () => {
+// Componenti UI
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
+    {children}
+  </div>
+);
+
+const CardHeader = ({ children }) => (
+  <div className="px-6 py-4 border-b border-gray-200">
+    {children}
+  </div>
+);
+
+const CardContent = ({ children }) => (
+  <div className="px-6 py-4">
+    {children}
+  </div>
+);
+
+const CardTitle = ({ children }) => (
+  <h3 className="text-lg font-semibold text-gray-900">
+    {children}
+  </h3>
+);
+
+const Button = ({ children, onClick, disabled = false, className = '' }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`px-4 py-2 rounded-md font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+  >
+    {children}
+  </button>
+);
+
+const OrderDetailPage = ({ orderId, onBack }) => {
   const [order, setOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadOrder = () => {
-      try {
-        // Ottieni l'ID dall'URL
-        const pathParts = window.location.pathname.split('/');
-        const orderId = pathParts[pathParts.length - 1];
-        
-        console.log('OrderDetailPage - URL pathname:', window.location.pathname);
-        console.log('OrderDetailPage - Extracted orderId:', orderId);
-        
-        // Carica gli ordini dal localStorage
-        const savedOrders = localStorage.getItem('shopify_orders');
-        if (!savedOrders) {
-          setError('Nessun ordine trovato');
-          setLoading(false);
-          return;
-        }
-        
-        const orders = JSON.parse(savedOrders);
-        console.log('OrderDetailPage - Total orders in localStorage:', orders.length);
-        console.log('OrderDetailPage - First few orders:', orders.slice(0, 3));
-        
-        // Converti l'ID in numero per il confronto
-        const numericOrderId = parseInt(orderId, 10);
-        console.log('OrderDetailPage - Looking for order with ID:', numericOrderId);
-        
-        let foundOrder = orders.find(o => o.id === numericOrderId);
-        
-        // Se non trovato per ID, prova a cercare per numero ordine
-        if (!foundOrder) {
-          console.log('OrderDetailPage - Order not found by ID, trying orderNumber...');
-          foundOrder = orders.find(o => o.orderNumber.toString() === orderId);
-        }
-        
-        if (!foundOrder) {
-          console.log('OrderDetailPage - Order not found. Available IDs:', orders.map(o => o.id).slice(0, 10));
-          console.log('OrderDetailPage - Available orderNumbers:', orders.map(o => o.orderNumber).slice(0, 10));
-          setError('Ordine non trovato');
-          setLoading(false);
-          return;
-        }
-        
-        console.log('OrderDetailPage - Found order:', foundOrder);
-        setOrder(foundOrder);
-      } catch (err) {
-        console.error('OrderDetailPage - Error loading order:', err);
-        setError('Errore nel caricamento dell\'ordine');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadOrder();
-  }, []);
+  }, [orderId]);
 
-  const formatDate = (dateString) => {
-    return format(new Date(dateString), 'dd MMMM yyyy HH:mm', { locale: it });
+  const loadOrder = async () => {
+    try {
+      setIsLoading(true);
+      const orders = await loadLargeData('shopify_orders') || [];
+      const foundOrder = orders.find(o => o.id.toString() === orderId.toString());
+      
+      if (foundOrder) {
+        setOrder(foundOrder);
+      } else {
+        setError('Ordine non trovato');
+      }
+    } catch (err) {
+      console.error('Errore caricamento ordine:', err);
+      setError('Errore nel caricamento dell\'ordine');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatPrice = (price) => {
@@ -75,492 +71,303 @@ const OrderDetailPage = () => {
       currency: 'EUR',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(price);
+    }).format(parseFloat(price || 0));
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('it-IT', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      case 'refunded':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
+      case 'paid': return 'bg-green-100 text-green-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'refunded': return 'bg-red-100 text-red-800';
+      case 'cancelled': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'paid':
-        return 'Pagato';
-      case 'pending':
-        return 'In Attesa';
-      case 'cancelled':
-        return 'Cancellato';
-      case 'refunded':
-        return 'Rimborsato';
-      default:
-        return status;
+      case 'paid': return 'Pagato';
+      case 'pending': return 'In Attesa';
+      case 'refunded': return 'Rimborsato';
+      case 'cancelled': return 'Cancellato';
+      default: return status;
     }
   };
 
-  const getFulfillmentStatusColor = (status) => {
-    switch (status) {
-      case 'fulfilled':
-        return 'bg-green-100 text-green-800';
-      case 'partial':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'unfulfilled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getFulfillmentStatusLabel = (status) => {
-    switch (status) {
-      case 'fulfilled':
-        return 'Spedito';
-      case 'partial':
-        return 'Parzialmente Spedito';
-      case 'unfulfilled':
-        return 'Non Spedito';
-      default:
-        return status || 'Non Spedito';
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Caricamento ordine...</p>
-        </div>
+      <div className="flex justify-center items-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2 text-gray-600">Caricamento ordine...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-8">
-          <p className="text-red-600">{error}</p>
-          <Button 
-            onClick={() => window.history.back()} 
-            className="mt-4"
-            variant="outline"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Torna Indietro
-          </Button>
-        </div>
+      <div className="text-center py-8">
+        <div className="text-red-600 mb-4">{error}</div>
+        <Button onClick={onBack} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Torna alla Lista
+        </Button>
       </div>
     );
   }
 
   if (!order) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">Ordine non trovato</p>
-          <Button 
-            onClick={() => window.history.back()} 
-            className="mt-4"
-            variant="outline"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Torna Indietro
-          </Button>
-        </div>
+      <div className="text-center py-8">
+        <div className="text-gray-500 mb-4">Ordine non trovato</div>
+        <Button onClick={onBack} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Torna alla Lista
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button 
-            onClick={() => window.history.back()} 
-            variant="outline"
-            size="sm"
-          >
+        <div className="flex items-center space-x-4">
+          <Button onClick={onBack} className="bg-gray-600 hover:bg-gray-700 text-white">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Torna Indietro
+            Torna alla Lista
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Ordine #{order.orderNumber}</h1>
-            <p className="text-muted-foreground">
-              Creato il {formatDate(order.createdAt)}
-            </p>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Ordine #{order.order_number}
+            </h1>
+            <p className="text-gray-600">ID: {order.id}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4 mr-2" />
-            Esporta
-          </Button>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-gray-900">
+            {formatPrice(order.total_price)}
+          </div>
+          <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(order.financial_status)}`}>
+            {getStatusLabel(order.financial_status)}
+          </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Informazioni Principali */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Stato Ordine */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="w-5 h-5" />
-                Stato Ordine
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Stato Pagamento</p>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                    {getStatusLabel(order.status)}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Stato Spedizione</p>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getFulfillmentStatusColor(order.fulfillmentStatus)}`}>
-                    {getFulfillmentStatusLabel(order.fulfillmentStatus)}
-                  </span>
-                </div>
+      {/* Informazioni Generali */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Calendar className="w-5 h-5 mr-2" />
+              Informazioni Ordine
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Data Creazione:</span>
+                <span className="font-medium">{formatDate(order.created_at)}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Informazioni Cliente */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Informazioni Cliente
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Informazioni Cliente Principali */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Nome Completo</p>
-                    <p className="font-medium">{order.customerName || 'Non specificato'}</p>
-                  </div>
-                  {order.customerEmail && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="font-medium">{order.customerEmail}</p>
-                    </div>
-                  )}
-                  {order.customerPhone && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Telefono</p>
-                      <p className="font-medium">{order.customerPhone}</p>
-                    </div>
-                  )}
-                  {order.customerFirstName && order.customerLastName && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Nome e Cognome</p>
-                      <p className="font-medium">{order.customerFirstName} {order.customerLastName}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Indirizzo di Spedizione Dettagliato */}
-                {order.shippingAddress && (
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Indirizzo di Spedizione Completo</p>
-                    <div className="bg-gray-50 p-3 rounded border text-sm space-y-1">
-                      {order.shippingAddress.name && (
-                        <p className="font-medium">📋 {order.shippingAddress.name}</p>
-                      )}
-                      {order.shippingAddress.address1 && (
-                        <p>📍 {order.shippingAddress.address1}</p>
-                      )}
-                      {order.shippingAddress.address2 && (
-                        <p>📍 {order.shippingAddress.address2}</p>
-                      )}
-                      {(order.shippingAddress.city || order.shippingAddress.province || order.shippingAddress.zip) && (
-                        <p>🏙️ {order.shippingAddress.city || ''} {order.shippingAddress.province || ''} {order.shippingAddress.zip || ''}</p>
-                      )}
-                      {order.shippingAddress.country && (
-                        <p>🌍 {order.shippingAddress.country}</p>
-                      )}
-                      {order.shippingAddress.phone && (
-                        <p>📞 {order.shippingAddress.phone}</p>
-                      )}
-                      {order.shippingAddress.email && (
-                        <p>📧 {order.shippingAddress.email}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Indirizzo di Fatturazione (se diverso) */}
-                {order.billingAddress && (
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Indirizzo di Fatturazione</p>
-                    <div className="bg-blue-50 p-3 rounded border text-sm space-y-1">
-                      {order.billingAddress.name && (
-                        <p className="font-medium">📋 {order.billingAddress.name}</p>
-                      )}
-                      {order.billingAddress.address1 && (
-                        <p>📍 {order.billingAddress.address1}</p>
-                      )}
-                      {order.billingAddress.address2 && (
-                        <p>📍 {order.billingAddress.address2}</p>
-                      )}
-                      {(order.billingAddress.city || order.billingAddress.province || order.billingAddress.zip) && (
-                        <p>🏙️ {order.billingAddress.city || ''} {order.billingAddress.province || ''} {order.billingAddress.zip || ''}</p>
-                      )}
-                      {order.billingAddress.country && (
-                        <p>🌍 {order.billingAddress.country}</p>
-                      )}
-                      {order.billingAddress.phone && (
-                        <p>📞 {order.billingAddress.phone}</p>
-                      )}
-                      {order.billingAddress.email && (
-                        <p>📧 {order.billingAddress.email}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+              <div className="flex justify-between">
+                <span className="text-gray-600">Data Aggiornamento:</span>
+                <span className="font-medium">{formatDate(order.updated_at)}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Sezione Spedizione */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center">
-              <TruckIcon className="w-5 h-5 mr-2" />
-              Informazioni di Spedizione
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Tipo di Spedizione */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo di Spedizione
-                </label>
-                <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border">
-                  {order.shippingType || 'Standard'}
-                </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Fonte:</span>
+                <span className="font-medium">{order.source || 'Shopify'}</span>
               </div>
-
-              {/* Corriere */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Corriere
-                </label>
-                <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border">
-                  {order.shippingCarrier || 'N/A'}
-                </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Valuta:</span>
+                <span className="font-medium">{order.currency || 'EUR'}</span>
               </div>
-
-              {/* Costo Spedizione */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Costo Spedizione
-                </label>
-                <div className={`text-sm px-3 py-2 rounded border ${
-                  order.shippingPrice > 0 
-                    ? 'text-gray-900 bg-gray-50' 
-                    : 'text-green-700 bg-green-50 border-green-200'
-                }`}>
-                  {order.shippingPrice > 0 
-                    ? `${order.shippingPrice.toFixed(2)} ${order.currency}`
-                    : '🆓 Gratuita'
-                  }
-                </div>
-              </div>
-
-              {/* Stato Pagamento */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Stato Pagamento
-                </label>
-                <div className={`text-sm px-3 py-2 rounded border ${
-                  order.status === 'paid' 
-                    ? 'text-green-700 bg-green-50 border-green-200' 
-                    : order.status === 'pending'
-                    ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
-                    : 'text-gray-900 bg-gray-50'
-                }`}>
-                  {order.status === 'paid' ? '✅ Pagato' : 
-                   order.status === 'pending' ? '⏳ In attesa' : 
-                   order.status === 'refunded' ? '🔄 Rimborsato' : 
-                   order.status}
-                </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Status Fulfillment:</span>
+                <span className="font-medium">{order.fulfillment_status || 'N/A'}</span>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Note dell'Ordine */}
-            {order.note && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Note dell'Ordine
-                </label>
-                <div className="bg-yellow-50 p-3 rounded border text-sm">
-                  <div className="text-gray-800">{order.note}</div>
-                </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <User className="w-5 h-5 mr-2" />
+              Informazioni Cliente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Nome:</span>
+                <span className="font-medium">
+                  {order.customer?.first_name} {order.customer?.last_name}
+                </span>
               </div>
-            )}
-
-            {/* Dettagli Shipping Lines */}
-            {order.shippingLines && (Array.isArray(order.shippingLines) ? order.shippingLines : []).length > 0 && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Dettagli Spedizione
-                </label>
-                <div className="space-y-2">
-                  {(Array.isArray(order.shippingLines) ? order.shippingLines : []).map((line, index) => (
-                    <div key={index} className="bg-gray-50 p-3 rounded border text-sm">
-                      <div className="font-medium">{line.title}</div>
-                      <div className="text-gray-600">
-                        Prezzo: {parseFloat(line.price || 0).toFixed(2)} {order.currency}
-                      </div>
-                      {line.carrier_identifier && (
-                        <div className="text-gray-600">
-                          Corriere: {line.carrier_identifier}
-                        </div>
-                      )}
-                      {line.code && (
-                        <div className="text-gray-600">
-                          Codice: {line.code}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Email:</span>
+                <span className="font-medium">{order.email}</span>
               </div>
-            )}
-          </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">ID Cliente:</span>
+                <span className="font-medium">{order.customer?.id || 'N/A'}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Prodotti */}
+      {/* Indirizzi */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {order.billing_address && (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="w-5 h-5" />
-                Prodotti ({order.items.length})
+              <CardTitle className="flex items-center">
+                <MapPin className="w-5 h-5 mr-2" />
+                Indirizzo di Fatturazione
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {(Array.isArray(order.items) ? order.items : []).map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="space-y-2">
+                <div className="font-medium">
+                  {order.billing_address.first_name} {order.billing_address.last_name}
+                </div>
+                <div>{order.billing_address.address1}</div>
+                {order.billing_address.address2 && <div>{order.billing_address.address2}</div>}
+                <div>
+                  {order.billing_address.zip} {order.billing_address.city}
+                </div>
+                <div>{order.billing_address.province}</div>
+                <div>{order.billing_address.country}</div>
+                {order.billing_address.phone && (
+                  <div className="text-blue-600">{order.billing_address.phone}</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {order.shipping_address && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Truck className="w-5 h-5 mr-2" />
+                Indirizzo di Spedizione
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="font-medium">
+                  {order.shipping_address.first_name} {order.shipping_address.last_name}
+                </div>
+                <div>{order.shipping_address.address1}</div>
+                {order.shipping_address.address2 && <div>{order.shipping_address.address2}</div>}
+                <div>
+                  {order.shipping_address.zip} {order.shipping_address.city}
+                </div>
+                <div>{order.shipping_address.province}</div>
+                <div>{order.shipping_address.country}</div>
+                {order.shipping_address.phone && (
+                  <div className="text-blue-600">{order.shipping_address.phone}</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Prodotti */}
+      {order.line_items && order.line_items.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Package className="w-5 h-5 mr-2" />
+              Prodotti ({order.line_items.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {order.line_items.map((item, index) => (
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <Package className="w-6 h-6 text-gray-500" />
+                      <h4 className="font-medium text-gray-900">{item.name}</h4>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <Tag className="w-4 h-4 mr-2" />
+                          <span>SKU: {item.sku || 'N/A'}</span>
                         </div>
-                        <div>
-                          <h4 className="font-medium">{item.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            SKU: {item.sku || 'N/A'}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Quantità: {item.quantity}
-                          </p>
+                        <div>Quantità: {item.quantity}</div>
+                        <div>Prezzo unitario: {formatPrice(item.price)}</div>
+                        {item.vendor && <div>Vendor: {item.vendor}</div>}
+                        <div className="flex items-center space-x-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            item.requires_shipping ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {item.requires_shipping ? 'Richiede spedizione' : 'Non richiede spedizione'}
+                          </span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            item.taxable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {item.taxable ? 'Tassabile' : 'Non tassabile'}
+                          </span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            item.fulfillment_status === 'fulfilled' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {item.fulfillment_status || 'Pending'}
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{formatPrice(item.price)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Totale: {formatPrice(item.price * item.quantity)}
-                      </p>
+                    <div className="text-right ml-4">
+                      <div className="text-lg font-semibold text-gray-900">
+                        {formatPrice(item.price * item.quantity)}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {item.quantity} × {formatPrice(item.price)}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-          {/* Debug: JSON grezzo dell'ordine */}
-          <div className="mt-8">
-            <details>
-              <summary className="cursor-pointer font-mono text-xs text-gray-500 mb-2">Mostra dati JSON grezzi dell'ordine</summary>
-              <pre className="bg-gray-100 p-4 rounded text-xs overflow-x-auto border mt-2" style={{maxHeight: 400}}>
-                {JSON.stringify(order._rawShopifyOrder || order.rawShopifyOrder || order, null, 2)}
-              </pre>
-            </details>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Riepilogo Finanziario */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <CreditCard className="w-5 h-5 mr-2" />
+            Riepilogo Finanziario
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex justify-between text-lg">
+              <span className="font-medium">Totale Ordine:</span>
+              <span className="font-bold text-xl">{formatPrice(order.total_price)}</span>
+            </div>
+            <div className="text-sm text-gray-600">
+              <div>Valuta: {order.currency || 'EUR'}</div>
+              <div>Status Pagamento: {getStatusLabel(order.financial_status)}</div>
+              <div>Status Fulfillment: {order.fulfillment_status || 'N/A'}</div>
+            </div>
           </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Riepilogo */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Riepilogo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span>Subtotale Prodotti</span>
-                  <span>{formatPrice(order.totalPrice - order.shippingPrice - order.taxPrice)}</span>
-                </div>
-                {order.shippingPrice > 0 && (
-                  <div className="flex justify-between">
-                    <span>Spedizione</span>
-                    <span>{formatPrice(order.shippingPrice)}</span>
-                  </div>
-                )}
-                {order.taxPrice > 0 && (
-                  <div className="flex justify-between">
-                    <span>Tasse</span>
-                    <span>{formatPrice(order.taxPrice)}</span>
-                  </div>
-                )}
-                <div className="border-t pt-3">
-                  <div className="flex justify-between font-semibold">
-                    <span>Totale</span>
-                    <span>{formatPrice(order.totalPrice)}</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Informazioni Aggiuntive */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Informazioni Aggiuntive</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">ID Ordine Shopify</p>
-                  <p className="font-mono text-sm">{order.id}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Nome Ordine</p>
-                  <p className="font-medium">{order.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Valuta</p>
-                  <p className="font-medium">{order.currency}</p>
-                </div>
-                {order.note && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Note</p>
-                    <p className="text-sm">{order.note}</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
 
-export default OrderDetailPage; 
+export default OrderDetailPage;
