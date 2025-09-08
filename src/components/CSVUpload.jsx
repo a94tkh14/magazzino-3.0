@@ -107,18 +107,11 @@ const CSVUpload = () => {
           // Se è la prima volta che vediamo questo ordine, crea il gruppo
           if (!orderGroups[orderName]) {
             orderGroups[orderName] = {
-              orderData: orderData,
+              orderData: orderData, // Prima riga con totale, spedizione, cliente
               products: []
             };
-          } else {
-            // Se è una riga successiva, aggiorna solo i campi che non sono vuoti
-            // per mantenere i dati completi della prima riga
-            Object.keys(orderData).forEach(key => {
-              if (orderData[key] && orderData[key] !== '' && !orderGroups[orderName].orderData[key]) {
-                orderGroups[orderName].orderData[key] = orderData[key];
-              }
-            });
           }
+          // Le righe successive contengono solo i prodotti, non i dati dell'ordine
 
           // Aggiungi il prodotto a questo ordine
           if (orderData['Lineitem name']) {
@@ -260,8 +253,32 @@ const CSVUpload = () => {
 
       console.log(`✅ CSV processato: ${processedCount} righe, ${Object.keys(orderGroups).length} ordini unici, ${errorCount} errori`);
       console.log('📊 Esempio ordine:', orders[0]);
-      console.log('📊 Ordine #5056:', orders.find(o => o.order_number === '#5056'));
-      console.log('📊 Ordine #5058:', orders.find(o => o.order_number === '#5058'));
+      
+      // Debug specifico per ordini problematici
+      const order5056 = orders.find(o => o.order_number === '#5056');
+      const order5058 = orders.find(o => o.order_number === '#5058');
+      
+      console.log('📊 Ordine #5056:', {
+        order_number: order5056?.order_number,
+        email: order5056?.email,
+        total_price: order5056?.total_price,
+        discount_code: order5056?.discount_code,
+        discount_amount: order5056?.discount_amount,
+        shipping_cost: order5056?.shipping_cost,
+        products_count: order5056?.products?.length,
+        products: order5056?.products?.map(p => ({ name: p.name, price: p.price, qty: p.qty }))
+      });
+      
+      console.log('📊 Ordine #5058:', {
+        order_number: order5058?.order_number,
+        email: order5058?.email,
+        total_price: order5058?.total_price,
+        discount_code: order5058?.discount_code,
+        discount_amount: order5058?.discount_amount,
+        shipping_cost: order5058?.shipping_cost,
+        products_count: order5058?.products?.length,
+        products: order5058?.products?.map(p => ({ name: p.name, price: p.price, qty: p.qty }))
+      });
 
       if (orders.length > 0) {
         try {
