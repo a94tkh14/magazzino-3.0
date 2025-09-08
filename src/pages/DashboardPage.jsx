@@ -230,7 +230,7 @@ const DashboardPage = () => {
       
       // Calcola dati di confronto se abilitato
       let comparisonOrders = null;
-      if (showComparison) {
+      if (showComparison && comparisonDateRange && comparisonDateRange.startDate && comparisonDateRange.endDate) {
         comparisonOrders = filterOrdersByDateRange(csvOrders, comparisonDateRange.startDate, comparisonDateRange.endDate);
       }
       
@@ -240,8 +240,8 @@ const DashboardPage = () => {
         mainDateRange.startDate, 
         mainDateRange.endDate,
         comparisonOrders,
-        comparisonDateRange.startDate,
-        comparisonDateRange.endDate
+        comparisonDateRange?.startDate,
+        comparisonDateRange?.endDate
       );
       setChartData(chartData);
     }
@@ -1048,6 +1048,9 @@ const DashboardPage = () => {
                 </h4>
                 <div className="space-y-3">
                   {(() => {
+                    if (!comparisonDateRange || !comparisonDateRange.startDate || !comparisonDateRange.endDate) {
+                      return null;
+                    }
                     const comparisonOrders = filterOrdersByDateRange(csvOrders, comparisonDateRange.startDate, comparisonDateRange.endDate);
                     const comparisonStats = {
                       totalOrders: comparisonOrders.length,
