@@ -93,12 +93,33 @@ const CSVUpload = () => {
         if (lines[i].trim() === '') continue;
         
         try {
-          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          if (values.length !== headers.length) continue;
+          // Parsing CSV più robusto per gestire virgolette e campi vuoti
+          const line = lines[i];
+          const values = [];
+          let current = '';
+          let inQuotes = false;
+          
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              values.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          values.push(current.trim());
+          
+          if (values.length !== headers.length) {
+            console.log(`⚠️ Riga ${i}: ${values.length} campi invece di ${headers.length}`);
+            continue;
+          }
 
           const orderData = {};
           headers.forEach((header, index) => {
-            orderData[header] = values[index];
+            orderData[header] = values[index].replace(/"/g, '');
           });
 
           const orderName = orderData['Name'];
@@ -130,15 +151,15 @@ const CSVUpload = () => {
           if (orderData['Lineitem name']) {
             orderGroups[orderName].products.push({
               name: orderData['Lineitem name'] || '',
-              price: parseFloat((orderData['Lineitem price'] || '0').toString().replace(/"/g, '')),
+              price: parseFloat(orderData['Lineitem price'] || '0'),
               qty: parseInt(orderData['Lineitem quantity'] || '1'),
               sku: orderData['Lineitem sku'] || '',
               vendor: orderData['Vendor'] || '',
-              compare_at_price: parseFloat((orderData['Lineitem compare at price'] || '0').toString().replace(/"/g, '')),
+              compare_at_price: parseFloat(orderData['Lineitem compare at price'] || '0'),
               requires_shipping: orderData['Lineitem requires shipping'] === 'true',
               taxable: orderData['Lineitem taxable'] === 'true',
               fulfillment_status: orderData['Lineitem fulfillment status'] || 'pending',
-              discount: parseFloat((orderData['Lineitem discount'] || '0').toString().replace(/"/g, ''))
+              discount: parseFloat(orderData['Lineitem discount'] || '0')
             });
           }
 
@@ -183,25 +204,25 @@ const CSVUpload = () => {
           fulfilled_at: orderData['Fulfilled at'] || null,
           
           // I - Sub totale
-          subtotal: parseFloat((orderData['Subtotal'] || '0').toString().replace(/"/g, '')),
+          subtotal: parseFloat(orderData['Subtotal'] || '0'),
           
           // J - Costo spedizione (se import = 0 vuol dire che non l'ha pagata)
-          shipping_cost: parseFloat((orderData['Shipping'] || '0').toString().replace(/"/g, '')),
-          is_free_shipping: parseFloat((orderData['Shipping'] || '0').toString().replace(/"/g, '')) === 0,
+          shipping_cost: parseFloat(orderData['Shipping'] || '0'),
+          is_free_shipping: parseFloat(orderData['Shipping'] || '0') === 0,
           shipping_method: orderData['Shipping Method'] || '',
           
           // L - Totale che ha pagato
-          total_price: parseFloat((orderData['Total'] || '0').toString().replace(/"/g, '')),
+          total_price: parseFloat(orderData['Total'] || '0'),
           
           // M - Codice sconto utilizzato
           discount_code: orderData['Discount Code'] || '',
           
           // N - Quanto sconto ha ottenuto
-          discount_amount: parseFloat((orderData['Discount Amount'] || '0').toString().replace(/"/g, '')),
+          discount_amount: parseFloat(orderData['Discount Amount'] || '0'),
           
           // Altre informazioni
           currency: orderData['Currency'] || 'EUR',
-          taxes: parseFloat((orderData['Taxes'] || '0').toString().replace(/"/g, '')),
+          taxes: parseFloat(orderData['Taxes'] || '0'),
           payment_method: orderData['Payment Method'] || '',
           payment_reference: orderData['Payment Reference'] || '',
           source: 'csv',
