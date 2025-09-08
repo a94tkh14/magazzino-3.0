@@ -104,6 +104,20 @@ const CSVUpload = () => {
           const orderName = orderData['Name'];
           if (!orderName) continue;
 
+          // Debug per vedere cosa contiene ogni riga
+          if (orderName === '#5056' || orderName === '#5058') {
+            console.log(`🔍 Riga ${i} per ordine ${orderName}:`, {
+              hasEmail: !!orderData['Email'],
+              hasTotal: !!orderData['Total'],
+              hasLineitemName: !!orderData['Lineitem name'],
+              hasLineitemPrice: !!orderData['Lineitem price'],
+              email: orderData['Email'],
+              total: orderData['Total'],
+              lineitemName: orderData['Lineitem name'],
+              lineitemPrice: orderData['Lineitem price']
+            });
+          }
+
           // Se è la prima volta che vediamo questo ordine, crea il gruppo
           if (!orderGroups[orderName]) {
             orderGroups[orderName] = {
@@ -111,9 +125,8 @@ const CSVUpload = () => {
               products: []
             };
           }
-          // Le righe successive contengono solo i prodotti, non i dati dell'ordine
 
-          // Aggiungi il prodotto a questo ordine
+          // Aggiungi il prodotto a questo ordine (sia dalla prima riga che dalle successive)
           if (orderData['Lineitem name']) {
             orderGroups[orderName].products.push({
               name: orderData['Lineitem name'] || '',
