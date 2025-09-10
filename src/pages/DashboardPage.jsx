@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { loadMagazzinoData } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
 import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPrice } from '../lib/utils';
 import { addDays, startOfDay, endOfDay, subDays, subMonths, subYears, format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -30,7 +30,6 @@ const DashboardPage = () => {
   
   // Dati per il grafico
   const [chartData, setChartData] = useState([]);
-  const [comparisonChartData, setComparisonChartData] = useState([]);
   
   // Periodo principale
   const [startDate, setStartDate] = useState(startOfDay(addDays(new Date(), -30)));
@@ -604,7 +603,7 @@ const DashboardPage = () => {
                     dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
                     name="Ordini"
                   />
-                  {showComparison && comparisonChartData.length > 0 && (
+                  {showComparison && (
                     <>
                       <Line 
                         type="monotone" 
