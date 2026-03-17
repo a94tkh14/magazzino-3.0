@@ -10,6 +10,7 @@ import ShopifyDebug from '../components/ShopifyDebug';
 import CSVUpload from '../components/CSVUpload';
 import { saveLargeData, loadLargeData } from '../lib/dataManager';
 import { downloadAllShopifyOrders, convertShopifyOrder, getShopifyCredentials } from '../lib/shopifyAPI';
+import { migrateLocalDataToFirebase, invalidateCache } from '../lib/magazzinoStorage';
 import { 
   Settings, 
   Database, 
@@ -24,7 +25,9 @@ import {
   ShoppingCart,
   CheckCircle,
   AlertCircle,
-  StopCircle
+  StopCircle,
+  CloudUpload,
+  Loader2
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -53,6 +56,10 @@ export default function SettingsPage() {
     autoBackup: true,
     backupInterval: '24'
   });
+
+  // Stati per migrazione Firebase
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState(null);
 
 
 
@@ -177,6 +184,28 @@ export default function SettingsPage() {
 
   const handleRestore = () => {
     window.alert('Restore avviato...');
+  };
+
+  // Funzione per migrare dati locali a Firebase
+  const handleMigrateToFirebase = async () => {
+    if (!window.confirm('Vuoi migrare tutti i dati locali su Firebase?\n\nQuesto sincronizzerà:\n- Magazzino\n- Ordini Shopify\n- Ordini Fornitori\n- Prima Nota\n- Conti Bancari\n\nI dati saranno accessibili da qualsiasi dispositivo.')) {
+      return;
+    }
+
+    setIsMigrating(true);
+    setMigrationResult(null);
+
+    try {
+      const result = await migrateLocalDataToFirebase();
+      setMigrationResult(result);
+      invalidateCache();
+      window.alert(`✅ Migrazione completata!\n\n📦 Magazzino: ${result.magazzino} prodotti\n🛒 Ordini Shopify: ${result.shopifyOrders}\n🚚 Ordini Fornitori: ${result.supplierOrders}\n📝 Prima Nota: ${result.primaNota} movimenti\n🏦 Conti Bancari: ${result.contiBancari}`);
+    } catch (error) {
+      console.error('Errore migrazione:', error);
+      window.alert('❌ Errore durante la migrazione: ' + error.message);
+    } finally {
+      setIsMigrating(false);
+    }
   };
 
   // Funzione per sincronizzare TUTTI gli ordini Shopify
@@ -540,15 +569,78 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="database" className="space-y-6">
+          {/* Sincronizzazione Firebase Cloud */}
+          <Card className="border-2 border-[#c68776]">
+            <CardHeader className="bg-gradient-to-r from-[#c68776] to-[#d4a097] text-white rounded-t-lg">
+              <CardTitle className="flex items-center space-x-2">
+                <CloudUpload className="h-5 w-5" />
+                <span>Sincronizzazione Cloud (Firebase)</span>
+              </CardTitle>
+              <CardDescription className="text-white/80">
+                Sincronizza i dati su Firebase per accedervi da qualsiasi dispositivo
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-800 mb-2">Perché sincronizzare?</h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• Accedi ai tuoi dati da qualsiasi PC o dispositivo</li>
+                  <li>• I dati sono salvati nel cloud, mai più persi</li>
+                  <li>• Sincronizzazione automatica in tempo reale</li>
+                </ul>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <Button 
+                  onClick={handleMigrateToFirebase} 
+                  disabled={isMigrating}
+                  className="w-full bg-[#c68776] hover:bg-[#b07567] h-12 text-lg"
+                >
+                  {isMigrating ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                      Migrazione in corso...
+                    </>
+                  ) : (
+                    <>
+                      <CloudUpload className="h-5 w-5 mr-2" />
+                      Migra Dati Locali su Firebase
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {migrationResult && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-green-800 mb-2 flex items-center">
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Migrazione Completata
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm text-green-700">
+                    <div>📦 Magazzino: <strong>{migrationResult.magazzino}</strong></div>
+                    <div>🛒 Ordini Shopify: <strong>{migrationResult.shopifyOrders}</strong></div>
+                    <div>🚚 Ordini Fornitori: <strong>{migrationResult.supplierOrders}</strong></div>
+                    <div>📝 Prima Nota: <strong>{migrationResult.primaNota}</strong></div>
+                    <div>🏦 Conti Bancari: <strong>{migrationResult.contiBancari}</strong></div>
+                  </div>
+                </div>
+              )}
+
+              <div className="text-sm text-gray-500 mt-2">
+                <p><strong>Nota:</strong> Dopo la migrazione, i dati saranno automaticamente sincronizzati con Firebase. Puoi eliminare i dati locali in sicurezza.</p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Configurazione Database */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Database className="h-5 w-5" />
-                <span>Configurazione Database</span>
+                <span>Configurazione Database Locale</span>
               </CardTitle>
               <CardDescription>
-                Gestisci le impostazioni del database e le operazioni di backup
+                Gestisci le impostazioni del database locale e le operazioni di backup
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

@@ -236,7 +236,7 @@ export default function MagazzinoDetailPage() {
     };
   }, [ordiniShopify, sku, prodotto, stats.prezzoMedio]);
 
-  // Dati per grafico prezzi
+  // Dati per grafico prezzi acquisto
   const priceChartData = useMemo(() => {
     return (storico || []).map((entry, idx) => ({
       name: formatDateTime(entry.data).date,
@@ -244,6 +244,36 @@ export default function MagazzinoDetailPage() {
       quantita: entry.quantita
     }));
   }, [storico]);
+
+  // Dati per grafico trend vendite e prezzi
+  const venditeChartData = useMemo(() => {
+    const monthlyData = {};
+    
+    ordiniShopify.forEach(order => {
+      const date = new Date(order.created_at || order.createdAt);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = date.toLocaleDateString('it-IT', { month: 'short', year: '2-digit' });
+      
+      const items = order.line_items || order.products || order.items || [];
+      const item = items.find(i => i.sku === sku || i.variant_id?.toString() === sku);
+      
+      if (item) {
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { name: monthLabel, vendite: 0, ricavo: 0, prezzoMedio: 0, count: 0 };
+        }
+        const qty = item.quantity || 1;
+        const price = parseFloat(item.price) || 0;
+        monthlyData[monthKey].vendite += qty;
+        monthlyData[monthKey].ricavo += qty * price;
+        monthlyData[monthKey].count += 1;
+        monthlyData[monthKey].prezzoMedio = monthlyData[monthKey].ricavo / monthlyData[monthKey].vendite;
+      }
+    });
+    
+    return Object.entries(monthlyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, data]) => data);
+  }, [ordiniShopify, sku]);
 
   // Campo editabile
   const EditableField = ({ label, value, setValue, isEditing, setEditing, field, icon: Icon }) => (
@@ -637,9 +667,67 @@ export default function MagazzinoDetailPage() {
         )}
       </Card>
 
-      {/* Grafico Prezzi */}
+      {/* Grafico Trend Vendite */}
+      {venditeChartData.length > 0 && (
+        <Card>
+          <SectionHeader title="Trend Vendite" section="trendVendite" icon={TrendingUp} badge={`${venditeChartData.length} mesi`} />
+          {expandedSections.trendVendite !== false && (
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Grafico Quantità Vendute */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-500 mb-3">Quantità Vendute per Mese</h4>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={venditeChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="name" fontSize={11} stroke="#888" />
+                        <YAxis fontSize={11} stroke="#888" />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            `${value} pz`,
+                            'Venduti'
+                          ]}
+                        />
+                        <Bar dataKey="vendite" fill="#c68776" radius={[4, 4, 0, 0]} name="Venduti" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Grafico Prezzo Medio di Vendita */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-500 mb-3">Trend Prezzo di Vendita</h4>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={venditeChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="name" fontSize={11} stroke="#888" />
+                        <YAxis fontSize={11} stroke="#888" tickFormatter={(v) => `€${v.toFixed(0)}`} />
+                        <Tooltip 
+                          formatter={(value) => [formatCurrency(value), 'Prezzo Medio']}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="prezzoMedio" 
+                          stroke="#10b981" 
+                          strokeWidth={2} 
+                          dot={{ fill: '#10b981' }}
+                          name="Prezzo Medio"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* Grafico Prezzi Acquisto */}
       <Card>
-        <SectionHeader title="Andamento Prezzi" section="grafico" icon={BarChart3} badge={`${priceChartData.length} punti`} />
+        <SectionHeader title="Andamento Prezzi Acquisto" section="grafico" icon={BarChart3} badge={`${priceChartData.length} carichi`} />
         {expandedSections.grafico && (
           <CardContent>
             {priceChartData.length > 1 ? (
@@ -662,7 +750,7 @@ export default function MagazzinoDetailPage() {
                       stroke="#c68776" 
                       strokeWidth={2} 
                       dot={{ fill: '#c68776' }}
-                      name="Prezzo"
+                      name="Prezzo Acquisto"
                     />
                   </LineChart>
                 </ResponsiveContainer>

@@ -1,4 +1,6 @@
 // Gestione ordini fornitori
+import { loadFromLocalStorage, saveToLocalStorage } from './magazzinoStorage';
+
 const SUPPLIER_ORDERS_KEY = 'supplier_orders';
 
 // Stati degli ordini
@@ -75,6 +77,40 @@ export const getSupplierOrder = (orderId) => {
   }
 };
 
+// Aggiorna prezzo fornitore nel magazzino
+const updateMagazzinoPrezzoFornitore = (sku, newPrice, fornitore) => {
+  try {
+    const magazzino = loadFromLocalStorage('magazzino_data', []);
+    const productIndex = magazzino.findIndex(p => p.sku === sku);
+    
+    if (productIndex !== -1) {
+      // Aggiorna il prezzo di acquisto
+      magazzino[productIndex].prezzo = newPrice;
+      magazzino[productIndex].prezzoFornitore = newPrice;
+      magazzino[productIndex].ultimoAggiornamentoPrezzo = new Date().toISOString();
+      if (fornitore) {
+        magazzino[productIndex].fornitore = fornitore;
+      }
+      
+      saveToLocalStorage('magazzino_data', magazzino);
+      
+      // Salva anche nello storico prezzi fornitore
+      const storicoKey = `storico_prezzi_${sku}`;
+      const storicoPrezzi = loadFromLocalStorage(storicoKey, []);
+      storicoPrezzi.push({
+        prezzo: newPrice,
+        fornitore: fornitore,
+        data: new Date().toISOString()
+      });
+      saveToLocalStorage(storicoKey, storicoPrezzi);
+      
+      console.log(`Aggiornato prezzo fornitore per ${sku}: ${newPrice}€`);
+    }
+  } catch (error) {
+    console.error('Errore aggiornamento prezzo magazzino:', error);
+  }
+};
+
 // Registra ricezione di un prodotto
 export const receiveProduct = (orderId, sku, quantity) => {
   try {
@@ -94,6 +130,9 @@ export const receiveProduct = (orderId, sku, quantity) => {
         quantity: receivedQuantity,
         receivedAt: new Date().toISOString()
       });
+      
+      // AGGIORNA PREZZO FORNITORE NEL MAGAZZINO
+      updateMagazzinoPrezzoFornitore(sku, product.price, order.supplier);
     }
     
     // Calcola totali

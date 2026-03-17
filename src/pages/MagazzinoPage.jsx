@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Package, Tag, Settings, Download, Upload, ShoppingBag, Check, X, RefreshCw } from 'lucide-react';
+import { Search, Package, Tag, Settings, Download, Upload, ShoppingBag, Check, X, RefreshCw, Trash2, Image } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { saveMagazzino, loadMagazzino } from '../lib/firebase';
@@ -43,6 +43,10 @@ const MagazzinoPage = () => {
   const [selectedForImport, setSelectedForImport] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importSearch, setImportSearch] = useState('');
+  
+  // Stato per cancellazione magazzino
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const navigate = useNavigate();
   const lowStockThreshold = 5;
@@ -550,6 +554,34 @@ const MagazzinoPage = () => {
     setSelectedForImport([]);
   };
 
+  // Cancella tutto il magazzino
+  const handleDeleteAllMagazzino = async () => {
+    if (deleteConfirmText !== 'CANCELLA') {
+      alert('Scrivi "CANCELLA" per confermare');
+      return;
+    }
+    
+    try {
+      // Importa la funzione per cancellare tutto
+      const { clearAllMagazzino } = await import('../lib/magazzinoStorage');
+      await clearAllMagazzino();
+      
+      // Pulisci localStorage storico
+      localStorage.removeItem('magazzino_storico');
+      
+      // Aggiorna stato
+      setMagazzinoData([]);
+      setFilteredData([]);
+      
+      alert('Magazzino cancellato con successo!');
+      setShowDeleteAllModal(false);
+      setDeleteConfirmText('');
+    } catch (error) {
+      console.error('Errore cancellazione magazzino:', error);
+      alert('Errore durante la cancellazione: ' + error.message);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -580,6 +612,16 @@ const MagazzinoPage = () => {
           <Button onClick={() => setShowAddModal(true)}>
             + Aggiungi prodotto
           </Button>
+          {magazzinoData.length > 0 && (
+            <Button 
+              variant="outline" 
+              className="border-red-300 text-red-600 hover:bg-red-50"
+              onClick={() => setShowDeleteAllModal(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Svuota
+            </Button>
+          )}
         </div>
       </div>
 
@@ -675,6 +717,54 @@ const MagazzinoPage = () => {
                 <Button type="submit">Salva</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFERMA CANCELLAZIONE MAGAZZINO */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-red-600 mb-2">Cancella Magazzino</h2>
+              <p className="text-gray-600 mb-4">
+                Stai per cancellare <strong>{magazzinoData.length} prodotti</strong> dal magazzino.
+                <br />Questa azione è <strong>irreversibile</strong>.
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Scrivi <strong>CANCELLA</strong> per confermare:
+              </p>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
+                className="w-full border-2 border-red-200 rounded-lg px-4 py-2 text-center font-mono text-lg mb-4 focus:border-red-500 focus:outline-none"
+                placeholder="CANCELLA"
+              />
+              <div className="flex gap-3">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => {
+                    setShowDeleteAllModal(false);
+                    setDeleteConfirmText('');
+                  }}
+                >
+                  Annulla
+                </Button>
+                <Button 
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  onClick={handleDeleteAllMagazzino}
+                  disabled={deleteConfirmText !== 'CANCELLA'}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Cancella Tutto
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -936,167 +1026,82 @@ const MagazzinoPage = () => {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b">
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-3 font-medium w-16">Foto</th>
                     <th className="text-left p-3 font-medium">Nome</th>
                     <th className="text-left p-3 font-medium">SKU</th>
                     <th className="text-left p-3 font-medium">Quantità</th>
                     <th className="text-left p-3 font-medium">Prezzo</th>
-                    <th className="text-left p-3 font-medium">Anagrafica</th>
-                    <th className="text-left p-3 font-medium">Tipologia</th>
                     <th className="text-left p-3 font-medium">Marca</th>
                     <th className="text-left p-3 font-medium">Azioni</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {editingSku === item.sku && editingField === 'nome' ? (
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'nome', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'nome', editingValue)}
-                            className="w-40 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span 
-                            onClick={() => handleEditField(item.sku, 'nome', item.nome)} 
-                            className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded text-blue-600 hover:text-blue-800 hover:underline"
-                            title="Clicca per modificare o per vedere i dettagli"
-                          >
-                            {item.nome}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {editingSku === item.sku && editingField === 'sku' ? (
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'sku', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'sku', editingValue)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span 
-                            className="font-mono bg-gray-100 px-2 py-1 rounded text-xs cursor-pointer hover:bg-gray-200 text-blue-600 hover:text-blue-800"
+                  {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => {
+                    const foto = localStorage.getItem(`foto_${item.sku}`) || item.immagine;
+                    return (
+                    <tr 
+                      key={index} 
+                      className="border-b hover:bg-gray-50 cursor-pointer"
+                      onClick={() => navigate(`/magazzino/${item.sku}`)}
+                    >
+                      {/* Foto */}
+                      <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                        {foto ? (
+                          <img 
+                            src={foto} 
+                            alt={item.nome}
+                            className="w-12 h-12 object-cover rounded border cursor-pointer hover:scale-110 transition-transform"
                             onClick={() => navigate(`/magazzino/${item.sku}`)}
-                            title="Clicca per vedere i dettagli del prodotto"
-                          >
-                            {item.sku}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {editingSku === item.sku && editingField === 'quantita' ? (
-                          <input
-                            type="number"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'quantita', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'quantita', editingValue)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
+                            onError={(e) => { e.target.style.display = 'none'; }}
                           />
                         ) : (
-                          <span onClick={() => handleEditField(item.sku, 'quantita', item.quantita.toString())} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            {item.quantita}
-                          </span>
+                          <div className="w-12 h-12 bg-gray-100 rounded border flex items-center justify-center">
+                            <Package className="h-6 w-6 text-gray-300" />
+                          </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {editingSku === item.sku && editingField === 'prezzo' ? (
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'prezzo', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'prezzo', editingValue)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span onClick={() => handleEditField(item.sku, 'prezzo', safeToFixed(item.prezzo, 2).replace('.', ','))} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            {formatPrice(item.prezzo)}
-                          </span>
-                        )}
+                      {/* Nome */}
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{item.nome}</div>
+                        {item.marca && <div className="text-xs text-gray-500">{item.marca}</div>}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {editingSku === item.sku && editingField === 'anagrafica' ? (
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'anagrafica', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'anagrafica', editingValue)}
-                            className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span onClick={() => handleEditField(item.sku, 'anagrafica', item.anagrafica || '')} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            {item.anagrafica || '-'}
-                          </span>
-                        )}
+                      {/* SKU */}
+                      <td className="px-4 py-3">
+                        <span className="font-mono bg-gray-100 px-2 py-1 rounded text-xs">
+                          {item.sku}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {editingSku === item.sku && editingField === 'tipologia' ? (
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'tipologia', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'tipologia', editingValue)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span onClick={() => handleEditField(item.sku, 'tipologia', item.tipologia || '')} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            {item.tipologia || '-'}
-                          </span>
-                        )}
+                      {/* Quantità */}
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          item.quantita <= 0 ? 'bg-red-100 text-red-800' :
+                          item.quantita <= 5 ? 'bg-orange-100 text-orange-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {item.quantita}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {editingSku === item.sku && editingField === 'marca' ? (
-                          <input
-                            type="text"
-                            value={editingValue}
-                            onChange={(e) => setEditingValue(e.target.value)}
-                            onBlur={() => handleSaveEdit(item.sku, 'marca', editingValue)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit(item.sku, 'marca', editingValue)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span onClick={() => handleEditField(item.sku, 'tipologia', item.marca || '')} className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded">
-                            {item.marca || '-'}
-                          </span>
-                        )}
+                      {/* Prezzo */}
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {formatPrice(item.prezzo)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => navigate(`/magazzino/${item.sku}`)}
-                            className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
-                            title="Vedi dettagli e variazioni prezzo"
-                          >
-                            👁️ Dettagli
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(item.sku)}
-                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
-                            title="Elimina prodotto"
-                          >
-                            🗑️ Cancella
-                          </button>
-                        </div>
+                      {/* Marca */}
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {item.marca || '-'}
+                      </td>
+                      {/* Azioni */}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteProduct(item.sku); }}
+                          className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
+                          title="Elimina prodotto"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
