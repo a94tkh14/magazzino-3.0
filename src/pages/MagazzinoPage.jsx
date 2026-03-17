@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Package, Tag, Settings, Download, Upload, ShoppingBag, Check, X, RefreshCw, Trash2, Image } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { loadMagazzinoData, saveMagazzinoData, saveSingleProduct, deleteProduct, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, saveMagazzinoData, saveSingleProduct, deleteProduct, saveToLocalStorage, loadFromLocalStorage, loadShopifyOrdersData } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
@@ -561,6 +561,131 @@ const MagazzinoPage = () => {
     setSelectedForImport([]);
   };
 
+  // Funzione per pulire testo da apostrofi e caratteri speciali
+  const cleanText = (str) => {
+    if (!str) return '';
+    return str.replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
+  };
+
+  // Pulisce i nomi di tutti i prodotti nel magazzino
+  const handleCleanAllNames = async () => {
+    if (!window.confirm('Vuoi pulire i nomi di tutti i prodotti?\n\nQuesto rimuoverà apostrofi e caratteri speciali dai nomi.')) {
+      return;
+    }
+
+    try {
+      let cleaned = 0;
+      const updatedProducts = magazzinoData.map(product => {
+        const cleanedNome = cleanText(product.nome);
+        const cleanedMarca = cleanText(product.marca);
+        
+        if (cleanedNome !== product.nome || cleanedMarca !== product.marca) {
+          cleaned++;
+          return { ...product, nome: cleanedNome, marca: cleanedMarca };
+        }
+        return product;
+      });
+
+      if (cleaned > 0) {
+        // Salva su Firebase
+        await saveMagazzinoData(updatedProducts);
+        setMagazzinoData(updatedProducts);
+        setFilteredData(updatedProducts);
+        alert(`✅ Puliti ${cleaned} prodotti!`);
+      } else {
+        alert('Tutti i nomi sono già puliti!');
+      }
+    } catch (error) {
+      console.error('Errore pulizia nomi:', error);
+      alert('Errore: ' + error.message);
+    }
+  };
+
+  // Matching SKU: associa dati ordini Shopify ai prodotti del magazzino
+  const handleMatchSkuWithOrders = async () => {
+    if (!window.confirm('Vuoi associare i dati degli ordini Shopify ai prodotti del magazzino?\n\nQuesto aggiornerà:\n- Prezzo di vendita\n- Quantità vendute\n- Ultimo ordine')) {
+      return;
+    }
+
+    try {
+      // Carica ordini Shopify
+      const orders = await loadShopifyOrdersData();
+      
+      if (!orders || orders.length === 0) {
+        alert('Nessun ordine Shopify trovato. Sincronizza prima gli ordini.');
+        return;
+      }
+
+      // Crea mappa SKU -> dati vendita
+      const skuSalesData = new Map();
+      
+      orders.forEach(order => {
+        const items = order.line_items || order.products || order.items || [];
+        const orderDate = order.created_at || order.createdAt;
+        
+        items.forEach(item => {
+          const sku = item.sku;
+          if (!sku) return;
+          
+          const price = parseFloat(item.price) || 0;
+          const quantity = item.quantity || 1;
+          
+          if (skuSalesData.has(sku)) {
+            const existing = skuSalesData.get(sku);
+            existing.totalSold += quantity;
+            existing.ordersCount += 1;
+            existing.totalRevenue += price * quantity;
+            // Aggiorna ultimo prezzo se ordine più recente
+            if (orderDate > existing.lastOrderDate) {
+              existing.lastOrderDate = orderDate;
+              existing.lastPrice = price;
+            }
+          } else {
+            skuSalesData.set(sku, {
+              totalSold: quantity,
+              ordersCount: 1,
+              totalRevenue: price * quantity,
+              lastPrice: price,
+              lastOrderDate: orderDate
+            });
+          }
+        });
+      });
+
+      // Aggiorna prodotti del magazzino
+      let matched = 0;
+      const updatedProducts = magazzinoData.map(product => {
+        const salesData = skuSalesData.get(product.sku);
+        
+        if (salesData) {
+          matched++;
+          return {
+            ...product,
+            prezzoVendita: salesData.lastPrice,
+            quantitaVenduta: salesData.totalSold,
+            ordiniTotali: salesData.ordersCount,
+            ricavoTotale: salesData.totalRevenue,
+            ultimoOrdine: salesData.lastOrderDate,
+            matchedWithShopify: true
+          };
+        }
+        return product;
+      });
+
+      if (matched > 0) {
+        await saveMagazzinoData(updatedProducts);
+        setMagazzinoData(updatedProducts);
+        setFilteredData(updatedProducts);
+        alert(`✅ Associati ${matched} prodotti con dati Shopify!\n\n📊 SKU trovati negli ordini: ${skuSalesData.size}\n📦 Prodotti aggiornati: ${matched}`);
+      } else {
+        alert(`Nessun match trovato.\n\nSKU negli ordini: ${skuSalesData.size}\nProdotti nel magazzino: ${magazzinoData.length}\n\nVerifica che gli SKU corrispondano.`);
+      }
+    } catch (error) {
+      console.error('Errore matching SKU:', error);
+      alert('Errore: ' + error.message);
+    }
+  };
+
   // Cancella tutto il magazzino
   const handleDeleteAllMagazzino = async () => {
     if (deleteConfirmText !== 'CANCELLA') {
@@ -609,12 +734,19 @@ const MagazzinoPage = () => {
             Gestione inventario e controllo scorte
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
           <Package className="h-4 w-4" />
           <span>{magazzinoData.length} prodotti</span>
           <Button className="ml-4 bg-[#c68776] hover:bg-[#b07567]" onClick={handleOpenImportModal}>
             <ShoppingBag className="h-4 w-4 mr-2" />
             Importa da Ordini
+          </Button>
+          <Button variant="outline" className="border-blue-300 text-blue-600 hover:bg-blue-50" onClick={handleMatchSkuWithOrders}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Match SKU
+          </Button>
+          <Button variant="outline" onClick={handleCleanAllNames}>
+            Pulisci Nomi
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
             + Aggiungi prodotto
