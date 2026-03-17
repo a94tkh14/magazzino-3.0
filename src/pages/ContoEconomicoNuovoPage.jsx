@@ -5,13 +5,14 @@ import {
   ChevronDown, ChevronUp, Search, RefreshCw, ArrowUpRight,
   ArrowDownRight, Wallet, CreditCard, Receipt, PiggyBank,
   BarChart3, PieChart, AlertCircle, CheckCircle, Clock,
-  Building, Users, Megaphone, Package, Truck, Calculator
+  Building, Users, Megaphone, Package, Truck, Calculator,
+  Link2, Link2Off, Landmark, ArrowRightLeft, Eye, EyeOff,
+  Target, Banknote, CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 
 // Piano dei Conti strutturato
 const PIANO_DEI_CONTI = {
-  // ATTIVO - RICAVI
   ricavi: {
     id: 'ricavi',
     nome: 'RICAVI',
@@ -27,7 +28,6 @@ const PIANO_DEI_CONTI = {
       { codice: 'R006', nome: 'Interessi Attivi', descrizione: 'Interessi su depositi' }
     ]
   },
-  // PASSIVO - COSTI DIRETTI
   costi_diretti: {
     id: 'costi_diretti',
     nome: 'COSTI DIRETTI (COGS)',
@@ -44,7 +44,6 @@ const PIANO_DEI_CONTI = {
       { codice: 'CD07', nome: 'Dazi e Dogana', descrizione: 'Costi importazione' }
     ]
   },
-  // COSTI MARKETING
   marketing: {
     id: 'marketing',
     nome: 'COSTI MARKETING',
@@ -62,7 +61,6 @@ const PIANO_DEI_CONTI = {
       { codice: 'MK08', nome: 'Altro Marketing', descrizione: 'Altre spese marketing' }
     ]
   },
-  // COSTI OPERATIVI
   operativi: {
     id: 'operativi',
     nome: 'COSTI OPERATIVI',
@@ -81,7 +79,6 @@ const PIANO_DEI_CONTI = {
       { codice: 'OP09', nome: 'Spese Bancarie', descrizione: 'Commissioni e spese c/c' }
     ]
   },
-  // COSTI PERSONALE
   personale: {
     id: 'personale',
     nome: 'COSTI PERSONALE',
@@ -97,7 +94,6 @@ const PIANO_DEI_CONTI = {
       { codice: 'PE06', nome: 'Formazione', descrizione: 'Corsi e aggiornamento' }
     ]
   },
-  // COSTI PROFESSIONALI
   professionali: {
     id: 'professionali',
     nome: 'CONSULENZE E PROFESSIONISTI',
@@ -112,7 +108,6 @@ const PIANO_DEI_CONTI = {
       { codice: 'PR05', nome: 'Altri Professionisti', descrizione: 'Altre consulenze' }
     ]
   },
-  // IMPOSTE E TASSE
   imposte: {
     id: 'imposte',
     nome: 'IMPOSTE E TASSE',
@@ -131,7 +126,6 @@ const PIANO_DEI_CONTI = {
   }
 };
 
-// Funzione per ottenere il colore Tailwind
 const getColorClass = (colore, tipo) => {
   const colori = {
     emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800' },
@@ -146,24 +140,56 @@ const getColorClass = (colore, tipo) => {
 };
 
 const ContoEconomicoNuovoPage = () => {
-  // Stati principali
-  const [movimenti, setMovimenti] = useState([]);
-  const [activeTab, setActiveTab] = useState('prima-nota');
-  const [showForm, setShowForm] = useState(false);
+  // ==================== STATI ====================
+  // Dati principali
+  const [contiBancari, setContiBancari] = useState([]);
+  const [movimentiBanca, setMovimentiBanca] = useState([]);
+  const [movimentiPrimaNota, setMovimentiPrimaNota] = useState([]);
+  
+  // UI
+  const [activeTab, setActiveTab] = useState('conti-banca');
+  const [showFormConto, setShowFormConto] = useState(false);
+  const [showFormMovBanca, setShowFormMovBanca] = useState(false);
+  const [showFormPrimaNota, setShowFormPrimaNota] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [selectedConto, setSelectedConto] = useState('');
   
   // Filtri
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategoria, setFilterCategoria] = useState('');
   const [filterPeriodo, setFilterPeriodo] = useState('this_month');
+  const [filterCategoria, setFilterCategoria] = useState('');
+  const [filterRiconciliato, setFilterRiconciliato] = useState('');
   const [customDateStart, setCustomDateStart] = useState('');
   const [customDateEnd, setCustomDateEnd] = useState('');
   
-  // Sezioni espanse
+  // Espansioni
   const [expandedCategorie, setExpandedCategorie] = useState({});
   
-  // Form
-  const [formData, setFormData] = useState({
+  // Form Conto Bancario
+  const [formConto, setFormConto] = useState({
+    nome: '',
+    banca: '',
+    iban: '',
+    saldoIniziale: '',
+    colore: 'blue',
+    attivo: true
+  });
+  
+  // Form Movimento Banca
+  const [formMovBanca, setFormMovBanca] = useState({
+    data: new Date().toISOString().slice(0, 10),
+    contoId: '',
+    descrizione: '',
+    importo: '',
+    tipo: 'uscita', // entrata o uscita
+    causale: '',
+    riferimento: '',
+    riconciliato: false,
+    primaNotaId: ''
+  });
+  
+  // Form Prima Nota
+  const [formPrimaNota, setFormPrimaNota] = useState({
     data: new Date().toISOString().slice(0, 10),
     categoria: '',
     conto: '',
@@ -173,29 +199,38 @@ const ContoEconomicoNuovoPage = () => {
     documento: '',
     fornitore: '',
     note: '',
-    ricorrente: false,
-    pagato: true
+    pagato: true,
+    movimentoBancaId: ''
   });
 
-  // Carica dati
+  // ==================== CARICAMENTO DATI ====================
   useEffect(() => {
-    const saved = localStorage.getItem('conto_economico_movimenti');
-    if (saved) {
-      try {
-        setMovimenti(JSON.parse(saved));
-      } catch (e) {
-        console.error('Errore caricamento movimenti:', e);
-      }
-    }
+    const savedConti = localStorage.getItem('conti_bancari');
+    const savedMovBanca = localStorage.getItem('movimenti_banca');
+    const savedPrimaNota = localStorage.getItem('conto_economico_movimenti');
+    
+    if (savedConti) setContiBancari(JSON.parse(savedConti));
+    if (savedMovBanca) setMovimentiBanca(JSON.parse(savedMovBanca));
+    if (savedPrimaNota) setMovimentiPrimaNota(JSON.parse(savedPrimaNota));
   }, []);
 
-  // Salva dati
-  const saveMovimenti = (newMovimenti) => {
-    localStorage.setItem('conto_economico_movimenti', JSON.stringify(newMovimenti));
-    setMovimenti(newMovimenti);
+  // ==================== SALVATAGGIO ====================
+  const saveContiBancari = (data) => {
+    localStorage.setItem('conti_bancari', JSON.stringify(data));
+    setContiBancari(data);
+  };
+  
+  const saveMovimentiBanca = (data) => {
+    localStorage.setItem('movimenti_banca', JSON.stringify(data));
+    setMovimentiBanca(data);
+  };
+  
+  const saveMovimentiPrimaNota = (data) => {
+    localStorage.setItem('conto_economico_movimenti', JSON.stringify(data));
+    setMovimentiPrimaNota(data);
   };
 
-  // Calcola range date
+  // ==================== DATE RANGE ====================
   const getDateRange = () => {
     const now = new Date();
     let start, end = new Date(now);
@@ -203,14 +238,12 @@ const ContoEconomicoNuovoPage = () => {
     
     switch (filterPeriodo) {
       case 'today':
-        start = new Date(now);
-        start.setHours(0, 0, 0, 0);
+        start = new Date(now); start.setHours(0, 0, 0, 0);
         break;
       case 'this_week':
         start = new Date(now);
         const day = start.getDay();
-        const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-        start.setDate(diff);
+        start.setDate(start.getDate() - day + (day === 0 ? -6 : 1));
         start.setHours(0, 0, 0, 0);
         break;
       case 'this_month':
@@ -227,10 +260,6 @@ const ContoEconomicoNuovoPage = () => {
       case 'this_year':
         start = new Date(now.getFullYear(), 0, 1);
         break;
-      case 'last_year':
-        start = new Date(now.getFullYear() - 1, 0, 1);
-        end = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
-        break;
       case 'custom':
         start = customDateStart ? new Date(customDateStart) : new Date(now.getFullYear(), 0, 1);
         end = customDateEnd ? new Date(customDateEnd) : new Date();
@@ -242,117 +271,237 @@ const ContoEconomicoNuovoPage = () => {
     return { start, end };
   };
 
-  // Filtra movimenti
-  const filteredMovimenti = useMemo(() => {
+  // ==================== FILTRI MOVIMENTI ====================
+  const filteredMovBanca = useMemo(() => {
     const { start, end } = getDateRange();
-    
-    return movimenti
+    return movimentiBanca
+      .filter(m => {
+        const date = new Date(m.data);
+        if (date < start || date > end) return false;
+        if (selectedConto && m.contoId !== selectedConto) return false;
+        if (filterRiconciliato === 'si' && !m.riconciliato) return false;
+        if (filterRiconciliato === 'no' && m.riconciliato) return false;
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase();
+          return m.descrizione?.toLowerCase().includes(term) || 
+                 m.causale?.toLowerCase().includes(term) ||
+                 m.riferimento?.toLowerCase().includes(term);
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.data) - new Date(a.data));
+  }, [movimentiBanca, filterPeriodo, selectedConto, filterRiconciliato, searchTerm, customDateStart, customDateEnd]);
+
+  const filteredPrimaNota = useMemo(() => {
+    const { start, end } = getDateRange();
+    return movimentiPrimaNota
       .filter(m => {
         const date = new Date(m.data);
         if (date < start || date > end) return false;
         if (filterCategoria && m.categoria !== filterCategoria) return false;
         if (searchTerm) {
           const term = searchTerm.toLowerCase();
-          return (
-            m.descrizione?.toLowerCase().includes(term) ||
-            m.documento?.toLowerCase().includes(term) ||
-            m.fornitore?.toLowerCase().includes(term) ||
-            m.conto?.toLowerCase().includes(term)
-          );
+          return m.descrizione?.toLowerCase().includes(term) ||
+                 m.documento?.toLowerCase().includes(term) ||
+                 m.fornitore?.toLowerCase().includes(term);
         }
         return true;
       })
       .sort((a, b) => new Date(b.data) - new Date(a.data));
-  }, [movimenti, filterPeriodo, filterCategoria, searchTerm, customDateStart, customDateEnd]);
+  }, [movimentiPrimaNota, filterPeriodo, filterCategoria, searchTerm, customDateStart, customDateEnd]);
 
-  // Calcoli aggregati
-  const totali = useMemo(() => {
-    const totDare = filteredMovimenti
-      .filter(m => m.tipo === 'dare')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+  // ==================== CALCOLI ====================
+  // Saldi conti bancari
+  const saldoConti = useMemo(() => {
+    const saldi = {};
+    contiBancari.forEach(c => {
+      saldi[c.id] = parseFloat(c.saldoIniziale || 0);
+    });
+    movimentiBanca.forEach(m => {
+      if (saldi[m.contoId] !== undefined) {
+        if (m.tipo === 'entrata') {
+          saldi[m.contoId] += parseFloat(m.importo || 0);
+        } else {
+          saldi[m.contoId] -= parseFloat(m.importo || 0);
+        }
+      }
+    });
+    return saldi;
+  }, [contiBancari, movimentiBanca]);
+
+  const saldoTotaleBanca = useMemo(() => {
+    return Object.values(saldoConti).reduce((sum, s) => sum + s, 0);
+  }, [saldoConti]);
+
+  // Totali Prima Nota (filtrati)
+  const totaliPrimaNota = useMemo(() => {
+    const riconciliati = filteredPrimaNota.filter(m => m.movimentoBancaId);
+    const nonRiconciliati = filteredPrimaNota.filter(m => !m.movimentoBancaId);
     
-    const totAvere = filteredMovimenti
-      .filter(m => m.tipo === 'avere')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    const totDare = filteredPrimaNota.filter(m => m.tipo === 'dare').reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    const totAvere = filteredPrimaNota.filter(m => m.tipo === 'avere').reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
     
     return {
       dare: totDare,
       avere: totAvere,
       utile: totAvere - totDare,
-      margine: totAvere > 0 ? ((totAvere - totDare) / totAvere * 100) : 0
+      margine: totAvere > 0 ? ((totAvere - totDare) / totAvere * 100) : 0,
+      riconciliati: riconciliati.length,
+      nonRiconciliati: nonRiconciliati.length
     };
-  }, [filteredMovimenti]);
+  }, [filteredPrimaNota]);
 
-  // Raggruppa per categoria
+  // Per categoria
   const perCategoria = useMemo(() => {
     const grouped = {};
-    
     Object.keys(PIANO_DEI_CONTI).forEach(catId => {
-      grouped[catId] = {
-        ...PIANO_DEI_CONTI[catId],
-        totale: 0,
-        movimenti: [],
-        perConto: {}
-      };
+      grouped[catId] = { ...PIANO_DEI_CONTI[catId], totale: 0, movimenti: [], perConto: {} };
     });
-    
-    filteredMovimenti.forEach(m => {
+    filteredPrimaNota.forEach(m => {
       if (grouped[m.categoria]) {
         const importo = parseFloat(m.importo || 0);
         grouped[m.categoria].totale += importo;
         grouped[m.categoria].movimenti.push(m);
-        
-        if (!grouped[m.categoria].perConto[m.conto]) {
-          grouped[m.categoria].perConto[m.conto] = 0;
-        }
+        if (!grouped[m.categoria].perConto[m.conto]) grouped[m.categoria].perConto[m.conto] = 0;
         grouped[m.categoria].perConto[m.conto] += importo;
       }
     });
-    
     return grouped;
-  }, [filteredMovimenti]);
+  }, [filteredPrimaNota]);
 
-  // Handlers form
-  const handleInputChange = (field, value) => {
-    setFormData(prev => {
-      const newData = { ...prev, [field]: value };
-      
-      if (field === 'categoria' && value) {
-        newData.conto = '';
-        newData.tipo = PIANO_DEI_CONTI[value]?.tipo || 'dare';
-      }
-      
-      return newData;
-    });
+  // ==================== HANDLERS CONTI BANCARI ====================
+  const handleSaveConto = () => {
+    if (!formConto.nome || !formConto.banca) {
+      alert('Inserisci nome e banca');
+      return;
+    }
+    const conto = {
+      id: editingId || `conto_${Date.now()}`,
+      ...formConto,
+      saldoIniziale: parseFloat(formConto.saldoIniziale || 0),
+      createdAt: editingId ? contiBancari.find(c => c.id === editingId)?.createdAt : new Date().toISOString()
+    };
+    let newConti;
+    if (editingId) {
+      newConti = contiBancari.map(c => c.id === editingId ? conto : c);
+    } else {
+      newConti = [...contiBancari, conto];
+    }
+    saveContiBancari(newConti);
+    resetFormConto();
   };
 
-  const handleSubmit = () => {
-    if (!formData.data || !formData.descrizione || !formData.importo || !formData.categoria || !formData.conto) {
+  const resetFormConto = () => {
+    setFormConto({ nome: '', banca: '', iban: '', saldoIniziale: '', colore: 'blue', attivo: true });
+    setShowFormConto(false);
+    setEditingId(null);
+  };
+
+  const handleEditConto = (conto) => {
+    setFormConto({ ...conto, saldoIniziale: conto.saldoIniziale.toString() });
+    setEditingId(conto.id);
+    setShowFormConto(true);
+  };
+
+  const handleDeleteConto = (id) => {
+    if (movimentiBanca.some(m => m.contoId === id)) {
+      alert('Non puoi eliminare un conto con movimenti. Elimina prima i movimenti.');
+      return;
+    }
+    if (window.confirm('Eliminare questo conto?')) {
+      saveContiBancari(contiBancari.filter(c => c.id !== id));
+    }
+  };
+
+  // ==================== HANDLERS MOVIMENTI BANCA ====================
+  const handleSaveMovBanca = () => {
+    if (!formMovBanca.data || !formMovBanca.contoId || !formMovBanca.importo || !formMovBanca.descrizione) {
+      alert('Compila i campi obbligatori');
+      return;
+    }
+    const mov = {
+      id: editingId || `movb_${Date.now()}`,
+      ...formMovBanca,
+      importo: parseFloat(formMovBanca.importo),
+      createdAt: editingId ? movimentiBanca.find(m => m.id === editingId)?.createdAt : new Date().toISOString()
+    };
+    let newMov;
+    if (editingId) {
+      newMov = movimentiBanca.map(m => m.id === editingId ? mov : m);
+    } else {
+      newMov = [...movimentiBanca, mov];
+    }
+    saveMovimentiBanca(newMov);
+    resetFormMovBanca();
+  };
+
+  const resetFormMovBanca = () => {
+    setFormMovBanca({
+      data: new Date().toISOString().slice(0, 10),
+      contoId: selectedConto || '',
+      descrizione: '',
+      importo: '',
+      tipo: 'uscita',
+      causale: '',
+      riferimento: '',
+      riconciliato: false,
+      primaNotaId: ''
+    });
+    setShowFormMovBanca(false);
+    setEditingId(null);
+  };
+
+  const handleEditMovBanca = (mov) => {
+    setFormMovBanca({ ...mov, importo: mov.importo.toString() });
+    setEditingId(mov.id);
+    setShowFormMovBanca(true);
+  };
+
+  const handleDeleteMovBanca = (id) => {
+    if (window.confirm('Eliminare questo movimento?')) {
+      // Rimuovi anche il collegamento dalla prima nota
+      const newPrimaNota = movimentiPrimaNota.map(m => 
+        m.movimentoBancaId === id ? { ...m, movimentoBancaId: '' } : m
+      );
+      saveMovimentiPrimaNota(newPrimaNota);
+      saveMovimentiBanca(movimentiBanca.filter(m => m.id !== id));
+    }
+  };
+
+  // ==================== HANDLERS PRIMA NOTA ====================
+  const handleSavePrimaNota = () => {
+    if (!formPrimaNota.data || !formPrimaNota.descrizione || !formPrimaNota.importo || !formPrimaNota.categoria || !formPrimaNota.conto) {
       alert('Compila tutti i campi obbligatori');
       return;
     }
-
-    const movimento = {
-      id: editingId || `mov_${Date.now()}`,
-      ...formData,
-      importo: parseFloat(formData.importo),
-      createdAt: editingId ? movimenti.find(m => m.id === editingId)?.createdAt : new Date().toISOString(),
+    const mov = {
+      id: editingId || `pn_${Date.now()}`,
+      ...formPrimaNota,
+      importo: parseFloat(formPrimaNota.importo),
+      createdAt: editingId ? movimentiPrimaNota.find(m => m.id === editingId)?.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-
-    let newMovimenti;
+    let newMov;
     if (editingId) {
-      newMovimenti = movimenti.map(m => m.id === editingId ? movimento : m);
+      newMov = movimentiPrimaNota.map(m => m.id === editingId ? mov : m);
     } else {
-      newMovimenti = [...movimenti, movimento];
+      newMov = [...movimentiPrimaNota, mov];
     }
-
-    saveMovimenti(newMovimenti);
-    resetForm();
+    saveMovimentiPrimaNota(newMov);
+    
+    // Se collegato a movimento banca, aggiorna anche quello
+    if (formPrimaNota.movimentoBancaId) {
+      const newMovBanca = movimentiBanca.map(m => 
+        m.id === formPrimaNota.movimentoBancaId ? { ...m, riconciliato: true, primaNotaId: mov.id } : m
+      );
+      saveMovimentiBanca(newMovBanca);
+    }
+    
+    resetFormPrimaNota();
   };
 
-  const resetForm = () => {
-    setFormData({
+  const resetFormPrimaNota = () => {
+    setFormPrimaNota({
       data: new Date().toISOString().slice(0, 10),
       categoria: '',
       conto: '',
@@ -362,33 +511,82 @@ const ContoEconomicoNuovoPage = () => {
       documento: '',
       fornitore: '',
       note: '',
-      ricorrente: false,
-      pagato: true
+      pagato: true,
+      movimentoBancaId: ''
     });
-    setShowForm(false);
+    setShowFormPrimaNota(false);
     setEditingId(null);
   };
 
-  const handleEdit = (movimento) => {
-    setFormData({
-      ...movimento,
-      importo: movimento.importo.toString()
-    });
-    setEditingId(movimento.id);
-    setShowForm(true);
-    setActiveTab('prima-nota');
+  const handleEditPrimaNota = (mov) => {
+    setFormPrimaNota({ ...mov, importo: mov.importo.toString() });
+    setEditingId(mov.id);
+    setShowFormPrimaNota(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDeletePrimaNota = (id) => {
     if (window.confirm('Eliminare questo movimento?')) {
-      saveMovimenti(movimenti.filter(m => m.id !== id));
+      const mov = movimentiPrimaNota.find(m => m.id === id);
+      if (mov?.movimentoBancaId) {
+        const newMovBanca = movimentiBanca.map(m => 
+          m.id === mov.movimentoBancaId ? { ...m, riconciliato: false, primaNotaId: '' } : m
+        );
+        saveMovimentiBanca(newMovBanca);
+      }
+      saveMovimentiPrimaNota(movimentiPrimaNota.filter(m => m.id !== id));
     }
   };
 
-  // Export
+  // ==================== RICONCILIAZIONE ====================
+  const handleRiconcilia = (movBancaId, primaNotaId) => {
+    // Collega movimento banca con prima nota
+    const newMovBanca = movimentiBanca.map(m => 
+      m.id === movBancaId ? { ...m, riconciliato: true, primaNotaId } : m
+    );
+    const newPrimaNota = movimentiPrimaNota.map(m => 
+      m.id === primaNotaId ? { ...m, movimentoBancaId: movBancaId } : m
+    );
+    saveMovimentiBanca(newMovBanca);
+    saveMovimentiPrimaNota(newPrimaNota);
+  };
+
+  const handleScollegaRiconciliazione = (movBancaId) => {
+    const movBanca = movimentiBanca.find(m => m.id === movBancaId);
+    if (!movBanca) return;
+    
+    const newMovBanca = movimentiBanca.map(m => 
+      m.id === movBancaId ? { ...m, riconciliato: false, primaNotaId: '' } : m
+    );
+    const newPrimaNota = movimentiPrimaNota.map(m => 
+      m.movimentoBancaId === movBancaId ? { ...m, movimentoBancaId: '' } : m
+    );
+    saveMovimentiBanca(newMovBanca);
+    saveMovimentiPrimaNota(newPrimaNota);
+  };
+
+  // Crea prima nota da movimento banca
+  const handleCreaFromBanca = (movBanca) => {
+    setFormPrimaNota({
+      data: movBanca.data,
+      categoria: '',
+      conto: '',
+      descrizione: movBanca.descrizione,
+      importo: movBanca.importo.toString(),
+      tipo: movBanca.tipo === 'entrata' ? 'avere' : 'dare',
+      documento: movBanca.riferimento || '',
+      fornitore: '',
+      note: movBanca.causale || '',
+      pagato: true,
+      movimentoBancaId: movBanca.id
+    });
+    setShowFormPrimaNota(true);
+    setActiveTab('prima-nota');
+  };
+
+  // ==================== EXPORT ====================
   const exportCSV = () => {
-    const headers = ['Data', 'Categoria', 'Conto', 'Descrizione', 'Fornitore', 'Documento', 'Dare', 'Avere', 'Note'];
-    const rows = filteredMovimenti.map(m => [
+    const headers = ['Data', 'Categoria', 'Conto', 'Descrizione', 'Fornitore', 'Documento', 'Dare', 'Avere', 'Riconciliato'];
+    const rows = filteredPrimaNota.map(m => [
       m.data,
       PIANO_DEI_CONTI[m.categoria]?.nome || m.categoria,
       m.conto,
@@ -397,9 +595,8 @@ const ContoEconomicoNuovoPage = () => {
       m.documento || '',
       m.tipo === 'dare' ? m.importo : '',
       m.tipo === 'avere' ? m.importo : '',
-      m.note || ''
+      m.movimentoBancaId ? 'Sì' : 'No'
     ]);
-    
     const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -409,130 +606,112 @@ const ContoEconomicoNuovoPage = () => {
     link.click();
   };
 
-  // Formattazione
+  // ==================== UTILS ====================
   const formatCurrency = (val) => parseFloat(val || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
   const formatDate = (d) => new Date(d).toLocaleDateString('it-IT');
-
-  // Toggle categoria espansa
+  
   const toggleCategoria = (catId) => {
     setExpandedCategorie(prev => ({ ...prev, [catId]: !prev[catId] }));
   };
 
-  // Nome periodo
   const getPeriodoLabel = () => {
-    const labels = {
-      today: 'Oggi',
-      this_week: 'Questa Settimana',
-      this_month: 'Questo Mese',
-      last_month: 'Mese Scorso',
-      this_quarter: 'Questo Trimestre',
-      this_year: 'Anno Corrente',
-      last_year: 'Anno Scorso',
-      custom: 'Personalizzato'
-    };
+    const labels = { today: 'Oggi', this_week: 'Questa Settimana', this_month: 'Questo Mese', last_month: 'Mese Scorso', this_quarter: 'Questo Trimestre', this_year: 'Anno Corrente', custom: 'Personalizzato' };
     return labels[filterPeriodo] || 'Questo Mese';
   };
 
+  const getContoColor = (colore) => {
+    const colors = { blue: 'bg-blue-500', green: 'bg-green-500', purple: 'bg-purple-500', orange: 'bg-orange-500', red: 'bg-red-500', gray: 'bg-gray-500' };
+    return colors[colore] || colors.blue;
+  };
+
+  // ==================== RENDER ====================
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Conto Economico</h1>
-          <p className="text-gray-500 mt-1">Prima Nota e analisi economica • {getPeriodoLabel()}</p>
+          <p className="text-gray-500 mt-1">Conti Bancari, Prima Nota e Riconciliazione • {getPeriodoLabel()}</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Esporta
-          </button>
-          <button
-            onClick={() => { resetForm(); setShowForm(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nuovo Movimento
+          <button onClick={exportCSV} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50">
+            <Download className="w-4 h-4" /> Esporta
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Cards - Riepilogo Generale */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Saldo Banca Totale */}
+        <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200">
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-indigo-700">Saldo Banca</p>
+                <p className="text-2xl font-bold text-indigo-800 mt-1">{formatCurrency(saldoTotaleBanca)}</p>
+                <p className="text-xs text-indigo-600 mt-1">{contiBancari.length} conti attivi</p>
+              </div>
+              <Landmark className="w-8 h-8 text-indigo-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Ricavi */}
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-emerald-700">Ricavi Totali</p>
-                <p className="text-3xl font-bold text-emerald-800 mt-1">{formatCurrency(totali.avere)}</p>
-                <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                  <ArrowUpRight className="w-3 h-3" />
-                  Entrate nel periodo
-                </p>
+                <p className="text-sm font-medium text-emerald-700">Ricavi (Avere)</p>
+                <p className="text-2xl font-bold text-emerald-800 mt-1">{formatCurrency(totaliPrimaNota.avere)}</p>
+                <p className="text-xs text-emerald-600 mt-1">Entrate periodo</p>
               </div>
-              <div className="p-3 bg-emerald-200 rounded-xl">
-                <TrendingUp className="w-6 h-6 text-emerald-700" />
-              </div>
+              <ArrowUpRight className="w-8 h-8 text-emerald-600" />
             </div>
           </CardContent>
         </Card>
 
+        {/* Costi */}
         <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-red-700">Costi Totali</p>
-                <p className="text-3xl font-bold text-red-800 mt-1">{formatCurrency(totali.dare)}</p>
-                <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                  <ArrowDownRight className="w-3 h-3" />
-                  Uscite nel periodo
-                </p>
+                <p className="text-sm font-medium text-red-700">Costi (Dare)</p>
+                <p className="text-2xl font-bold text-red-800 mt-1">{formatCurrency(totaliPrimaNota.dare)}</p>
+                <p className="text-xs text-red-600 mt-1">Uscite periodo</p>
               </div>
-              <div className="p-3 bg-red-200 rounded-xl">
-                <TrendingDown className="w-6 h-6 text-red-700" />
-              </div>
+              <ArrowDownRight className="w-8 h-8 text-red-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className={`bg-gradient-to-br ${totali.utile >= 0 ? 'from-blue-50 to-blue-100 border-blue-200' : 'from-orange-50 to-orange-100 border-orange-200'}`}>
+        {/* EBITDA */}
+        <Card className={`bg-gradient-to-br ${totaliPrimaNota.utile >= 0 ? 'from-blue-50 to-blue-100 border-blue-200' : 'from-orange-50 to-orange-100 border-orange-200'}`}>
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className={`text-sm font-medium ${totali.utile >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-                  {totali.utile >= 0 ? 'Utile' : 'Perdita'}
+                <p className={`text-sm font-medium ${totaliPrimaNota.utile >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>EBITDA</p>
+                <p className={`text-2xl font-bold mt-1 ${totaliPrimaNota.utile >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                  {formatCurrency(totaliPrimaNota.utile)}
                 </p>
-                <p className={`text-3xl font-bold mt-1 ${totali.utile >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
-                  {formatCurrency(Math.abs(totali.utile))}
-                </p>
-                <p className={`text-xs mt-2 flex items-center gap-1 ${totali.utile >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                  {totali.utile >= 0 ? <CheckCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                  Risultato operativo
+                <p className={`text-xs mt-1 ${totaliPrimaNota.utile >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                  Margine: {totaliPrimaNota.margine.toFixed(1)}%
                 </p>
               </div>
-              <div className={`p-3 rounded-xl ${totali.utile >= 0 ? 'bg-blue-200' : 'bg-orange-200'}`}>
-                <Wallet className={`w-6 h-6 ${totali.utile >= 0 ? 'text-blue-700' : 'text-orange-700'}`} />
-              </div>
+              <Target className={`w-8 h-8 ${totaliPrimaNota.utile >= 0 ? 'text-blue-600' : 'text-orange-600'}`} />
             </div>
           </CardContent>
         </Card>
 
+        {/* Riconciliazione */}
         <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-purple-700">Margine %</p>
-                <p className="text-3xl font-bold text-purple-800 mt-1">{totali.margine.toFixed(1)}%</p>
-                <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
-                  <PieChart className="w-3 h-3" />
-                  {filteredMovimenti.length} movimenti
-                </p>
+                <p className="text-sm font-medium text-purple-700">Riconciliati</p>
+                <p className="text-2xl font-bold text-purple-800 mt-1">{totaliPrimaNota.riconciliati}</p>
+                <p className="text-xs text-purple-600 mt-1">{totaliPrimaNota.nonRiconciliati} da riconciliare</p>
               </div>
-              <div className="p-3 bg-purple-200 rounded-xl">
-                <BarChart3 className="w-6 h-6 text-purple-700" />
-              </div>
+              <Link2 className="w-8 h-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -544,50 +723,24 @@ const ContoEconomicoNuovoPage = () => {
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-gray-500" />
-              <select
-                value={filterPeriodo}
-                onChange={e => setFilterPeriodo(e.target.value)}
-                className="px-3 py-2 border rounded-lg bg-white"
-              >
+              <select value={filterPeriodo} onChange={e => setFilterPeriodo(e.target.value)} className="px-3 py-2 border rounded-lg bg-white">
                 <option value="today">Oggi</option>
                 <option value="this_week">Questa Settimana</option>
                 <option value="this_month">Questo Mese</option>
                 <option value="last_month">Mese Scorso</option>
                 <option value="this_quarter">Questo Trimestre</option>
                 <option value="this_year">Anno Corrente</option>
-                <option value="last_year">Anno Scorso</option>
                 <option value="custom">Personalizzato</option>
               </select>
             </div>
 
             {filterPeriodo === 'custom' && (
               <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={customDateStart}
-                  onChange={e => setCustomDateStart(e.target.value)}
-                  className="px-3 py-2 border rounded-lg"
-                />
+                <input type="date" value={customDateStart} onChange={e => setCustomDateStart(e.target.value)} className="px-3 py-2 border rounded-lg" />
                 <span className="text-gray-400">→</span>
-                <input
-                  type="date"
-                  value={customDateEnd}
-                  onChange={e => setCustomDateEnd(e.target.value)}
-                  className="px-3 py-2 border rounded-lg"
-                />
+                <input type="date" value={customDateEnd} onChange={e => setCustomDateEnd(e.target.value)} className="px-3 py-2 border rounded-lg" />
               </div>
             )}
-
-            <select
-              value={filterCategoria}
-              onChange={e => setFilterCategoria(e.target.value)}
-              className="px-3 py-2 border rounded-lg bg-white"
-            >
-              <option value="">Tutte le categorie</option>
-              {Object.entries(PIANO_DEI_CONTI).map(([id, cat]) => (
-                <option key={id} value={id}>{cat.nome}</option>
-              ))}
-            </select>
 
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
@@ -606,19 +759,19 @@ const ContoEconomicoNuovoPage = () => {
       </Card>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto">
         {[
+          { id: 'conti-banca', label: 'Conti Bancari', icon: Landmark },
+          { id: 'movimenti-banca', label: 'Movimenti Banca', icon: ArrowRightLeft },
           { id: 'prima-nota', label: 'Prima Nota', icon: FileText },
-          { id: 'riepilogo', label: 'Riepilogo', icon: PieChart },
-          { id: 'bilancio', label: 'Bilancio', icon: BarChart3 }
+          { id: 'riconciliazione', label: 'Riconciliazione', icon: Link2 },
+          { id: 'conto-economico', label: 'Conto Economico', icon: BarChart3 }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
-              activeTab === tab.id 
-                ? 'border-blue-600 text-blue-600' 
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
             <tab.icon className="w-4 h-4" />
@@ -627,500 +780,757 @@ const ContoEconomicoNuovoPage = () => {
         ))}
       </div>
 
-      {/* Form nuovo movimento */}
-      {showForm && (
-        <Card className="border-2 border-blue-300 shadow-lg">
-          <CardHeader className="bg-blue-50 border-b">
-            <div className="flex items-center justify-between">
-              <CardTitle>{editingId ? 'Modifica Movimento' : 'Nuovo Movimento'}</CardTitle>
-              <button onClick={resetForm} className="p-2 hover:bg-blue-100 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
-                <input
-                  type="date"
-                  value={formData.data}
-                  onChange={e => handleInputChange('data', e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
-                <select
-                  value={formData.categoria}
-                  onChange={e => handleInputChange('categoria', e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
-                >
-                  <option value="">Seleziona...</option>
-                  {Object.entries(PIANO_DEI_CONTI).map(([id, cat]) => (
-                    <option key={id} value={id}>{cat.nome}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Conto *</label>
-                <select
-                  value={formData.conto}
-                  onChange={e => handleInputChange('conto', e.target.value)}
-                  disabled={!formData.categoria}
-                  className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100"
-                >
-                  <option value="">Seleziona...</option>
-                  {formData.categoria && PIANO_DEI_CONTI[formData.categoria]?.conti.map(c => (
-                    <option key={c.codice} value={c.codice}>{c.codice} - {c.nome}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrizione *</label>
-                <input
-                  type="text"
-                  value={formData.descrizione}
-                  onChange={e => handleInputChange('descrizione', e.target.value)}
-                  placeholder="Descrizione del movimento"
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Importo (€) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.importo}
-                  onChange={e => handleInputChange('importo', e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fornitore/Cliente</label>
-                <input
-                  type="text"
-                  value={formData.fornitore}
-                  onChange={e => handleInputChange('fornitore', e.target.value)}
-                  placeholder="Nome fornitore o cliente"
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">N. Documento</label>
-                <input
-                  type="text"
-                  value={formData.documento}
-                  onChange={e => handleInputChange('documento', e.target.value)}
-                  placeholder="Es: FT-2024/001"
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                <div className="flex gap-4 mt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={formData.tipo === 'dare'}
-                      onChange={() => handleInputChange('tipo', 'dare')}
-                      className="text-red-600"
-                    />
-                    <span className="text-red-600 font-medium">Costo (Dare)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={formData.tipo === 'avere'}
-                      onChange={() => handleInputChange('tipo', 'avere')}
-                      className="text-green-600"
-                    />
-                    <span className="text-green-600 font-medium">Ricavo (Avere)</span>
-                  </label>
-                </div>
-              </div>
-              
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
-                <input
-                  type="text"
-                  value={formData.note}
-                  onChange={e => handleInputChange('note', e.target.value)}
-                  placeholder="Note aggiuntive..."
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
-              
-              <div className="flex items-center gap-6 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.pagato}
-                    onChange={e => handleInputChange('pagato', e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-sm">Pagato</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.ricorrente}
-                    onChange={e => handleInputChange('ricorrente', e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-sm">Ricorrente</span>
-                </label>
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-              <button
-                onClick={resetForm}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-              >
-                Annulla
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Save className="w-4 h-4" />
-                {editingId ? 'Salva Modifiche' : 'Registra'}
-              </button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* ==================== TAB: CONTI BANCARI ==================== */}
+      {activeTab === 'conti-banca' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold">I tuoi Conti Bancari</h2>
+            <button onClick={() => { resetFormConto(); setShowFormConto(true); }} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <Plus className="w-4 h-4" /> Aggiungi Conto
+            </button>
+          </div>
 
-      {/* Tab Content */}
-      {activeTab === 'prima-nota' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Prima Nota</CardTitle>
-            <CardDescription>Registro cronologico dei movimenti contabili</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-gray-50">
-                    <th className="text-left p-3 font-semibold text-gray-700">Data</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">Categoria / Conto</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">Descrizione</th>
-                    <th className="text-left p-3 font-semibold text-gray-700">Documento</th>
-                    <th className="text-right p-3 font-semibold text-red-600">Dare</th>
-                    <th className="text-right p-3 font-semibold text-green-600">Avere</th>
-                    <th className="text-center p-3 font-semibold text-gray-700">Stato</th>
-                    <th className="p-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMovimenti.map(m => {
-                    const cat = PIANO_DEI_CONTI[m.categoria];
-                    const conto = cat?.conti.find(c => c.codice === m.conto);
-                    
-                    return (
-                      <tr key={m.id} className="border-b hover:bg-gray-50">
-                        <td className="p-3 text-sm">{formatDate(m.data)}</td>
-                        <td className="p-3">
-                          <div className="text-sm font-medium">{conto?.nome || m.conto}</div>
-                          <div className="text-xs text-gray-500">{cat?.nome}</div>
-                        </td>
-                        <td className="p-3">
-                          <div className="text-sm">{m.descrizione}</div>
-                          {m.fornitore && <div className="text-xs text-gray-500">{m.fornitore}</div>}
-                        </td>
-                        <td className="p-3 text-sm text-gray-500">{m.documento || '-'}</td>
-                        <td className="p-3 text-right text-red-600 font-medium">
-                          {m.tipo === 'dare' ? formatCurrency(m.importo) : ''}
-                        </td>
-                        <td className="p-3 text-right text-green-600 font-medium">
-                          {m.tipo === 'avere' ? formatCurrency(m.importo) : ''}
-                        </td>
-                        <td className="p-3 text-center">
-                          {m.pagato ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                              <CheckCircle className="w-3 h-3" /> Pagato
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-                              <Clock className="w-3 h-3" /> Da pagare
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handleEdit(m)}
-                              className="p-1.5 hover:bg-gray-200 rounded"
-                              title="Modifica"
-                            >
-                              <Edit className="w-4 h-4 text-gray-500" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(m.id)}
-                              className="p-1.5 hover:bg-red-100 rounded"
-                              title="Elimina"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-100 font-bold">
-                    <td colSpan={4} className="p-3">TOTALI</td>
-                    <td className="p-3 text-right text-red-600">{formatCurrency(totali.dare)}</td>
-                    <td className="p-3 text-right text-green-600">{formatCurrency(totali.avere)}</td>
-                    <td colSpan={2} className={`p-3 text-center ${totali.utile >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                      Saldo: {formatCurrency(totali.utile)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-              
-              {filteredMovimenti.length === 0 && (
-                <div className="text-center py-16">
-                  <FileText className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                  <p className="text-lg font-medium text-gray-600 mb-2">Nessun movimento trovato</p>
-                  <p className="text-gray-500 mb-6">Inizia a registrare i movimenti contabili</p>
-                  <button
-                    onClick={() => { resetForm(); setShowForm(true); }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    <Plus className="w-4 h-4 inline mr-2" />
-                    Registra primo movimento
+          {showFormConto && (
+            <Card className="border-2 border-blue-300">
+              <CardHeader className="bg-blue-50 border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle>{editingId ? 'Modifica Conto' : 'Nuovo Conto Bancario'}</CardTitle>
+                  <button onClick={resetFormConto} className="p-2 hover:bg-blue-100 rounded-lg"><X className="w-5 h-5" /></button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Nome Conto *</label>
+                    <input type="text" value={formConto.nome} onChange={e => setFormConto(p => ({ ...p, nome: e.target.value }))} placeholder="Es: Conto Principale" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Banca *</label>
+                    <input type="text" value={formConto.banca} onChange={e => setFormConto(p => ({ ...p, banca: e.target.value }))} placeholder="Es: Intesa Sanpaolo" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">IBAN</label>
+                    <input type="text" value={formConto.iban} onChange={e => setFormConto(p => ({ ...p, iban: e.target.value }))} placeholder="IT..." className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Saldo Iniziale (€)</label>
+                    <input type="number" step="0.01" value={formConto.saldoIniziale} onChange={e => setFormConto(p => ({ ...p, saldoIniziale: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Colore</label>
+                    <select value={formConto.colore} onChange={e => setFormConto(p => ({ ...p, colore: e.target.value }))} className="w-full px-3 py-2 border rounded-lg">
+                      <option value="blue">Blu</option>
+                      <option value="green">Verde</option>
+                      <option value="purple">Viola</option>
+                      <option value="orange">Arancione</option>
+                      <option value="red">Rosso</option>
+                      <option value="gray">Grigio</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                  <button onClick={resetFormConto} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Annulla</button>
+                  <button onClick={handleSaveConto} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <Save className="w-4 h-4" /> Salva
                   </button>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === 'riepilogo' && (
-        <div className="space-y-4">
-          {Object.entries(perCategoria).map(([catId, catData]) => {
-            if (catData.movimenti.length === 0) return null;
-            
-            const Icona = catData.icona;
-            const isExpanded = expandedCategorie[catId];
-            
-            return (
-              <Card key={catId} className={`border-l-4 ${getColorClass(catData.colore, 'border')}`}>
-                <button
-                  onClick={() => toggleCategoria(catId)}
-                  className="w-full"
-                >
-                  <CardHeader className={`${getColorClass(catData.colore, 'bg')} hover:opacity-90 transition-opacity`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Icona className={`w-5 h-5 ${getColorClass(catData.colore, 'text')}`} />
-                        <div className="text-left">
-                          <CardTitle className="text-lg">{catData.nome}</CardTitle>
-                          <CardDescription>{catData.movimenti.length} movimenti</CardDescription>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className={`text-2xl font-bold ${catData.tipo === 'dare' ? 'text-red-600' : 'text-green-600'}`}>
-                          {formatCurrency(catData.totale)}
-                        </span>
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </div>
-                    </div>
-                  </CardHeader>
-                </button>
-                
-                {isExpanded && (
-                  <CardContent className="pt-4">
-                    <div className="space-y-4">
-                      {/* Riepilogo per conto */}
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {Object.entries(catData.perConto).map(([codice, totale]) => {
-                          const contoInfo = catData.conti.find(c => c.codice === codice);
-                          return (
-                            <div key={codice} className="p-3 bg-white border rounded-lg">
-                              <div className="text-xs text-gray-500">{codice}</div>
-                              <div className="font-medium text-sm">{contoInfo?.nome || codice}</div>
-                              <div className={`font-bold ${catData.tipo === 'dare' ? 'text-red-600' : 'text-green-600'}`}>
-                                {formatCurrency(totale)}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Lista movimenti */}
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b text-left text-gray-600">
-                            <th className="pb-2">Data</th>
-                            <th className="pb-2">Conto</th>
-                            <th className="pb-2">Descrizione</th>
-                            <th className="pb-2 text-right">Importo</th>
-                            <th className="pb-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {catData.movimenti.map(m => (
-                            <tr key={m.id} className="border-b hover:bg-gray-50">
-                              <td className="py-2">{formatDate(m.data)}</td>
-                              <td className="py-2">{m.conto}</td>
-                              <td className="py-2">{m.descrizione}</td>
-                              <td className={`py-2 text-right font-medium ${catData.tipo === 'dare' ? 'text-red-600' : 'text-green-600'}`}>
-                                {formatCurrency(m.importo)}
-                              </td>
-                              <td className="py-2 text-right">
-                                <button onClick={() => handleEdit(m)} className="p-1 hover:bg-gray-200 rounded">
-                                  <Edit className="w-4 h-4 text-gray-400" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
-          
-          {Object.values(perCategoria).every(c => c.movimenti.length === 0) && (
-            <Card>
-              <CardContent className="py-16 text-center">
-                <PieChart className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500">Nessun dato da visualizzare per questo periodo</p>
               </CardContent>
             </Card>
           )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {contiBancari.map(conto => (
+              <Card key={conto.id} className="overflow-hidden">
+                <div className={`h-2 ${getContoColor(conto.colore)}`} />
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-lg">{conto.nome}</h3>
+                      <p className="text-sm text-gray-500">{conto.banca}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleEditConto(conto)} className="p-1.5 hover:bg-gray-100 rounded"><Edit className="w-4 h-4 text-gray-500" /></button>
+                      <button onClick={() => handleDeleteConto(conto.id)} className="p-1.5 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4 text-red-500" /></button>
+                    </div>
+                  </div>
+                  {conto.iban && <p className="text-xs text-gray-400 font-mono mb-3">{conto.iban}</p>}
+                  <div className="pt-3 border-t">
+                    <p className="text-sm text-gray-500">Saldo attuale</p>
+                    <p className={`text-2xl font-bold ${saldoConti[conto.id] >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatCurrency(saldoConti[conto.id] || 0)}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => { setSelectedConto(conto.id); setActiveTab('movimenti-banca'); }} 
+                    className="w-full mt-4 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    Vedi Movimenti →
+                  </button>
+                </CardContent>
+              </Card>
+            ))}
+            
+            {contiBancari.length === 0 && (
+              <Card className="col-span-full">
+                <CardContent className="py-12 text-center">
+                  <Landmark className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500 mb-4">Nessun conto bancario configurato</p>
+                  <button onClick={() => setShowFormConto(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <Plus className="w-4 h-4 inline mr-2" /> Aggiungi il primo conto
+                  </button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 
-      {activeTab === 'bilancio' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Conto Economico */}
-          <Card>
-            <CardHeader className="bg-gray-50 border-b">
-              <CardTitle>Conto Economico</CardTitle>
-              <CardDescription>Ricavi e Costi del periodo</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                {/* Ricavi */}
-                <div className="pb-4 border-b">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-semibold text-emerald-700">RICAVI</span>
-                    <span className="font-bold text-emerald-700">{formatCurrency(totali.avere)}</span>
+      {/* ==================== TAB: MOVIMENTI BANCA ==================== */}
+      {activeTab === 'movimenti-banca' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-semibold">Movimenti Bancari</h2>
+              <select value={selectedConto} onChange={e => setSelectedConto(e.target.value)} className="px-3 py-2 border rounded-lg bg-white">
+                <option value="">Tutti i conti</option>
+                {contiBancari.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <select value={filterRiconciliato} onChange={e => setFilterRiconciliato(e.target.value)} className="px-3 py-2 border rounded-lg bg-white">
+                <option value="">Tutti</option>
+                <option value="si">Riconciliati</option>
+                <option value="no">Da riconciliare</option>
+              </select>
+            </div>
+            <button onClick={() => { resetFormMovBanca(); setShowFormMovBanca(true); }} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <Plus className="w-4 h-4" /> Nuovo Movimento
+            </button>
+          </div>
+
+          {showFormMovBanca && (
+            <Card className="border-2 border-blue-300">
+              <CardHeader className="bg-blue-50 border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle>{editingId ? 'Modifica Movimento' : 'Nuovo Movimento Bancario'}</CardTitle>
+                  <button onClick={resetFormMovBanca} className="p-2 hover:bg-blue-100 rounded-lg"><X className="w-5 h-5" /></button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Data *</label>
+                    <input type="date" value={formMovBanca.data} onChange={e => setFormMovBanca(p => ({ ...p, data: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" />
                   </div>
-                  {perCategoria.ricavi?.movimenti.length > 0 && (
-                    <div className="space-y-1 pl-4">
-                      {Object.entries(perCategoria.ricavi.perConto).map(([cod, tot]) => (
-                        <div key={cod} className="flex justify-between text-sm">
-                          <span className="text-gray-600">{perCategoria.ricavi.conti.find(c => c.codice === cod)?.nome || cod}</span>
-                          <span className="text-emerald-600">{formatCurrency(tot)}</span>
-                        </div>
-                      ))}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Conto *</label>
+                    <select value={formMovBanca.contoId} onChange={e => setFormMovBanca(p => ({ ...p, contoId: e.target.value }))} className="w-full px-3 py-2 border rounded-lg">
+                      <option value="">Seleziona...</option>
+                      {contiBancari.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tipo *</label>
+                    <select value={formMovBanca.tipo} onChange={e => setFormMovBanca(p => ({ ...p, tipo: e.target.value }))} className="w-full px-3 py-2 border rounded-lg">
+                      <option value="entrata">Entrata (+)</option>
+                      <option value="uscita">Uscita (-)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Importo (€) *</label>
+                    <input type="number" step="0.01" value={formMovBanca.importo} onChange={e => setFormMovBanca(p => ({ ...p, importo: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Descrizione *</label>
+                    <input type="text" value={formMovBanca.descrizione} onChange={e => setFormMovBanca(p => ({ ...p, descrizione: e.target.value }))} placeholder="Descrizione movimento" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Causale</label>
+                    <input type="text" value={formMovBanca.causale} onChange={e => setFormMovBanca(p => ({ ...p, causale: e.target.value }))} placeholder="Bonifico, POS, etc." className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Riferimento</label>
+                    <input type="text" value={formMovBanca.riferimento} onChange={e => setFormMovBanca(p => ({ ...p, riferimento: e.target.value }))} placeholder="N. operazione" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                  <button onClick={resetFormMovBanca} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Annulla</button>
+                  <button onClick={handleSaveMovBanca} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <Save className="w-4 h-4" /> Salva
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-3 font-semibold">Data</th>
+                      <th className="text-left p-3 font-semibold">Conto</th>
+                      <th className="text-left p-3 font-semibold">Descrizione</th>
+                      <th className="text-left p-3 font-semibold">Causale</th>
+                      <th className="text-right p-3 font-semibold text-emerald-600">Entrata</th>
+                      <th className="text-right p-3 font-semibold text-red-600">Uscita</th>
+                      <th className="text-center p-3 font-semibold">Stato</th>
+                      <th className="p-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMovBanca.map(m => {
+                      const conto = contiBancari.find(c => c.id === m.contoId);
+                      return (
+                        <tr key={m.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 text-sm">{formatDate(m.data)}</td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${getContoColor(conto?.colore)}`} />
+                              <span className="text-sm">{conto?.nome || '-'}</span>
+                            </div>
+                          </td>
+                          <td className="p-3 text-sm">{m.descrizione}</td>
+                          <td className="p-3 text-sm text-gray-500">{m.causale || '-'}</td>
+                          <td className="p-3 text-right text-emerald-600 font-medium">
+                            {m.tipo === 'entrata' ? formatCurrency(m.importo) : ''}
+                          </td>
+                          <td className="p-3 text-right text-red-600 font-medium">
+                            {m.tipo === 'uscita' ? formatCurrency(m.importo) : ''}
+                          </td>
+                          <td className="p-3 text-center">
+                            {m.riconciliato ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                <Link2 className="w-3 h-3" /> Riconciliato
+                              </span>
+                            ) : (
+                              <button 
+                                onClick={() => handleCreaFromBanca(m)}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full hover:bg-yellow-200"
+                              >
+                                <Link2Off className="w-3 h-3" /> Registra
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => handleEditMovBanca(m)} className="p-1.5 hover:bg-gray-200 rounded"><Edit className="w-4 h-4 text-gray-500" /></button>
+                              <button onClick={() => handleDeleteMovBanca(m.id)} className="p-1.5 hover:bg-red-100 rounded"><Trash2 className="w-4 h-4 text-red-500" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {filteredMovBanca.length === 0 && (
+                  <div className="text-center py-12 text-gray-500">
+                    <ArrowRightLeft className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                    <p>Nessun movimento bancario trovato</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== TAB: PRIMA NOTA ==================== */}
+      {activeTab === 'prima-nota' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-semibold">Prima Nota</h2>
+              <select value={filterCategoria} onChange={e => setFilterCategoria(e.target.value)} className="px-3 py-2 border rounded-lg bg-white">
+                <option value="">Tutte le categorie</option>
+                {Object.entries(PIANO_DEI_CONTI).map(([id, cat]) => <option key={id} value={id}>{cat.nome}</option>)}
+              </select>
+            </div>
+            <button onClick={() => { resetFormPrimaNota(); setShowFormPrimaNota(true); }} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <Plus className="w-4 h-4" /> Nuovo Movimento
+            </button>
+          </div>
+
+          {showFormPrimaNota && (
+            <Card className="border-2 border-blue-300">
+              <CardHeader className="bg-blue-50 border-b">
+                <div className="flex items-center justify-between">
+                  <CardTitle>{editingId ? 'Modifica Movimento' : 'Nuovo Movimento Prima Nota'}</CardTitle>
+                  <button onClick={resetFormPrimaNota} className="p-2 hover:bg-blue-100 rounded-lg"><X className="w-5 h-5" /></button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Data *</label>
+                    <input type="date" value={formPrimaNota.data} onChange={e => setFormPrimaNota(p => ({ ...p, data: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Categoria *</label>
+                    <select 
+                      value={formPrimaNota.categoria} 
+                      onChange={e => setFormPrimaNota(p => ({ ...p, categoria: e.target.value, conto: '', tipo: PIANO_DEI_CONTI[e.target.value]?.tipo || 'dare' }))} 
+                      className="w-full px-3 py-2 border rounded-lg"
+                    >
+                      <option value="">Seleziona...</option>
+                      {Object.entries(PIANO_DEI_CONTI).map(([id, cat]) => <option key={id} value={id}>{cat.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Conto *</label>
+                    <select value={formPrimaNota.conto} onChange={e => setFormPrimaNota(p => ({ ...p, conto: e.target.value }))} disabled={!formPrimaNota.categoria} className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100">
+                      <option value="">Seleziona...</option>
+                      {formPrimaNota.categoria && PIANO_DEI_CONTI[formPrimaNota.categoria]?.conti.map(c => <option key={c.codice} value={c.codice}>{c.codice} - {c.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Importo (€) *</label>
+                    <input type="number" step="0.01" value={formPrimaNota.importo} onChange={e => setFormPrimaNota(p => ({ ...p, importo: e.target.value }))} placeholder="0.00" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Descrizione *</label>
+                    <input type="text" value={formPrimaNota.descrizione} onChange={e => setFormPrimaNota(p => ({ ...p, descrizione: e.target.value }))} placeholder="Descrizione" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Fornitore/Cliente</label>
+                    <input type="text" value={formPrimaNota.fornitore} onChange={e => setFormPrimaNota(p => ({ ...p, fornitore: e.target.value }))} placeholder="Nome" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">N. Documento</label>
+                    <input type="text" value={formPrimaNota.documento} onChange={e => setFormPrimaNota(p => ({ ...p, documento: e.target.value }))} placeholder="FT-2024/001" className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tipo</label>
+                    <div className="flex gap-4 mt-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={formPrimaNota.tipo === 'dare'} onChange={() => setFormPrimaNota(p => ({ ...p, tipo: 'dare' }))} />
+                        <span className="text-red-600 font-medium">Dare (Costo)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" checked={formPrimaNota.tipo === 'avere'} onChange={() => setFormPrimaNota(p => ({ ...p, tipo: 'avere' }))} />
+                        <span className="text-green-600 font-medium">Avere (Ricavo)</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Note</label>
+                    <input type="text" value={formPrimaNota.note} onChange={e => setFormPrimaNota(p => ({ ...p, note: e.target.value }))} placeholder="Note..." className="w-full px-3 py-2 border rounded-lg" />
+                  </div>
+                  {formPrimaNota.movimentoBancaId && (
+                    <div className="md:col-span-4">
+                      <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <Link2 className="w-4 h-4 text-green-600" />
+                        <span className="text-sm text-green-700">Collegato a movimento bancario</span>
+                      </div>
                     </div>
                   )}
                 </div>
-                
-                {/* Costi */}
-                <div className="pb-4 border-b">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-semibold text-red-700">COSTI</span>
-                    <span className="font-bold text-red-700">{formatCurrency(totali.dare)}</span>
-                  </div>
-                  {Object.entries(PIANO_DEI_CONTI)
-                    .filter(([id]) => id !== 'ricavi')
-                    .map(([id, cat]) => {
-                      const catData = perCategoria[id];
-                      if (!catData || catData.totale === 0) return null;
-                      
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                  <button onClick={resetFormPrimaNota} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Annulla</button>
+                  <button onClick={handleSavePrimaNota} className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <Save className="w-4 h-4" /> Salva
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-3 font-semibold">Data</th>
+                      <th className="text-left p-3 font-semibold">Categoria / Conto</th>
+                      <th className="text-left p-3 font-semibold">Descrizione</th>
+                      <th className="text-left p-3 font-semibold">Documento</th>
+                      <th className="text-right p-3 font-semibold text-red-600">Dare</th>
+                      <th className="text-right p-3 font-semibold text-green-600">Avere</th>
+                      <th className="text-center p-3 font-semibold">Banca</th>
+                      <th className="p-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPrimaNota.map(m => {
+                      const cat = PIANO_DEI_CONTI[m.categoria];
+                      const conto = cat?.conti.find(c => c.codice === m.conto);
                       return (
-                        <div key={id} className="mb-3 pl-4">
-                          <div className="flex justify-between text-sm font-medium text-gray-700">
-                            <span>{cat.nome}</span>
-                            <span className="text-red-600">{formatCurrency(catData.totale)}</span>
-                          </div>
-                        </div>
+                        <tr key={m.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 text-sm">{formatDate(m.data)}</td>
+                          <td className="p-3">
+                            <div className="text-sm font-medium">{conto?.nome || m.conto}</div>
+                            <div className="text-xs text-gray-500">{cat?.nome}</div>
+                          </td>
+                          <td className="p-3">
+                            <div className="text-sm">{m.descrizione}</div>
+                            {m.fornitore && <div className="text-xs text-gray-500">{m.fornitore}</div>}
+                          </td>
+                          <td className="p-3 text-sm text-gray-500">{m.documento || '-'}</td>
+                          <td className="p-3 text-right text-red-600 font-medium">{m.tipo === 'dare' ? formatCurrency(m.importo) : ''}</td>
+                          <td className="p-3 text-right text-green-600 font-medium">{m.tipo === 'avere' ? formatCurrency(m.importo) : ''}</td>
+                          <td className="p-3 text-center">
+                            {m.movimentoBancaId ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                <Link2 className="w-3 h-3" />
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full">
+                                <Link2Off className="w-3 h-3" />
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => handleEditPrimaNota(m)} className="p-1.5 hover:bg-gray-200 rounded"><Edit className="w-4 h-4 text-gray-500" /></button>
+                              <button onClick={() => handleDeletePrimaNota(m.id)} className="p-1.5 hover:bg-red-100 rounded"><Trash2 className="w-4 h-4 text-red-500" /></button>
+                            </div>
+                          </td>
+                        </tr>
                       );
                     })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100 font-bold">
+                      <td colSpan={4} className="p-3">TOTALI</td>
+                      <td className="p-3 text-right text-red-600">{formatCurrency(totaliPrimaNota.dare)}</td>
+                      <td className="p-3 text-right text-green-600">{formatCurrency(totaliPrimaNota.avere)}</td>
+                      <td colSpan={2} className={`p-3 text-center ${totaliPrimaNota.utile >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                        EBITDA: {formatCurrency(totaliPrimaNota.utile)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+                {filteredPrimaNota.length === 0 && (
+                  <div className="text-center py-12 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                    <p>Nessun movimento trovato</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== TAB: RICONCILIAZIONE ==================== */}
+      {activeTab === 'riconciliazione' && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Riconciliazione Bancaria</h2>
+          <p className="text-gray-500">Collega i movimenti bancari con i movimenti della Prima Nota per avere un quadro completo.</p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Movimenti Banca non riconciliati */}
+            <Card>
+              <CardHeader className="bg-yellow-50 border-b">
+                <CardTitle className="flex items-center gap-2">
+                  <Link2Off className="w-5 h-5 text-yellow-600" />
+                  Movimenti Banca da Riconciliare
+                </CardTitle>
+                <CardDescription>{movimentiBanca.filter(m => !m.riconciliato).length} movimenti</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4 max-h-[500px] overflow-y-auto">
+                <div className="space-y-2">
+                  {movimentiBanca.filter(m => !m.riconciliato).slice(0, 20).map(m => {
+                    const conto = contiBancari.find(c => c.id === m.contoId);
+                    return (
+                      <div key={m.id} className="p-3 border rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium">{m.descrizione}</div>
+                            <div className="text-xs text-gray-500">{formatDate(m.data)} • {conto?.nome}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-bold ${m.tipo === 'entrata' ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {m.tipo === 'entrata' ? '+' : '-'}{formatCurrency(m.importo)}
+                            </div>
+                            <button 
+                              onClick={() => handleCreaFromBanca(m)}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Registra in Prima Nota →
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {movimentiBanca.filter(m => !m.riconciliato).length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <CheckCircle className="w-12 h-12 mx-auto text-green-300 mb-2" />
+                      <p>Tutti i movimenti sono riconciliati!</p>
+                    </div>
+                  )}
                 </div>
-                
-                {/* Risultato */}
-                <div className={`p-4 rounded-lg ${totali.utile >= 0 ? 'bg-blue-50' : 'bg-orange-50'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className={`font-bold text-lg ${totali.utile >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-                      {totali.utile >= 0 ? 'UTILE DEL PERIODO' : 'PERDITA DEL PERIODO'}
-                    </span>
-                    <span className={`font-bold text-2xl ${totali.utile >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
-                      {formatCurrency(Math.abs(totali.utile))}
-                    </span>
+              </CardContent>
+            </Card>
+
+            {/* Movimenti Prima Nota non riconciliati */}
+            <Card>
+              <CardHeader className="bg-orange-50 border-b">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-orange-600" />
+                  Prima Nota non Collegata a Banca
+                </CardTitle>
+                <CardDescription>{movimentiPrimaNota.filter(m => !m.movimentoBancaId).length} movimenti</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4 max-h-[500px] overflow-y-auto">
+                <div className="space-y-2">
+                  {movimentiPrimaNota.filter(m => !m.movimentoBancaId).slice(0, 20).map(m => {
+                    const cat = PIANO_DEI_CONTI[m.categoria];
+                    return (
+                      <div key={m.id} className="p-3 border rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium">{m.descrizione}</div>
+                            <div className="text-xs text-gray-500">{formatDate(m.data)} • {cat?.nome}</div>
+                          </div>
+                          <div className={`font-bold ${m.tipo === 'avere' ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {m.tipo === 'avere' ? '+' : '-'}{formatCurrency(m.importo)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {movimentiPrimaNota.filter(m => !m.movimentoBancaId).length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <CheckCircle className="w-12 h-12 mx-auto text-green-300 mb-2" />
+                      <p>Tutti collegati!</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Movimenti Riconciliati */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-green-600" />
+                Movimenti Riconciliati
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-2">Data</th>
+                      <th className="text-left p-2">Mov. Banca</th>
+                      <th className="text-left p-2">Prima Nota</th>
+                      <th className="text-right p-2">Importo</th>
+                      <th className="p-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movimentiBanca.filter(m => m.riconciliato).map(mb => {
+                      const pn = movimentiPrimaNota.find(p => p.id === mb.primaNotaId);
+                      const conto = contiBancari.find(c => c.id === mb.contoId);
+                      return (
+                        <tr key={mb.id} className="border-b">
+                          <td className="p-2">{formatDate(mb.data)}</td>
+                          <td className="p-2">
+                            <div>{mb.descrizione}</div>
+                            <div className="text-xs text-gray-500">{conto?.nome}</div>
+                          </td>
+                          <td className="p-2">
+                            <div>{pn?.descrizione || '-'}</div>
+                            <div className="text-xs text-gray-500">{pn?.documento}</div>
+                          </td>
+                          <td className={`p-2 text-right font-medium ${mb.tipo === 'entrata' ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {formatCurrency(mb.importo)}
+                          </td>
+                          <td className="p-2">
+                            <button onClick={() => handleScollegaRiconciliazione(mb.id)} className="p-1 hover:bg-red-50 rounded" title="Scollega">
+                              <Link2Off className="w-4 h-4 text-red-500" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {movimentiBanca.filter(m => m.riconciliato).length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>Nessun movimento riconciliato</p>
                   </div>
-                  <div className="mt-2 text-sm text-gray-600">
-                    Margine: <span className="font-semibold">{totali.margine.toFixed(1)}%</span>
-                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ==================== TAB: CONTO ECONOMICO ==================== */}
+      {activeTab === 'conto-economico' && (
+        <div className="space-y-6">
+          {/* EBITDA Grande */}
+          <Card className={`${totaliPrimaNota.utile >= 0 ? 'bg-gradient-to-r from-blue-600 to-blue-700' : 'bg-gradient-to-r from-orange-600 to-red-600'}`}>
+            <CardContent className="py-8">
+              <div className="text-center text-white">
+                <p className="text-lg opacity-90">EBITDA - Risultato Operativo</p>
+                <p className="text-5xl font-bold my-4">{formatCurrency(totaliPrimaNota.utile)}</p>
+                <div className="flex justify-center gap-8 text-sm opacity-80">
+                  <span>Ricavi: {formatCurrency(totaliPrimaNota.avere)}</span>
+                  <span>-</span>
+                  <span>Costi: {formatCurrency(totaliPrimaNota.dare)}</span>
+                  <span>=</span>
+                  <span>Margine: {totaliPrimaNota.margine.toFixed(1)}%</span>
                 </div>
               </div>
             </CardContent>
           </Card>
-          
-          {/* Dettaglio Costi */}
-          <Card>
-            <CardHeader className="bg-gray-50 border-b">
-              <CardTitle>Composizione Costi</CardTitle>
-              <CardDescription>Dettaglio per categoria</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-3">
-                {Object.entries(PIANO_DEI_CONTI)
-                  .filter(([id]) => id !== 'ricavi')
-                  .map(([id, cat]) => {
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Conto Economico Scalare */}
+            <Card>
+              <CardHeader className="bg-gray-50 border-b">
+                <CardTitle>Conto Economico Scalare</CardTitle>
+                <CardDescription>Ricavi - Costi = Utile</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  {/* RICAVI */}
+                  <div className="pb-4 border-b border-emerald-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-emerald-700 text-lg">A) RICAVI</span>
+                      <span className="font-bold text-emerald-700 text-xl">{formatCurrency(totaliPrimaNota.avere)}</span>
+                    </div>
+                    {perCategoria.ricavi?.movimenti.length > 0 && (
+                      <div className="space-y-1 pl-4">
+                        {Object.entries(perCategoria.ricavi.perConto).map(([cod, tot]) => (
+                          <div key={cod} className="flex justify-between text-sm">
+                            <span className="text-gray-600">{perCategoria.ricavi.conti.find(c => c.codice === cod)?.nome || cod}</span>
+                            <span className="text-emerald-600">{formatCurrency(tot)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* COSTI */}
+                  <div className="pb-4 border-b border-red-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-red-700 text-lg">B) COSTI TOTALI</span>
+                      <span className="font-bold text-red-700 text-xl">{formatCurrency(totaliPrimaNota.dare)}</span>
+                    </div>
+                    <div className="space-y-3 pl-4">
+                      {Object.entries(PIANO_DEI_CONTI).filter(([id]) => id !== 'ricavi').map(([id, cat]) => {
+                        const catData = perCategoria[id];
+                        if (!catData || catData.totale === 0) return null;
+                        return (
+                          <div key={id}>
+                            <div className="flex justify-between text-sm font-medium">
+                              <span className="text-gray-700">{cat.nome}</span>
+                              <span className="text-red-600">{formatCurrency(catData.totale)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* RISULTATO */}
+                  <div className={`p-4 rounded-lg ${totaliPrimaNota.utile >= 0 ? 'bg-blue-100 border-2 border-blue-300' : 'bg-orange-100 border-2 border-orange-300'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`font-bold text-xl ${totaliPrimaNota.utile >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                        A - B = {totaliPrimaNota.utile >= 0 ? 'UTILE' : 'PERDITA'}
+                      </span>
+                      <span className={`font-bold text-3xl ${totaliPrimaNota.utile >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                        {formatCurrency(Math.abs(totaliPrimaNota.utile))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Dettaglio Costi per Categoria */}
+            <Card>
+              <CardHeader className="bg-gray-50 border-b">
+                <CardTitle>Dettaglio Costi</CardTitle>
+                <CardDescription>Composizione percentuale</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  {Object.entries(PIANO_DEI_CONTI).filter(([id]) => id !== 'ricavi').map(([id, cat]) => {
                     const catData = perCategoria[id];
-                    const percentuale = totali.dare > 0 ? (catData?.totale || 0) / totali.dare * 100 : 0;
+                    const percentuale = totaliPrimaNota.dare > 0 ? (catData?.totale || 0) / totaliPrimaNota.dare * 100 : 0;
                     const Icona = cat.icona;
                     
                     return (
                       <div key={id} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <Icona className={`w-4 h-4 ${getColorClass(cat.colore, 'text')}`} />
-                            <span className="font-medium text-sm">{cat.nome}</span>
+                            <Icona className={`w-5 h-5 ${getColorClass(cat.colore, 'text')}`} />
+                            <span className="font-medium">{cat.nome}</span>
                           </div>
-                          <span className="font-bold">{formatCurrency(catData?.totale || 0)}</span>
+                          <span className="font-bold text-lg">{formatCurrency(catData?.totale || 0)}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-gray-200 rounded-full h-3">
                           <div 
-                            className={`h-2 rounded-full transition-all`}
+                            className="h-3 rounded-full transition-all"
                             style={{ 
                               width: `${Math.min(percentuale, 100)}%`,
-                              backgroundColor: cat.colore === 'red' ? '#ef4444' :
-                                              cat.colore === 'orange' ? '#f97316' :
-                                              cat.colore === 'purple' ? '#a855f7' :
-                                              cat.colore === 'blue' ? '#3b82f6' :
-                                              cat.colore === 'slate' ? '#64748b' : '#6b7280'
+                              backgroundColor: cat.colore === 'red' ? '#ef4444' : cat.colore === 'orange' ? '#f97316' : cat.colore === 'purple' ? '#a855f7' : cat.colore === 'blue' ? '#3b82f6' : cat.colore === 'slate' ? '#64748b' : '#6b7280'
                             }}
                           />
                         </div>
-                        <div className="text-right text-xs text-gray-500 mt-1">
-                          {percentuale.toFixed(1)}% dei costi totali
+                        <div className="flex justify-between mt-1 text-xs text-gray-500">
+                          <span>{catData?.movimenti.length || 0} movimenti</span>
+                          <span>{percentuale.toFixed(1)}%</span>
                         </div>
                       </div>
                     );
                   })}
-              </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tabella Riepilogativa */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Riepilogo Periodo: {getPeriodoLabel()}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-3 font-semibold">Voce</th>
+                    <th className="text-right p-3 font-semibold text-emerald-600">Avere (Ricavi)</th>
+                    <th className="text-right p-3 font-semibold text-red-600">Dare (Costi)</th>
+                    <th className="text-right p-3 font-semibold">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(PIANO_DEI_CONTI).map(([id, cat]) => {
+                    const catData = perCategoria[id];
+                    if (!catData || catData.totale === 0) return null;
+                    const isRicavo = cat.tipo === 'avere';
+                    return (
+                      <tr key={id} className="border-b hover:bg-gray-50">
+                        <td className="p-3 font-medium">{cat.nome}</td>
+                        <td className="p-3 text-right text-emerald-600">{isRicavo ? formatCurrency(catData.totale) : '-'}</td>
+                        <td className="p-3 text-right text-red-600">{!isRicavo ? formatCurrency(catData.totale) : '-'}</td>
+                        <td className={`p-3 text-right font-medium ${isRicavo ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {isRicavo ? '+' : '-'}{formatCurrency(catData.totale)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-100 font-bold text-lg">
+                    <td className="p-4">TOTALE</td>
+                    <td className="p-4 text-right text-emerald-700">{formatCurrency(totaliPrimaNota.avere)}</td>
+                    <td className="p-4 text-right text-red-700">{formatCurrency(totaliPrimaNota.dare)}</td>
+                    <td className={`p-4 text-right ${totaliPrimaNota.utile >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                      {formatCurrency(totaliPrimaNota.utile)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </CardContent>
           </Card>
         </div>
