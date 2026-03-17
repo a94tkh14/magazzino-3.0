@@ -2,10 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Package, Tag, Settings, Download, Upload, ShoppingBag, Check, X, RefreshCw, Trash2, Image } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { saveMagazzino, loadMagazzino } from '../lib/firebase';
-import { deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, saveMagazzinoData, saveSingleProduct, deleteProduct, saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
@@ -54,26 +51,14 @@ const MagazzinoPage = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Prova prima a caricare da Firebase
-        const firebaseResult = await loadMagazzino();
-        if (firebaseResult.success && firebaseResult.data && firebaseResult.data.length > 0) {
-          setMagazzinoData(firebaseResult.data);
-          setFilteredData(firebaseResult.data);
-        } else {
-          // Fallback al localStorage se Firebase non ha dati
-          const data = loadFromLocalStorage('magazzino_data', []);
-          const localDataArray = Array.isArray(data) ? data : [];
-          setMagazzinoData(localDataArray);
-          setFilteredData(localDataArray);
-          // NON migrare più i dati locali a Firebase automaticamente
-          // if (localDataArray.length > 0) {
-          //   for (const item of localDataArray) {
-          //     await saveMagazzino(item);
-          //   }
-          // }
-        }
+        // Carica da Firebase tramite il nuovo sistema unificato
+        const data = await loadMagazzinoData();
+        const dataArray = Array.isArray(data) ? data : [];
+        console.log('📦 Magazzino caricato, prodotti:', dataArray.length);
+        setMagazzinoData(dataArray);
+        setFilteredData(dataArray);
       } catch (error) {
-        console.error('Errore nel caricare i dati da Firebase:', error);
+        console.error('Errore nel caricare i dati:', error);
         // Fallback al localStorage
         const data = loadFromLocalStorage('magazzino_data', []);
         const localDataArray = Array.isArray(data) ? data : [];
@@ -220,7 +205,7 @@ const MagazzinoPage = () => {
         const item = magazzinoData.find(item => item.sku === sku);
         if (item) {
           const updatedItem = { ...item, ...changes };
-          return await saveMagazzino(updatedItem);
+          return await saveSingleProduct(updatedItem);
         }
       });
 
@@ -228,9 +213,6 @@ const MagazzinoPage = () => {
       const allSuccessful = results.every(result => result && result.success);
 
       if (allSuccessful) {
-        // Salva anche in localStorage come backup
-        saveToLocalStorage('magazzino_data', magazzinoData);
-        
         // Esci dalla modalità di modifica
         setIsEditMode(false);
         setPendingChanges({});
@@ -260,12 +242,9 @@ const MagazzinoPage = () => {
     if (!window.confirm(`Sei sicuro di voler eliminare il prodotto "${sku}"?`)) return;
     
     try {
-      // Prima elimina da Firebase se ha un ID
-      const itemToDelete = magazzinoData.find(item => item.sku === sku);
-      if (itemToDelete && itemToDelete.id) {
-        await deleteDoc(doc(db, 'magazzino', itemToDelete.id));
-        console.log('✅ Prodotto eliminato da Firebase');
-      }
+      // Elimina da Firebase
+      await deleteProduct(sku);
+      console.log('✅ Prodotto eliminato da Firebase');
       
       // Poi elimina immediatamente da stato locale
       const updated = magazzinoData.filter(item => item.sku !== sku);
@@ -273,9 +252,6 @@ const MagazzinoPage = () => {
       // Aggiorna immediatamente l'interfaccia
       setMagazzinoData(updated);
       setFilteredData(updated);
-      
-      // Salva in localStorage come backup
-      saveToLocalStorage('magazzino_data', updated);
       
       // Mostra messaggio di successo
       alert(`Prodotto "${sku}" eliminato con successo!`);
@@ -333,21 +309,15 @@ const MagazzinoPage = () => {
     console.log('🔄 Tentativo di salvataggio prodotto:', newItem);
 
     try {
-      // Salva solo il nuovo prodotto su Firebase
-      const result = await saveMagazzino(newItem);
+      // Salva il nuovo prodotto su Firebase
+      const result = await saveSingleProduct(newItem);
       console.log('📡 Risposta Firebase:', result);
       
       if (result.success) {
-        // Aggiungi il nuovo prodotto con l'ID restituito
-        const productWithId = { ...newItem, id: result.id };
-        
         // Aggiorna immediatamente l'interfaccia
-        const updated = [...magazzinoData, productWithId];
+        const updated = [...magazzinoData, newItem];
         setMagazzinoData(updated);
         setFilteredData(updated);
-        
-        // Salva anche in localStorage come backup
-        saveToLocalStorage('magazzino_data', updated);
         
         // Pulisci il form
         setNewProduct({
@@ -360,6 +330,7 @@ const MagazzinoPage = () => {
           marca: ''
         });
         setAddError('');
+        setShowAddModal(false);
         
         // Mostra messaggio di successo temporaneo
         const successMessage = document.createElement('div');
@@ -532,9 +503,9 @@ const MagazzinoPage = () => {
       };
 
       try {
-        const result = await saveMagazzino(newItem);
+        const result = await saveSingleProduct(newItem);
         if (result.success) {
-          newProducts.push({ ...newItem, id: result.id });
+          newProducts.push(newItem);
           imported++;
         }
       } catch (error) {
@@ -546,7 +517,6 @@ const MagazzinoPage = () => {
       const updated = [...magazzinoData, ...newProducts];
       setMagazzinoData(updated);
       setFilteredData(updated);
-      saveToLocalStorage('magazzino_data', updated);
     }
 
     alert(`Importazione completata!\n✅ Importati: ${imported}\n⏭️ Saltati (già esistenti): ${skipped}`);
