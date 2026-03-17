@@ -523,18 +523,18 @@ const MagazzinoPage = () => {
         continue;
       }
 
-      // Pulisce il nome da apostrofi e caratteri speciali
-      const cleanName = (str) => {
+      // Pulisce SKU e nome da apostrofi e caratteri speciali
+      const cleanStr = (str) => {
         if (!str) return '';
         return str.replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
       };
       
       const newItem = {
-        sku: product.sku,
-        nome: cleanName(product.nome),
+        sku: cleanStr(product.sku),
+        nome: cleanStr(product.nome),
         quantita: 0,
         prezzo: product.prezzo || 0,
-        marca: cleanName(product.marca || ''),
+        marca: cleanStr(product.marca || ''),
         tipologia: product.tipologia || '',
         anagrafica: ''
       };
@@ -567,21 +567,22 @@ const MagazzinoPage = () => {
     return str.replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
   };
 
-  // Pulisce i nomi di tutti i prodotti nel magazzino
+  // Pulisce i nomi e SKU di tutti i prodotti nel magazzino
   const handleCleanAllNames = async () => {
-    if (!window.confirm('Vuoi pulire i nomi di tutti i prodotti?\n\nQuesto rimuoverà apostrofi e caratteri speciali dai nomi.')) {
+    if (!window.confirm('Vuoi pulire nomi e SKU di tutti i prodotti?\n\nQuesto rimuoverà apostrofi e caratteri speciali.')) {
       return;
     }
 
     try {
       let cleaned = 0;
       const updatedProducts = magazzinoData.map(product => {
+        const cleanedSku = cleanText(product.sku);
         const cleanedNome = cleanText(product.nome);
         const cleanedMarca = cleanText(product.marca);
         
-        if (cleanedNome !== product.nome || cleanedMarca !== product.marca) {
+        if (cleanedSku !== product.sku || cleanedNome !== product.nome || cleanedMarca !== product.marca) {
           cleaned++;
-          return { ...product, nome: cleanedNome, marca: cleanedMarca };
+          return { ...product, sku: cleanedSku, nome: cleanedNome, marca: cleanedMarca };
         }
         return product;
       });
@@ -591,9 +592,9 @@ const MagazzinoPage = () => {
         await saveMagazzinoData(updatedProducts);
         setMagazzinoData(updatedProducts);
         setFilteredData(updatedProducts);
-        alert(`✅ Puliti ${cleaned} prodotti!`);
+        alert(`✅ Puliti ${cleaned} prodotti (SKU, nomi, marche)!`);
       } else {
-        alert('Tutti i nomi sono già puliti!');
+        alert('Tutti i dati sono già puliti!');
       }
     } catch (error) {
       console.error('Errore pulizia nomi:', error);
