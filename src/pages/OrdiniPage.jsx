@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { loadLargeData, saveLargeData } from '../lib/dataManager';
+import { loadShopifyOrdersData, saveShopifyOrdersData } from '../lib/magazzinoStorage';
 import { safeIncludes } from '../lib/utils';
 import { convertShopifyOrder, getShopifyCredentials, downloadAllShopifyOrders } from '../lib/shopifyAPI';
 import { RefreshCw, AlertCircle, Database, TrendingUp, Clock, Archive, Eye, Download, StopCircle, CheckCircle } from 'lucide-react';
@@ -69,8 +69,10 @@ const OrdiniPage = () => {
 
   const loadOrdini = async () => {
     try {
-      const data = await loadLargeData('shopify_orders');
-      if (data) {
+      console.log('🔄 Caricando ordini Shopify da Firebase...');
+      const data = await loadShopifyOrdersData();
+      if (data && data.length > 0) {
+        console.log(`✅ Caricati ${data.length} ordini Shopify`);
         setOrdini(data);
       }
     } catch (error) {
@@ -81,7 +83,7 @@ const OrdiniPage = () => {
 
   const saveOrders = async (orders) => {
     try {
-      await saveLargeData('shopify_orders', orders);
+      await saveShopifyOrdersData(orders);
       setOrdini(orders);
     } catch (error) {
       console.error('Errore salvataggio ordini:', error);
@@ -176,7 +178,7 @@ const OrdiniPage = () => {
       }
 
       // Carica ordini esistenti
-      const existingOrders = await loadLargeData('shopify_orders') || [];
+      const existingOrders = await loadShopifyOrdersData() || [];
       const existingOrderIds = new Set(existingOrders.map(o => o.id.toString()));
 
       // Scarica solo gli ultimi ordini (ultimi 3 giorni)
