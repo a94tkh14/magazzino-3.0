@@ -8,33 +8,182 @@ export const getShopifyCredentials = () => {
 };
 
 export const convertShopifyOrder = (shopifyOrder) => {
+  // Estrai informazioni spedizione
+  const shippingLine = shopifyOrder.shipping_lines?.[0] || {};
+  const shippingAddress = shopifyOrder.shipping_address || {};
+  const billingAddress = shopifyOrder.billing_address || {};
+  
+  // Calcola subtotale dai line items
+  const subtotal = (shopifyOrder.line_items || []).reduce((sum, item) => {
+    return sum + (parseFloat(item.price || 0) * (item.quantity || 0));
+  }, 0);
+  
+  // Calcola sconto totale
+  const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
+  
+  // Calcola tasse
+  const totalTax = parseFloat(shopifyOrder.total_tax || 0);
+  
+  // Costo spedizione
+  const shippingCost = parseFloat(
+    shopifyOrder.total_shipping_price_set?.shop_money?.amount || 
+    shippingLine.price || 
+    0
+  );
+  
   return {
+    // ID e numero ordine (mantieni entrambi i formati per compatibilità)
     id: shopifyOrder.id.toString(),
+    order_number: shopifyOrder.order_number || shopifyOrder.name,
     orderNumber: shopifyOrder.order_number || shopifyOrder.name,
+    name: shopifyOrder.name,
+    
+    // Cliente
+    customer: shopifyOrder.customer || null,
     customerName: shopifyOrder.customer ? 
       `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 
       'Cliente sconosciuto',
-    customerEmail: shopifyOrder.customer?.email || '',
+    customerEmail: shopifyOrder.customer?.email || shopifyOrder.email || '',
+    email: shopifyOrder.email || shopifyOrder.customer?.email || '',
+    phone: shopifyOrder.phone || shopifyOrder.customer?.phone || '',
+    
+    // Prezzi e totali (mantieni entrambi i formati)
+    total_price: parseFloat(shopifyOrder.total_price || 0),
     totalPrice: parseFloat(shopifyOrder.total_price || 0),
+    subtotal_price: parseFloat(shopifyOrder.subtotal_price || subtotal),
+    subtotal: parseFloat(shopifyOrder.subtotal_price || subtotal),
     currency: shopifyOrder.currency || 'EUR',
+    
+    // Spedizione
+    shipping_cost: shippingCost,
+    shippingPrice: shippingCost,
+    shippingType: shippingLine.title || 'Standard',
+    shipping_method: shippingLine.title || shippingLine.code || 'Standard',
+    is_free_shipping: shippingCost === 0,
+    is_shipped: shopifyOrder.fulfillment_status === 'fulfilled',
+    
+    // Sconti
+    discount_amount: totalDiscount,
+    total_discounts: totalDiscount,
+    discount_codes: shopifyOrder.discount_codes || [],
+    discount_code: shopifyOrder.discount_codes?.[0]?.code || '',
+    
+    // Tasse
+    taxes: totalTax,
+    total_tax: totalTax,
+    tax_lines: shopifyOrder.tax_lines || [],
+    
+    // Status
+    financial_status: shopifyOrder.financial_status || 'pending',
+    financialStatus: shopifyOrder.financial_status || 'pending',
     status: shopifyOrder.financial_status || 'pending',
+    fulfillment_status: shopifyOrder.fulfillment_status || null,
+    fulfillmentStatus: shopifyOrder.fulfillment_status || null,
+    
+    // Date
+    created_at: shopifyOrder.created_at,
     createdAt: shopifyOrder.created_at,
+    updated_at: shopifyOrder.updated_at,
     updatedAt: shopifyOrder.updated_at,
-    shippingPrice: parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0),
-    shippingType: shopifyOrder.shipping_lines?.[0]?.title || 'Standard',
-    items: (shopifyOrder.line_items || []).map(item => ({
-      id: item.id.toString(),
+    processed_at: shopifyOrder.processed_at,
+    closed_at: shopifyOrder.closed_at,
+    cancelled_at: shopifyOrder.cancelled_at,
+    
+    // Indirizzi
+    shipping_address: shippingAddress,
+    shipping: {
+      name: `${shippingAddress.first_name || ''} ${shippingAddress.last_name || ''}`.trim(),
+      address: `${shippingAddress.address1 || ''} ${shippingAddress.address2 || ''}`.trim(),
+      city: shippingAddress.city || '',
+      zip: shippingAddress.zip || '',
+      province: shippingAddress.province || '',
+      country: shippingAddress.country || '',
+      phone: shippingAddress.phone || ''
+    },
+    billing_address: billingAddress,
+    billing: {
+      name: `${billingAddress.first_name || ''} ${billingAddress.last_name || ''}`.trim(),
+      address: `${billingAddress.address1 || ''} ${billingAddress.address2 || ''}`.trim(),
+      city: billingAddress.city || '',
+      zip: billingAddress.zip || '',
+      province: billingAddress.province || '',
+      country: billingAddress.country || '',
+      phone: billingAddress.phone || ''
+    },
+    
+    // Prodotti - formato completo
+    line_items: (shopifyOrder.line_items || []).map(item => ({
+      id: item.id?.toString() || '',
+      product_id: item.product_id?.toString() || '',
+      variant_id: item.variant_id?.toString() || '',
       sku: item.sku || '',
-      name: item.name || '',
+      name: item.name || item.title || '',
+      title: item.title || item.name || '',
       quantity: item.quantity || 0,
       price: parseFloat(item.price || 0),
-      total: parseFloat(item.line_price || 0)
+      total: parseFloat(item.price || 0) * (item.quantity || 0),
+      vendor: item.vendor || '',
+      requires_shipping: item.requires_shipping !== false,
+      taxable: item.taxable !== false,
+      fulfillment_status: item.fulfillment_status || null,
+      compare_at_price: parseFloat(item.compare_at_price || 0),
+      discount: parseFloat(item.total_discount || 0),
+      variant_title: item.variant_title || '',
+      product_exists: item.product_exists !== false,
+      grams: item.grams || 0
     })),
-    // Dati aggiuntivi per compatibilità
-    financialStatus: shopifyOrder.financial_status,
-    fulfillmentStatus: shopifyOrder.fulfillment_status,
+    
+    // Prodotti - formato alternativo per compatibilità
+    products: (shopifyOrder.line_items || []).map(item => ({
+      id: item.id?.toString() || '',
+      product_id: item.product_id?.toString() || '',
+      variant_id: item.variant_id?.toString() || '',
+      sku: item.sku || '',
+      name: item.name || item.title || '',
+      title: item.title || item.name || '',
+      quantity: item.quantity || 0,
+      price: parseFloat(item.price || 0),
+      total: parseFloat(item.price || 0) * (item.quantity || 0),
+      vendor: item.vendor || '',
+      requires_shipping: item.requires_shipping !== false,
+      taxable: item.taxable !== false,
+      fulfillment_status: item.fulfillment_status || null,
+      compare_at_price: parseFloat(item.compare_at_price || 0),
+      discount: parseFloat(item.total_discount || 0),
+      variant_title: item.variant_title || '',
+      grams: item.grams || 0
+    })),
+    
+    // Items - formato legacy
+    items: (shopifyOrder.line_items || []).map(item => ({
+      id: item.id?.toString() || '',
+      sku: item.sku || '',
+      name: item.name || item.title || '',
+      quantity: item.quantity || 0,
+      price: parseFloat(item.price || 0),
+      total: parseFloat(item.price || 0) * (item.quantity || 0)
+    })),
+    
+    // Metadati aggiuntivi
     tags: shopifyOrder.tags || '',
-    note: shopifyOrder.note || ''
+    note: shopifyOrder.note || '',
+    note_attributes: shopifyOrder.note_attributes || [],
+    source_name: shopifyOrder.source_name || 'web',
+    source: shopifyOrder.source_name || 'Shopify',
+    gateway: shopifyOrder.gateway || '',
+    payment_method: shopifyOrder.gateway || shopifyOrder.payment_gateway_names?.[0] || '',
+    payment_gateway_names: shopifyOrder.payment_gateway_names || [],
+    referring_site: shopifyOrder.referring_site || '',
+    landing_site: shopifyOrder.landing_site || '',
+    
+    // Fulfillment info
+    fulfillments: shopifyOrder.fulfillments || [],
+    refunds: shopifyOrder.refunds || [],
+    
+    // Tracking
+    tracking_number: shopifyOrder.fulfillments?.[0]?.tracking_number || '',
+    tracking_company: shopifyOrder.fulfillments?.[0]?.tracking_company || '',
+    tracking_url: shopifyOrder.fulfillments?.[0]?.tracking_url || ''
   };
 };
 

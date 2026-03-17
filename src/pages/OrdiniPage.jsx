@@ -246,12 +246,18 @@ const OrdiniPage = () => {
 
   // Filtri
   const filteredOrdini = ordini.filter(ordine => {
-    const matchesSearch = safeIncludes(ordine.order_number?.toString(), searchTerm) ||
-                         safeIncludes(ordine.email, searchTerm) ||
-                         safeIncludes(ordine.customer?.first_name, searchTerm) ||
-                         safeIncludes(ordine.customer?.last_name, searchTerm);
+    const orderNumber = ordine.order_number || ordine.orderNumber || '';
+    const email = ordine.email || ordine.customerEmail || '';
+    const firstName = ordine.customer?.first_name || ordine.customerName || '';
+    const lastName = ordine.customer?.last_name || '';
     
-    const matchesStatus = statusFilter === 'all' || ordine.financial_status === statusFilter;
+    const matchesSearch = safeIncludes(orderNumber.toString(), searchTerm) ||
+                         safeIncludes(email, searchTerm) ||
+                         safeIncludes(firstName, searchTerm) ||
+                         safeIncludes(lastName, searchTerm);
+    
+    const status = ordine.financial_status || ordine.financialStatus || ordine.status || '';
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
@@ -266,10 +272,19 @@ const OrdiniPage = () => {
   };
 
   // Statistiche
-  const totalValue = filteredOrdini.reduce((sum, ordine) => sum + parseFloat(ordine.total_price || 0), 0);
+  const totalValue = filteredOrdini.reduce((sum, ordine) => {
+    const price = ordine.total_price || ordine.totalPrice || 0;
+    return sum + parseFloat(price);
+  }, 0);
   const totalOrders = filteredOrdini.length;
-  const paidOrders = filteredOrdini.filter(o => o.financial_status === 'paid').length;
-  const pendingOrders = filteredOrdini.filter(o => o.financial_status === 'pending').length;
+  const paidOrders = filteredOrdini.filter(o => {
+    const status = o.financial_status || o.financialStatus || o.status || '';
+    return status === 'paid';
+  }).length;
+  const pendingOrders = filteredOrdini.filter(o => {
+    const status = o.financial_status || o.financialStatus || o.status || '';
+    return status === 'pending';
+  }).length;
 
   // Se è selezionato un ordine, mostra la pagina di dettaglio
   if (selectedOrderId) {
@@ -495,83 +510,104 @@ const OrdiniPage = () => {
                    </tr>
                  </thead>
                  <tbody className="bg-white divide-y divide-gray-200">
-                   {filteredOrdini.map((ordine) => (
-                     <tr key={ordine.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewOrder(ordine.id)}>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <div className="text-sm font-medium text-gray-900">
-                           #{ordine.order_number}
-                         </div>
-                         <div className="text-sm text-gray-500">
-                           {ordine.id}
-                         </div>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <div className="text-sm font-medium text-gray-900">
-                           {ordine.customer?.first_name} {ordine.customer?.last_name}
-                         </div>
-                         <div className="text-sm text-gray-500">
-                           {ordine.email}
-                         </div>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                         {new Date(ordine.created_at).toLocaleDateString('it-IT')}
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                           ordine.financial_status === 'paid' 
-                             ? 'bg-green-100 text-green-800'
-                             : ordine.financial_status === 'pending'
-                             ? 'bg-yellow-100 text-yellow-800'
-                             : 'bg-red-100 text-red-800'
-                         }`}>
-                           {ordine.financial_status}
-                         </span>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                         <div className="text-sm">
-                           <div className={`font-medium ${
-                             ordine.is_shipped ? 'text-green-600' : 'text-orange-600'
-                           }`}>
-                             {ordine.is_shipped ? 'SPEDITO' : 'NON SPEDITO'}
+                   {filteredOrdini.map((ordine) => {
+                     const orderNumber = ordine.order_number || ordine.orderNumber || ordine.name || 'N/A';
+                     const customerName = ordine.customerName || 
+                       (ordine.customer ? `${ordine.customer.first_name || ''} ${ordine.customer.last_name || ''}`.trim() : 'N/A');
+                     const email = ordine.email || ordine.customerEmail || '';
+                     const createdAt = ordine.created_at || ordine.createdAt;
+                     const status = ordine.financial_status || ordine.financialStatus || ordine.status || 'pending';
+                     const totalPrice = ordine.total_price || ordine.totalPrice || 0;
+                     const shippingCost = ordine.shipping_cost || ordine.shippingPrice || 0;
+                     const isShipped = ordine.is_shipped || ordine.fulfillment_status === 'fulfilled';
+                     const isFreeShipping = ordine.is_free_shipping || shippingCost === 0;
+                     const productsCount = ordine.products?.length || ordine.line_items?.length || ordine.items?.length || 0;
+                     
+                     return (
+                       <tr key={ordine.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleViewOrder(ordine.id)}>
+                         <td className="px-6 py-4 whitespace-nowrap">
+                           <div className="text-sm font-medium text-gray-900">
+                             #{orderNumber}
                            </div>
-                           {ordine.shipping_cost !== undefined && (
+                           <div className="text-xs text-gray-500">
+                             ID: {ordine.id}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap">
+                           <div className="text-sm font-medium text-gray-900">
+                             {customerName}
+                           </div>
+                           <div className="text-sm text-gray-500">
+                             {email}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                           {createdAt ? new Date(createdAt).toLocaleDateString('it-IT', {
+                             day: '2-digit',
+                             month: '2-digit',
+                             year: 'numeric'
+                           }) : 'N/A'}
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap">
+                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                             status === 'paid' 
+                               ? 'bg-green-100 text-green-800'
+                               : status === 'pending'
+                               ? 'bg-yellow-100 text-yellow-800'
+                               : status === 'refunded'
+                               ? 'bg-purple-100 text-purple-800'
+                               : 'bg-red-100 text-red-800'
+                           }`}>
+                             {status === 'paid' ? 'Pagato' : 
+                              status === 'pending' ? 'In attesa' : 
+                              status === 'refunded' ? 'Rimborsato' :
+                              status === 'cancelled' ? 'Cancellato' : status}
+                           </span>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap">
+                           <div className="text-sm">
+                             <div className={`font-medium ${
+                               isShipped ? 'text-green-600' : 'text-orange-600'
+                             }`}>
+                               {isShipped ? '✓ SPEDITO' : '○ NON SPEDITO'}
+                             </div>
                              <div className="text-xs text-gray-500">
-                               {ordine.is_free_shipping ? 'GRATUITA' : 
+                               {isFreeShipping ? '🎁 Gratuita' : 
                                  new Intl.NumberFormat('it-IT', {
                                    style: 'currency',
-                                   currency: 'EUR',
-                                   minimumFractionDigits: 2,
-                                   maximumFractionDigits: 2
-                                 }).format(parseFloat(ordine.shipping_cost || 0))}
+                                   currency: 'EUR'
+                                 }).format(parseFloat(shippingCost))}
                              </div>
-                           )}
-                         </div>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                         {new Intl.NumberFormat('it-IT', {
-                           style: 'currency',
-                           currency: 'EUR',
-                           minimumFractionDigits: 2,
-                           maximumFractionDigits: 2
-                         }).format(parseFloat(ordine.total_price || 0))}
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                         {ordine.products?.length || ordine.line_items?.length || 0} prodotti
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                         <button
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             handleViewOrder(ordine.id);
-                           }}
-                           className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
-                         >
-                           <Eye className="w-4 h-4 mr-1" />
-                           Dettagli
-                         </button>
-                       </td>
-                     </tr>
-                   ))}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap">
+                           <div className="text-sm font-bold text-gray-900">
+                             {new Intl.NumberFormat('it-IT', {
+                               style: 'currency',
+                               currency: 'EUR'
+                             }).format(parseFloat(totalPrice))}
+                           </div>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                           <span className="bg-gray-100 px-2 py-1 rounded">
+                             {productsCount} {productsCount === 1 ? 'prodotto' : 'prodotti'}
+                           </span>
+                         </td>
+                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                           <button
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               handleViewOrder(ordine.id);
+                             }}
+                             className="flex items-center text-blue-600 hover:text-blue-800 transition-colors font-medium"
+                           >
+                             <Eye className="w-4 h-4 mr-1" />
+                             Dettagli
+                           </button>
+                         </td>
+                       </tr>
+                     );
+                   })}
                 </tbody>
               </table>
             </div>
