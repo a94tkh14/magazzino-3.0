@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calculator } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calculator, Package, ShoppingCart, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
 import { safeToLowerCase } from '../lib/utils';
+import { loadLargeData } from '../lib/dataManager';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -20,6 +21,9 @@ function getDateRangeFromState(selectedDateRange, customStartDate, customEndDate
       break;
     case 'last_90_days':
       startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case 'this_year':
+      startDate = new Date(now.getFullYear(), 0, 1);
       break;
     case 'custom':
       if (customStartDate && customEndDate) {
@@ -39,67 +43,137 @@ const ContoEconomicoPage = () => {
   const [selectedDateRange, setSelectedDateRange] = useState('last_30_days');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [viewMode, setViewMode] = useState('month'); // week, month, quarter
+  const [viewMode, setViewMode] = useState('month');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [costs, setCosts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [manualMetrics, setManualMetrics] = useState([]);
-  const [costCategories, setCostCategories] = useState([]);
+  const [magazzinoData, setMagazzinoData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Helper per ottenere valore con fallback
+  const getVal = (obj, ...keys) => {
+    for (const key of keys) {
+      const value = obj?.[key];
+      if (value !== undefined && value !== null && value !== '') return value;
+    }
+    return null;
+  };
 
   // Carica dati all'avvio
   useEffect(() => {
-    const allCosts = JSON.parse(localStorage.getItem('costs') || '[]');
-    const allOrders = JSON.parse(localStorage.getItem('shopify_orders') || '[]');
-    const allMetrics = JSON.parse(localStorage.getItem('manualMetrics') || '[]');
-    
-    setCosts(allCosts);
-    setOrders(allOrders);
-    setManualMetrics(allMetrics);
+    const loadAllData = async () => {
+      setIsLoading(true);
+      try {
+        // Carica ordini da dataManager (supporta dati grandi)
+        const loadedOrders = await loadLargeData('shopify_orders') || [];
+        setOrders(loadedOrders);
+        console.log(`📦 Caricati ${loadedOrders.length} ordini`);
 
-    // Carica categorie costi
-    const saved = localStorage.getItem('costCategories');
-    if (saved) {
-      setCostCategories(JSON.parse(saved));
-    }
+        // Carica costi
+        const allCosts = JSON.parse(localStorage.getItem('costs') || '[]');
+        setCosts(allCosts);
+
+        // Carica metriche marketing
+        const allMetrics = JSON.parse(localStorage.getItem('manualMetrics') || '[]');
+        setManualMetrics(allMetrics);
+
+        // Carica dati magazzino
+        const magData = JSON.parse(localStorage.getItem('magazzino_data') || '[]');
+        setMagazzinoData(magData);
+        console.log(`📊 Caricati ${magData.length} prodotti magazzino`);
+
+      } catch (error) {
+        console.error('Errore caricamento dati:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAllData();
   }, []);
 
-  // Calcola costi di acquisto per periodo basato su SKU venduti
-  const calculatePurchaseCosts = (startDate, endDate) => {
-    // Carica dati magazzino
-    const magazzinoData = JSON.parse(localStorage.getItem('magazzino_data') || '[]');
-    
-    // Filtra ordini per questo periodo
-    const periodOrders = orders.filter(order => {
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
-    
-    // Calcola costi di acquisto basato sui prodotti venduti
-    let totalPurchaseCosts = 0;
-    
-    periodOrders.forEach(order => {
-      if (order.items && Array.isArray(order.items)) {
-        order.items.forEach(item => {
-          // Cerca il prodotto nel magazzino per SKU
-          const magazzinoItem = magazzinoData.find(magItem => 
-            magItem.sku === item.sku || 
-            magItem.sku === item.sku?.toString() ||
-            magItem.sku === item.variant_id?.toString()
-          );
-          
-          if (magazzinoItem && magazzinoItem.prezzo > 0) {
-            // Calcola costo di acquisto per questo item
-            const itemPurchaseCost = magazzinoItem.prezzo * item.quantity;
-            totalPurchaseCosts += itemPurchaseCost;
-          }
-        });
-      }
-    });
-    
-    return totalPurchaseCosts;
+  // Ottieni data ordine con fallback
+  const getOrderDate = (order) => {
+    const dateStr = getVal(order, 'created_at', 'createdAt', 'date');
+    return dateStr ? new Date(dateStr) : null;
   };
 
-  // Calcola costi di acquisto per periodo
+  // Ottieni prezzo totale ordine
+  const getOrderTotal = (order) => {
+    return parseFloat(getVal(order, 'total_price', 'totalPrice') || 0);
+  };
+
+  // Ottieni costo spedizione pagato dal cliente
+  const getShippingRevenue = (order) => {
+    return parseFloat(getVal(order, 'shipping_cost', 'shippingPrice', 'shipping_price') || 0);
+  };
+
+  // Ottieni prodotti dell'ordine
+  const getOrderProducts = (order) => {
+    return getVal(order, 'products', 'line_items', 'items') || [];
+  };
+
+  // Calcola costo spedizione effettivo
+  const getShippingCost = (order) => {
+    const shippingType = safeToLowerCase(getVal(order, 'shippingType', 'shipping_method') || '', '');
+    if (shippingType.includes('express') || shippingType.includes('domicilio')) {
+      return COSTO_EXPRESS;
+    } else if (shippingType.includes('punto') || shippingType.includes('ritiro')) {
+      return COSTO_PUNTO_RITIRO;
+    }
+    return COSTO_EXPRESS; // Default
+  };
+
+  // Calcola costi di acquisto e quantità vendute per periodo
+  const calculateProductMetrics = (periodOrders) => {
+    let totalPurchaseCosts = 0;
+    let totalQuantitySold = 0;
+    let totalProductsSold = 0;
+    const productsSoldMap = new Map();
+
+    periodOrders.forEach(order => {
+      const products = getOrderProducts(order);
+      
+      products.forEach(item => {
+        const sku = item.sku || item.variant_id?.toString() || '';
+        const quantity = parseInt(item.quantity || 1);
+        const itemPrice = parseFloat(item.price || 0);
+        
+        totalQuantitySold += quantity;
+        
+        // Traccia prodotti unici venduti
+        if (sku && !productsSoldMap.has(sku)) {
+          productsSoldMap.set(sku, true);
+          totalProductsSold++;
+        }
+        
+        // Cerca il prodotto nel magazzino per calcolare costo acquisto
+        if (sku) {
+          const magazzinoItem = magazzinoData.find(magItem => 
+            magItem.sku === sku || 
+            magItem.sku === item.variant_id?.toString() ||
+            magItem.codice === sku
+          );
+          
+          if (magazzinoItem) {
+            const costPrice = parseFloat(magazzinoItem.prezzo || magazzinoItem.costo || 0);
+            if (costPrice > 0) {
+              totalPurchaseCosts += costPrice * quantity;
+            }
+          }
+        }
+      });
+    });
+
+    return {
+      purchaseCosts: totalPurchaseCosts,
+      quantitySold: totalQuantitySold,
+      productsSold: totalProductsSold
+    };
+  };
+
+  // Calcola dati economici per periodo
   const calculateEconomicDataByPeriod = () => {
     const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
     const periods = [];
@@ -107,242 +181,152 @@ const ContoEconomicoPage = () => {
     let currentDate = new Date(startDate);
     const end = new Date(endDate);
     
-    // Per le settimane, calcola tutte le settimane dall'inizio dell'anno selezionato fino ad oggi
+    // Per le settimane dell'anno
     if (viewMode === 'week') {
-      // Trova il primo gennaio dell'anno selezionato
-      const firstDayOfYear = new Date(selectedYear, 0, 1); // 1 gennaio
-      
-      // Trova il lunedì della prima settimana dell'anno
+      const firstDayOfYear = new Date(selectedYear, 0, 1);
       const dayOfWeek = firstDayOfYear.getDay();
-      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 0 = domenica
-      const firstMondayOfYear = new Date(selectedYear, 0, 1 + daysToMonday);
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const firstMondayOfYear = new Date(selectedYear, 0, 1 - daysToMonday + (dayOfWeek === 0 ? -6 : 1));
       
-      // Inizia dal primo lunedì dell'anno
       currentDate = new Date(firstMondayOfYear);
-      
-      // Calcola tutte le settimane dall'inizio dell'anno fino ad oggi (o fine anno se anno passato)
       const endDate = selectedYear === new Date().getFullYear() ? new Date() : new Date(selectedYear, 11, 31);
+      
+      let weekNumber = 1;
       while (currentDate <= endDate) {
         const periodEnd = new Date(currentDate);
         periodEnd.setDate(periodEnd.getDate() + 6);
+        periodEnd.setHours(23, 59, 59, 999);
         
-        // Verifica se ci sono ordini in questa settimana
-        const periodOrders = orders.filter(order => {
-          const orderDate = new Date(order.createdAt);
-          return orderDate >= currentDate && orderDate <= periodEnd;
-        });
+        const periodData = calculatePeriodData(currentDate, periodEnd, `Sett. ${weekNumber}`);
+        if (periodData.orderCount > 0 || periodData.totalCosts > 0) {
+          periods.push(periodData);
+        }
         
-        // Calcola il numero della settimana dell'anno
-        const weekOfYear = Math.floor((currentDate - firstMondayOfYear) / (7 * 24 * 60 * 60 * 1000)) + 1;
-        const periodLabel = `Week ${weekOfYear}`;
-        
-        // Calcola tutti i dati per questa settimana
-        const totalRevenue = periodOrders.reduce((sum, order) => {
-          return sum + (parseFloat(order.totalPrice) || 0);
-        }, 0);
-
-        const shippingRevenue = periodOrders.reduce((sum, order) => {
-          return sum + (parseFloat(order.shippingPrice) || 0);
-        }, 0);
-
-        const shippingCosts = periodOrders.reduce((sum, order) => {
-          const shippingType = safeToLowerCase(order.shippingType, '');
-          if (shippingType.includes('express a domicilio')) {
-            return sum + COSTO_EXPRESS;
-          } else if (shippingType.includes('punto di ritiro')) {
-            return sum + COSTO_PUNTO_RITIRO;
-          } else {
-            return sum + COSTO_EXPRESS;
-          }
-        }, 0);
-
-        const periodMetrics = manualMetrics.filter(metric => {
-          const metricStartDate = new Date(metric.weekStart);
-          const metricEndDate = new Date(metric.weekStart);
-          metricEndDate.setDate(metricEndDate.getDate() + 6);
-          return metricStartDate <= periodEnd && metricEndDate >= currentDate;
-        });
-        
-        const marketingCosts = periodMetrics.reduce((sum, metric) =>
-          sum + (metric.googleAds?.spent || 0) + (metric.meta?.spent || 0) + (metric.tiktok?.spent || 0), 0
-        );
-
-        const periodCosts = costs.filter(cost => {
-          const costDate = new Date(cost.date);
-          return costDate >= currentDate && costDate <= periodEnd;
-        });
-        
-        const otherCosts = periodCosts.reduce((sum, cost) => {
-          return sum + (parseFloat(cost.amount) || 0);
-        }, 0);
-
-        const purchaseCosts = calculatePurchaseCosts(currentDate, periodEnd);
-
-        const productRevenue = totalRevenue - shippingRevenue;
-        const productCosts = purchaseCosts;
-        const productProfit = productRevenue - productCosts;
-        const productMargin = productRevenue > 0 ? (productProfit / productRevenue) * 100 : 0;
-
-        const totalCosts = marketingCosts + otherCosts + shippingCosts + purchaseCosts;
-        const grossProfit = totalRevenue - totalCosts;
-        const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
-        const shippingProfit = shippingRevenue - shippingCosts;
-        const shippingMargin = shippingRevenue > 0 ? (shippingProfit / shippingRevenue) * 100 : 0;
-
-        periods.push({
-          period: periodLabel,
-          startDate: currentDate,
-          endDate: periodEnd,
-          totalRevenue,
-          shippingRevenue,
-          shippingCosts,
-          shippingProfit,
-          shippingMargin,
-          marketingCosts,
-          otherCosts,
-          purchaseCosts,
-          productRevenue,
-          productCosts,
-          productProfit,
-          productMargin,
-          totalCosts,
-          grossProfit,
-          grossMargin,
-          orderCount: periodOrders.length,
-          avgOrderValue: periodOrders.length > 0 ? totalRevenue / periodOrders.length : 0
-        });
-
         currentDate.setDate(currentDate.getDate() + 7);
+        weekNumber++;
       }
       
       return periods;
     }
     
-    // Per mesi e trimestri, usa la logica originale
+    // Per mesi e trimestri
     while (currentDate <= end) {
       let periodEnd;
       let periodLabel;
       
-      switch (viewMode) {
-        case 'month':
-          periodEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-          periodLabel = currentDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
-          break;
-        case 'quarter':
-          const quarter = Math.floor(currentDate.getMonth() / 3) + 1;
-          periodEnd = new Date(currentDate.getFullYear(), quarter * 3, 0);
-          periodLabel = `Q${quarter} ${currentDate.getFullYear()}`;
-          break;
-        default:
-          periodEnd = new Date(currentDate);
-          periodEnd.setDate(periodEnd.getDate() + 6);
-          const defaultWeekNumber = periods.length + 1;
-          periodLabel = `Week ${defaultWeekNumber}`;
+      if (viewMode === 'month') {
+        periodEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        periodLabel = currentDate.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
+      } else if (viewMode === 'quarter') {
+        const quarter = Math.floor(currentDate.getMonth() / 3) + 1;
+        periodEnd = new Date(currentDate.getFullYear(), quarter * 3, 0, 23, 59, 59, 999);
+        periodLabel = `Q${quarter} ${currentDate.getFullYear()}`;
+      } else {
+        periodEnd = new Date(currentDate);
+        periodEnd.setDate(periodEnd.getDate() + 6);
+        periodEnd.setHours(23, 59, 59, 999);
+        periodLabel = `Sett. ${periods.length + 1}`;
       }
       
-      // Filtra ordini per questo periodo
-      const periodOrders = orders.filter(order => {
-        const orderDate = new Date(order.createdAt);
-        return orderDate >= currentDate && orderDate <= periodEnd;
-      });
-
-      // Calcola ricavi
-      const totalRevenue = periodOrders.reduce((sum, order) => {
-        return sum + (parseFloat(order.totalPrice) || 0);
-      }, 0);
-
-      // Calcola ricavi spedizione
-      const shippingRevenue = periodOrders.reduce((sum, order) => {
-        return sum + (parseFloat(order.shippingPrice) || 0);
-      }, 0);
-
-      // Calcola costi spedizione
-      const shippingCosts = periodOrders.reduce((sum, order) => {
-        const shippingType = safeToLowerCase(order.shippingType, '');
-        if (shippingType.includes('express a domicilio')) {
-          return sum + COSTO_EXPRESS;
-        } else if (shippingType.includes('punto di ritiro')) {
-          return sum + COSTO_PUNTO_RITIRO;
-        } else {
-          return sum + COSTO_EXPRESS;
-        }
-      }, 0);
-
-      // Calcola costi marketing
-      const periodMetrics = manualMetrics.filter(metric => {
-        const metricStartDate = new Date(metric.weekStart);
-        const metricEndDate = new Date(metric.weekStart);
-        metricEndDate.setDate(metricEndDate.getDate() + 6);
-        return metricStartDate <= periodEnd && metricEndDate >= currentDate;
-      });
+      const periodData = calculatePeriodData(currentDate, periodEnd, periodLabel);
+      periods.push(periodData);
       
-      const marketingCosts = periodMetrics.reduce((sum, metric) =>
-        sum + (metric.googleAds?.spent || 0) + (metric.meta?.spent || 0) + (metric.tiktok?.spent || 0), 0
-      );
-
-      // Calcola altri costi
-      const periodCosts = costs.filter(cost => {
-        const costDate = new Date(cost.date);
-        return costDate >= currentDate && costDate <= periodEnd;
-      });
-      
-      const otherCosts = periodCosts.reduce((sum, cost) => {
-        return sum + (parseFloat(cost.amount) || 0);
-      }, 0);
-
-      // Calcola costi di acquisto
-      const purchaseCosts = calculatePurchaseCosts(currentDate, periodEnd);
-
-      // Calcola margine di profitto sui prodotti (escludendo spedizione e marketing)
-      const productRevenue = totalRevenue - shippingRevenue;
-      const productCosts = purchaseCosts;
-      const productProfit = productRevenue - productCosts;
-      const productMargin = productRevenue > 0 ? (productProfit / productRevenue) * 100 : 0;
-
-      // Calcola totali
-      const totalCosts = marketingCosts + otherCosts + shippingCosts + purchaseCosts;
-      const grossProfit = totalRevenue - totalCosts;
-      const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
-      const shippingProfit = shippingRevenue - shippingCosts;
-      const shippingMargin = shippingRevenue > 0 ? (shippingProfit / shippingRevenue) * 100 : 0;
-
-      periods.push({
-        period: periodLabel,
-        startDate: currentDate,
-        endDate: periodEnd,
-        totalRevenue,
-        shippingRevenue,
-        shippingCosts,
-        shippingProfit,
-        shippingMargin,
-        marketingCosts,
-        otherCosts,
-        purchaseCosts,
-        productRevenue,
-        productCosts,
-        productProfit,
-        productMargin,
-        totalCosts,
-        grossProfit,
-        grossMargin,
-        orderCount: periodOrders.length,
-        avgOrderValue: periodOrders.length > 0 ? totalRevenue / periodOrders.length : 0
-      });
-
-      // Passa al periodo successivo
-      switch (viewMode) {
-        case 'month':
-          currentDate.setMonth(currentDate.getMonth() + 1);
-          break;
-        case 'quarter':
-          currentDate.setMonth(currentDate.getMonth() + 3);
-          break;
-        default:
-          currentDate.setDate(currentDate.getDate() + 7);
+      if (viewMode === 'month') {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        currentDate.setDate(1);
+      } else if (viewMode === 'quarter') {
+        currentDate.setMonth(currentDate.getMonth() + 3);
+        currentDate.setDate(1);
+      } else {
+        currentDate.setDate(currentDate.getDate() + 7);
       }
     }
 
     return periods;
+  };
+
+  // Calcola dati per un singolo periodo
+  const calculatePeriodData = (startDate, endDate, periodLabel) => {
+    // Filtra ordini per questo periodo
+    const periodOrders = orders.filter(order => {
+      const orderDate = getOrderDate(order);
+      return orderDate && orderDate >= startDate && orderDate <= endDate;
+    });
+
+    // Ricavi
+    const totalRevenue = periodOrders.reduce((sum, order) => sum + getOrderTotal(order), 0);
+    const shippingRevenue = periodOrders.reduce((sum, order) => sum + getShippingRevenue(order), 0);
+    const productRevenue = totalRevenue - shippingRevenue;
+
+    // Costi spedizione
+    const shippingCosts = periodOrders.reduce((sum, order) => sum + getShippingCost(order), 0);
+
+    // Metriche prodotti (costi acquisto e quantità)
+    const productMetrics = calculateProductMetrics(periodOrders);
+
+    // Costi marketing
+    const periodMetrics = manualMetrics.filter(metric => {
+      const metricStartDate = new Date(metric.weekStart);
+      const metricEndDate = new Date(metric.weekStart);
+      metricEndDate.setDate(metricEndDate.getDate() + 6);
+      return metricStartDate <= endDate && metricEndDate >= startDate;
+    });
+    
+    const googleCosts = periodMetrics.reduce((sum, metric) => sum + (metric.googleAds?.spent || 0), 0);
+    const metaCosts = periodMetrics.reduce((sum, metric) => sum + (metric.meta?.spent || 0), 0);
+    const tiktokCosts = periodMetrics.reduce((sum, metric) => sum + (metric.tiktok?.spent || 0), 0);
+    const marketingCosts = googleCosts + metaCosts + tiktokCosts;
+
+    // Altri costi
+    const periodCosts = costs.filter(cost => {
+      const costDate = new Date(cost.date);
+      return costDate >= startDate && costDate <= endDate;
+    });
+    const otherCosts = periodCosts.reduce((sum, cost) => sum + (parseFloat(cost.amount) || 0), 0);
+
+    // Calcoli finali
+    const purchaseCosts = productMetrics.purchaseCosts;
+    const totalCosts = marketingCosts + otherCosts + shippingCosts + purchaseCosts;
+    const grossProfit = totalRevenue - totalCosts;
+    const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+    
+    const productProfit = productRevenue - purchaseCosts;
+    const productMargin = productRevenue > 0 ? (productProfit / productRevenue) * 100 : 0;
+    
+    const shippingProfit = shippingRevenue - shippingCosts;
+    const shippingMargin = shippingRevenue > 0 ? (shippingProfit / shippingRevenue) * 100 : 0;
+
+    return {
+      period: periodLabel,
+      startDate,
+      endDate,
+      // Ricavi
+      totalRevenue,
+      productRevenue,
+      shippingRevenue,
+      // Costi
+      purchaseCosts,
+      marketingCosts,
+      googleCosts,
+      metaCosts,
+      tiktokCosts,
+      shippingCosts,
+      otherCosts,
+      totalCosts,
+      // Profitti
+      grossProfit,
+      grossMargin,
+      productProfit,
+      productMargin,
+      shippingProfit,
+      shippingMargin,
+      // Metriche
+      orderCount: periodOrders.length,
+      quantitySold: productMetrics.quantitySold,
+      productsSold: productMetrics.productsSold,
+      avgOrderValue: periodOrders.length > 0 ? totalRevenue / periodOrders.length : 0,
+      cpaAdv: periodOrders.length > 0 ? marketingCosts / periodOrders.length : 0
+    };
   };
 
   // Calcola totali cumulativi
@@ -351,12 +335,14 @@ const ContoEconomicoPage = () => {
     let cumulativeCosts = 0;
     let cumulativeProfit = 0;
     let cumulativeOrders = 0;
+    let cumulativeQuantity = 0;
     
     return periods.map(period => {
       cumulativeRevenue += period.totalRevenue;
       cumulativeCosts += period.totalCosts;
       cumulativeProfit += period.grossProfit;
       cumulativeOrders += period.orderCount;
+      cumulativeQuantity += period.quantitySold;
       
       return {
         ...period,
@@ -364,109 +350,45 @@ const ContoEconomicoPage = () => {
         cumulativeCosts,
         cumulativeProfit,
         cumulativeOrders,
+        cumulativeQuantity,
         cumulativeMargin: cumulativeRevenue > 0 ? (cumulativeProfit / cumulativeRevenue) * 100 : 0
       };
     });
   };
 
-  // Calcola dati periodo precedente per confronto
-  const calculatePreviousPeriodData = () => {
-    const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
-    const periodDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-    
-    const previousStartDate = new Date(startDate);
-    previousStartDate.setDate(previousStartDate.getDate() - periodDays);
-    const previousEndDate = new Date(startDate);
-    previousEndDate.setDate(previousEndDate.getDate() - 1);
-
-    // Filtra ordini periodo precedente
-    const previousOrders = orders.filter(order => {
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= previousStartDate && orderDate <= previousEndDate;
-    });
-
-    const previousRevenue = previousOrders.reduce((sum, order) => {
-      return sum + (parseFloat(order.totalPrice) || 0);
-    }, 0);
-
-    const previousCosts = costs.filter(cost => {
-      const costDate = new Date(cost.date);
-      return costDate >= previousStartDate && costDate <= previousEndDate;
-    }).reduce((sum, cost) => sum + (parseFloat(cost.amount) || 0), 0);
-
-    return {
-      revenue: previousRevenue,
-      costs: previousCosts,
-      profit: previousRevenue - previousCosts,
-      orderCount: previousOrders.length
-    };
-  };
-
-  // Calcola proiezioni future
-  const calculateProjections = () => {
-    const periods = calculateEconomicDataByPeriod();
-    const currentPeriod = periods[periods.length - 1] || {
-      totalRevenue: 0,
-      totalCosts: 0,
-      grossProfit: 0
-    };
-    const previousData = calculatePreviousPeriodData();
-    
-    // Calcola trend di crescita
-    const revenueGrowth = previousData.revenue > 0 ? 
-      ((currentPeriod.totalRevenue - previousData.revenue) / previousData.revenue) * 100 : 0;
-    
-    const costGrowth = previousData.costs > 0 ? 
-      ((currentPeriod.totalCosts - previousData.costs) / previousData.costs) * 100 : 0;
-
-    // Proiezioni per i prossimi 3 mesi
-    const projectedRevenue = currentPeriod.totalRevenue * (1 + (revenueGrowth / 100));
-    const projectedCosts = currentPeriod.totalCosts * (1 + (costGrowth / 100));
-    const projectedProfit = projectedRevenue - projectedCosts;
-
-    return {
-      revenueGrowth,
-      costGrowth,
-      projectedRevenue,
-      projectedCosts,
-      projectedProfit
-    };
-  };
-
-  // Calcola break-even
-  const calculateBreakEven = () => {
-    const periods = calculateEconomicDataByPeriod();
-    const currentPeriod = periods[periods.length - 1] || {
-      avgOrderValue: 0,
-      marketingCosts: 0,
-      otherCosts: 0,
-      shippingCosts: 0,
-      orderCount: 0
-    };
-    const avgOrderValue = currentPeriod.avgOrderValue;
-    const fixedCosts = currentPeriod.marketingCosts + currentPeriod.otherCosts;
-    const variableCostsPerOrder = currentPeriod.shippingCosts / currentPeriod.orderCount || 0;
-    
-    if (avgOrderValue > variableCostsPerOrder) {
-      const breakEvenOrders = fixedCosts / (avgOrderValue - variableCostsPerOrder);
-      const breakEvenRevenue = breakEvenOrders * avgOrderValue;
-      return {
-        breakEvenOrders: Math.ceil(breakEvenOrders),
-        breakEvenRevenue: Math.ceil(breakEvenRevenue),
-        avgOrderValue,
-        fixedCosts,
-        variableCostsPerOrder
-      };
-    }
-    
-    return null;
-  };
-
   const periods = calculateEconomicDataByPeriod();
   const periodsWithCumulative = calculateCumulativeData(periods);
-  const previousData = calculatePreviousPeriodData();
-  const projections = calculateProjections();
-  const breakEven = calculateBreakEven();
+  
+  // Calcola totali
+  const totals = periodsWithCumulative.length > 0 ? {
+    revenue: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeRevenue || 0,
+    costs: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeCosts || 0,
+    profit: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeProfit || 0,
+    orders: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeOrders || 0,
+    quantity: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeQuantity || 0,
+    margin: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeMargin || 0,
+    purchaseCosts: periodsWithCumulative.reduce((sum, p) => sum + p.purchaseCosts, 0),
+    marketingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.marketingCosts, 0),
+    googleCosts: periodsWithCumulative.reduce((sum, p) => sum + p.googleCosts, 0),
+    metaCosts: periodsWithCumulative.reduce((sum, p) => sum + p.metaCosts, 0),
+    shippingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.shippingCosts, 0),
+    shippingRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.shippingRevenue, 0),
+    productRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.productRevenue, 0),
+    productProfit: periodsWithCumulative.reduce((sum, p) => sum + p.productProfit, 0)
+  } : {};
+
+  const formatCurrency = (value) => {
+    return (value || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-16">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-4 text-gray-600">Caricamento dati...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -474,75 +396,184 @@ const ContoEconomicoPage = () => {
         <div>
           <h1 className="text-3xl font-bold">Conto Economico</h1>
           <p className="text-muted-foreground">
-            Analisi completa ricavi, costi e profittabilità
+            Analisi completa ricavi, costi e profittabilità • {orders.length} ordini caricati
           </p>
         </div>
       </div>
 
-      {/* Controlli periodo e vista */}
-      <div className="flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Periodo:</label>
-          <select
-            value={selectedDateRange}
-            onChange={e => setSelectedDateRange(e.target.value)}
-            className="px-3 py-2 border rounded-md"
-          >
-            <option value="last_7_days">Ultimi 7 giorni</option>
-            <option value="last_30_days">Ultimi 30 giorni</option>
-            <option value="last_90_days">Ultimi 90 giorni</option>
-            <option value="custom">Personalizzato</option>
-          </select>
-        </div>
+      {/* Controlli */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Periodo:</label>
+              <select
+                value={selectedDateRange}
+                onChange={e => setSelectedDateRange(e.target.value)}
+                className="px-3 py-2 border rounded-md"
+              >
+                <option value="last_7_days">Ultimi 7 giorni</option>
+                <option value="last_30_days">Ultimi 30 giorni</option>
+                <option value="last_90_days">Ultimi 90 giorni</option>
+                <option value="this_year">Anno corrente</option>
+                <option value="custom">Personalizzato</option>
+              </select>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Vista:</label>
-          <select
-            value={viewMode}
-            onChange={e => setViewMode(e.target.value)}
-            className="px-3 py-2 border rounded-md"
-          >
-            <option value="week">Settimanale</option>
-            <option value="month">Mensile</option>
-            <option value="quarter">Trimestrale</option>
-          </select>
-        </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Vista:</label>
+              <select
+                value={viewMode}
+                onChange={e => setViewMode(e.target.value)}
+                className="px-3 py-2 border rounded-md"
+              >
+                <option value="week">Settimanale</option>
+                <option value="month">Mensile</option>
+                <option value="quarter">Trimestrale</option>
+              </select>
+            </div>
 
-        {viewMode === 'week' && (
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium">Anno:</label>
-            <select
-              value={selectedYear}
-              onChange={e => setSelectedYear(parseInt(e.target.value))}
-              className="px-3 py-2 border rounded-md"
-            >
-              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
+            {viewMode === 'week' && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Anno:</label>
+                <select
+                  value={selectedYear}
+                  onChange={e => setSelectedYear(parseInt(e.target.value))}
+                  className="px-3 py-2 border rounded-md"
+                >
+                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {selectedDateRange === 'custom' && (
+              <DateRangePicker
+                startDate={customStartDate ? new Date(customStartDate) : null}
+                endDate={customEndDate ? new Date(customEndDate) : null}
+                onDateChange={([start, end]) => {
+                  setCustomStartDate(start ? start.toISOString().slice(0, 10) : '');
+                  setCustomEndDate(end ? end.toISOString().slice(0, 10) : '');
+                }}
+              />
+            )}
           </div>
-        )}
+        </CardContent>
+      </Card>
 
-        {selectedDateRange === 'custom' && (
-          <DateRangePicker
-            startDate={customStartDate ? new Date(customStartDate) : null}
-            endDate={customEndDate ? new Date(customEndDate) : null}
-            onDateChange={([start, end]) => {
-              setCustomStartDate(start ? start.toISOString().slice(0, 10) : '');
-              setCustomEndDate(end ? end.toISOString().slice(0, 10) : '');
-            }}
-          />
-        )}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-green-700">Ricavi Totali</p>
+                <p className="text-2xl font-bold text-green-800">{formatCurrency(totals.revenue)}</p>
+              </div>
+              <TrendingUp className="w-8 h-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-red-700">Costi Totali</p>
+                <p className="text-2xl font-bold text-red-800">{formatCurrency(totals.costs)}</p>
+              </div>
+              <TrendingDown className="w-8 h-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={`${totals.profit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm ${totals.profit >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>Profitto (EBITDA)</p>
+                <p className={`text-2xl font-bold ${totals.profit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                  {formatCurrency(totals.profit)}
+                </p>
+              </div>
+              <DollarSign className={`w-8 h-8 ${totals.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-purple-50 border-purple-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-purple-700">Margine %</p>
+                <p className="text-2xl font-bold text-purple-800">{(totals.margin || 0).toFixed(1)}%</p>
+              </div>
+              <BarChart3 className="w-8 h-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Dashboard di Monitoraggio */}
+      {/* Metriche Vendite */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <ShoppingCart className="w-8 h-8 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-600">Ordini</p>
+                <p className="text-xl font-bold">{totals.orders || 0}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Package className="w-8 h-8 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-600">Pezzi Venduti</p>
+                <p className="text-xl font-bold">{totals.quantity || 0}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Calculator className="w-8 h-8 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-600">AOV (Scontrino Medio)</p>
+                <p className="text-xl font-bold">{formatCurrency(totals.orders > 0 ? totals.revenue / totals.orders : 0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <Target className="w-8 h-8 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-600">CPA Marketing</p>
+                <p className="text-xl font-bold">{formatCurrency(totals.orders > 0 ? totals.marketingCosts / totals.orders : 0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabella Dettagliata */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            📊 Dashboard di Monitoraggio - Vista {viewMode === 'week' ? 'Settimanale' : viewMode === 'month' ? 'Mensile' : 'Trimestrale'}
+            📊 Dashboard Economico - Vista {viewMode === 'week' ? 'Settimanale' : viewMode === 'month' ? 'Mensile' : 'Trimestrale'}
           </CardTitle>
           <CardDescription>
-            Sintesi per periodo con indicatori chiave
+            Analisi dettagliata per periodo
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -550,347 +581,214 @@ const ContoEconomicoPage = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left p-3 font-semibold min-w-[200px]">Indicatore</th>
+                  <th className="text-left p-3 font-semibold sticky left-0 bg-gray-50 min-w-[180px]">Indicatore</th>
                   {periodsWithCumulative.map((period, index) => (
-                    <th key={index} className="text-right p-3 font-semibold min-w-[120px]">
+                    <th key={index} className="text-right p-3 font-semibold min-w-[100px]">
                       {period.period}
                     </th>
                   ))}
-                  <th className="text-right p-3 font-semibold min-w-[120px] bg-blue-50">
+                  <th className="text-right p-3 font-semibold min-w-[110px] bg-blue-50">
                     TOTALE
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {/* Sezione Sintesi */}
-                <tr className="border-b bg-gray-100">
-                  <td className="p-3 font-bold text-gray-700">📈 SINTESI</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right"></td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50"></td>
+                {/* SINTESI */}
+                <tr className="bg-gray-100">
+                  <td colSpan={periodsWithCumulative.length + 2} className="p-3 font-bold text-gray-700">📈 SINTESI</td>
                 </tr>
                 
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Totale Ricavi</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right font-bold text-green-600">
-                      {period.totalRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Ricavi Totali</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right font-bold text-green-600">{formatCurrency(p.totalRevenue)}</td>
+                  ))}
+                  <td className="p-3 text-right font-bold text-green-600 bg-blue-50">{formatCurrency(totals.revenue)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Costi Totali</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right font-bold text-red-600">{formatCurrency(p.totalCosts)}</td>
+                  ))}
+                  <td className="p-3 text-right font-bold text-red-600 bg-blue-50">{formatCurrency(totals.costs)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">EBITDA (Profitto)</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className={`p-3 text-right font-bold ${p.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(p.grossProfit)}
                     </td>
                   ))}
-                  <td className="p-3 text-right font-bold text-green-600 bg-blue-50">
-                    {periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) || '€0,00'}
+                  <td className={`p-3 text-right font-bold bg-blue-50 ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(totals.profit)}
                   </td>
                 </tr>
                 
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Costi di Acquisto</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right text-red-600">
-                      {period.purchaseCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Margine %</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className={`p-3 text-right ${p.grossMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {p.grossMargin.toFixed(1)}%
                     </td>
                   ))}
-                  <td className="p-3 text-right text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.purchaseCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                  <td className={`p-3 text-right bg-blue-50 font-bold ${totals.margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {(totals.margin || 0).toFixed(1)}%
+                  </td>
+                </tr>
+
+                {/* VENDITE */}
+                <tr className="bg-gray-100">
+                  <td colSpan={periodsWithCumulative.length + 2} className="p-3 font-bold text-gray-700">🛒 VENDITE</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Ordini</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right">{p.orderCount}</td>
+                  ))}
+                  <td className="p-3 text-right font-bold bg-blue-50">{totals.orders}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Pezzi Venduti</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right">{p.quantitySold}</td>
+                  ))}
+                  <td className="p-3 text-right font-bold bg-blue-50">{totals.quantity}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Scontrino Medio (AOV)</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right">{formatCurrency(p.avgOrderValue)}</td>
+                  ))}
+                  <td className="p-3 text-right bg-blue-50">{formatCurrency(totals.orders > 0 ? totals.revenue / totals.orders : 0)}</td>
+                </tr>
+
+                {/* MARGINI PRODOTTI */}
+                <tr className="bg-gray-100">
+                  <td colSpan={periodsWithCumulative.length + 2} className="p-3 font-bold text-gray-700">📦 MARGINI PRODOTTI</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Ricavi Prodotti</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right text-green-600">{formatCurrency(p.productRevenue)}</td>
+                  ))}
+                  <td className="p-3 text-right text-green-600 bg-blue-50">{formatCurrency(totals.productRevenue)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Costi Acquisto Prodotti</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.purchaseCosts)}</td>
+                  ))}
+                  <td className="p-3 text-right text-red-600 bg-blue-50">{formatCurrency(totals.purchaseCosts)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Margine Prodotti</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className={`p-3 text-right font-bold ${p.productProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(p.productProfit)}
+                    </td>
+                  ))}
+                  <td className={`p-3 text-right font-bold bg-blue-50 ${totals.productProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(totals.productProfit)}
                   </td>
                 </tr>
                 
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Totale Costi</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right font-bold text-red-600">
-                      {period.totalCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Margine Prodotti %</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className={`p-3 text-right ${p.productMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {p.productMargin.toFixed(1)}%
                     </td>
                   ))}
-                  <td className="p-3 text-right font-bold text-red-600 bg-blue-50">
-                    {periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) || '€0,00'}
+                  <td className={`p-3 text-right bg-blue-50 ${totals.productRevenue > 0 && (totals.productProfit / totals.productRevenue * 100) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {totals.productRevenue > 0 ? (totals.productProfit / totals.productRevenue * 100).toFixed(1) : 0}%
                   </td>
                 </tr>
+
+                {/* COSTI MARKETING */}
+                <tr className="bg-gray-100">
+                  <td colSpan={periodsWithCumulative.length + 2} className="p-3 font-bold text-gray-700">💰 COSTI MARKETING</td>
+                </tr>
                 
-                <tr className="border-b">
-                  <td className="p-3 font-medium">EBITDA</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className={`p-3 text-right font-bold ${period.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {period.grossProfit.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Google Ads</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.googleCosts)}</td>
+                  ))}
+                  <td className="p-3 text-right text-red-600 bg-blue-50">{formatCurrency(totals.googleCosts)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Meta (Facebook/Instagram)</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.metaCosts)}</td>
+                  ))}
+                  <td className="p-3 text-right text-red-600 bg-blue-50">{formatCurrency(totals.metaCosts)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Totale Marketing</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right font-bold text-red-600">{formatCurrency(p.marketingCosts)}</td>
+                  ))}
+                  <td className="p-3 text-right font-bold text-red-600 bg-blue-50">{formatCurrency(totals.marketingCosts)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">CPA (Costo per Ordine)</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right">{formatCurrency(p.cpaAdv)}</td>
+                  ))}
+                  <td className="p-3 text-right bg-blue-50">{formatCurrency(totals.orders > 0 ? totals.marketingCosts / totals.orders : 0)}</td>
+                </tr>
+
+                {/* SPEDIZIONI */}
+                <tr className="bg-gray-100">
+                  <td colSpan={periodsWithCumulative.length + 2} className="p-3 font-bold text-gray-700">🚚 SPEDIZIONI</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Ricavi Spedizione</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right text-green-600">{formatCurrency(p.shippingRevenue)}</td>
+                  ))}
+                  <td className="p-3 text-right text-green-600 bg-blue-50">{formatCurrency(totals.shippingRevenue)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Costi Spedizione</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.shippingCosts)}</td>
+                  ))}
+                  <td className="p-3 text-right text-red-600 bg-blue-50">{formatCurrency(totals.shippingCosts)}</td>
+                </tr>
+                
+                <tr className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium sticky left-0 bg-white">Margine Spedizioni</td>
+                  {periodsWithCumulative.map((p, i) => (
+                    <td key={i} className={`p-3 text-right ${p.shippingProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(p.shippingProfit)}
                     </td>
                   ))}
-                  <td className={`p-3 text-right font-bold bg-blue-50 ${periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeProfit.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) || '€0,00'}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Perc. di Margine</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className={`p-3 text-right ${period.grossMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {period.grossMargin.toFixed(1)}%
-                    </td>
-                  ))}
-                  <td className={`p-3 text-right bg-blue-50 ${periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeMargin.toFixed(1) || '0.0'}%
-                  </td>
-                </tr>
-                
-                {/* Sezione Costi ADV */}
-                <tr className="border-b bg-gray-100">
-                  <td className="p-3 font-bold text-gray-700">💰 COSTI ADV</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right"></td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50"></td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Totale Costi ADV</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right font-bold text-red-600">
-                      {period.marketingCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right font-bold text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.marketingCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">CPA ADV</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right">
-                      {period.orderCount > 0 ? (period.marketingCosts / period.orderCount).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) : '€0,00'}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50">
-                    {(() => {
-                      const totalOrders = periodsWithCumulative.reduce((sum, period) => sum + period.orderCount, 0);
-                      const totalMarketingCosts = periodsWithCumulative.reduce((sum, period) => sum + period.marketingCosts, 0);
-                      return totalOrders > 0 ? (totalMarketingCosts / totalOrders).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) : '€0,00';
-                    })()}
-                  </td>
-                </tr>
-                
-                {/* Sezione Dettaglio Vendite */}
-                <tr className="border-b bg-gray-100">
-                  <td className="p-3 font-bold text-gray-700">🛒 DETTAGLIO VENDITE</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right"></td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50"></td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Prodotti Venduti</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right">
-                      {period.orderCount}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.orderCount, 0)}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Quantità Venduta</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right">
-                      {period.orderCount}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.orderCount, 0)}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Ordini Ricevuti</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right">
-                      {period.orderCount}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.orderCount, 0)}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Quantità Acquistata</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right">
-                      {period.orderCount}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.orderCount, 0)}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Gross Profit %</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className={`p-3 text-right ${period.grossMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {period.grossMargin.toFixed(1)}%
-                    </td>
-                  ))}
-                  <td className={`p-3 text-right bg-blue-50 ${periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeMargin.toFixed(1) || '0.0'}%
-                  </td>
-                </tr>
-                
-                {/* Sezione Margini Prodotti */}
-                <tr className="border-b bg-gray-100">
-                  <td className="p-3 font-bold text-gray-700">📦 MARGINI PRODOTTI</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right"></td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50"></td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Ricavi Prodotti</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right font-bold text-green-600">
-                      {period.productRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right font-bold text-green-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.productRevenue, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Costi Prodotti</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right font-bold text-red-600">
-                      {period.productCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right font-bold text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.productCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Profitto Prodotti</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className={`p-3 text-right font-bold ${period.productProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {period.productProfit.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className={`p-3 text-right font-bold bg-blue-50 ${periodsWithCumulative.reduce((sum, period) => sum + period.productProfit, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.productProfit, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Margine Prodotti %</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className={`p-3 text-right ${period.productMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {period.productMargin.toFixed(1)}%
-                    </td>
-                  ))}
-                  <td className={`p-3 text-right bg-blue-50 ${(() => {
-                    const totalProductRevenue = periodsWithCumulative.reduce((sum, period) => sum + period.productRevenue, 0);
-                    const totalProductProfit = periodsWithCumulative.reduce((sum, period) => sum + period.productProfit, 0);
-                    const totalProductMargin = totalProductRevenue > 0 ? (totalProductProfit / totalProductRevenue) * 100 : 0;
-                    return totalProductMargin >= 0 ? 'text-green-600' : 'text-red-600';
-                  })()}`}>
-                    {(() => {
-                      const totalProductRevenue = periodsWithCumulative.reduce((sum, period) => sum + period.productRevenue, 0);
-                      const totalProductProfit = periodsWithCumulative.reduce((sum, period) => sum + period.productProfit, 0);
-                      const totalProductMargin = totalProductRevenue > 0 ? (totalProductProfit / totalProductRevenue) * 100 : 0;
-                      return totalProductMargin.toFixed(1);
-                    })()}%
-                  </td>
-                </tr>
-                
-                {/* Sezione Costi Dettagliati */}
-                <tr className="border-b bg-gray-100">
-                  <td className="p-3 font-bold text-gray-700">💸 COSTI DETTAGLIATI</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right"></td>
-                  ))}
-                  <td className="p-3 text-right bg-blue-50"></td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Costi di Acquisto</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right text-red-600">
-                      {period.purchaseCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.purchaseCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Costi ADV</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right text-red-600">
-                      {period.marketingCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.marketingCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Google</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right text-red-600">
-                      €0,00
-                    </td>
-                  ))}
-                  <td className="p-3 text-right text-red-600 bg-blue-50">
-                    €0,00
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Meta</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right text-red-600">
-                      €0,00
-                    </td>
-                  ))}
-                  <td className="p-3 text-right text-red-600 bg-blue-50">
-                    €0,00
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Costi di Spedizione</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right text-red-600">
-                      {period.shippingCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.shippingCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                  </td>
-                </tr>
-                
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Totale Costi</td>
-                  {periodsWithCumulative.map((period, index) => (
-                    <td key={index} className="p-3 text-right font-bold text-red-600">
-                      {period.totalCosts.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
-                    </td>
-                  ))}
-                  <td className="p-3 text-right font-bold text-red-600 bg-blue-50">
-                    {periodsWithCumulative.reduce((sum, period) => sum + period.totalCosts, 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                  <td className={`p-3 text-right bg-blue-50 ${(totals.shippingRevenue - totals.shippingCosts) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(totals.shippingRevenue - totals.shippingCosts)}
                   </td>
                 </tr>
               </tbody>
             </table>
             
             {periodsWithCumulative.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <p className="mb-2">Nessun dato disponibile per questo periodo</p>
-                <p className="text-sm">Prova a cambiare il periodo o la vista</p>
+              <div className="text-center py-12 text-gray-500">
+                <Package className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium mb-2">Nessun dato disponibile</p>
+                <p className="text-sm">Sincronizza gli ordini da Shopify nelle Impostazioni</p>
               </div>
             )}
           </div>
@@ -900,4 +798,4 @@ const ContoEconomicoPage = () => {
   );
 };
 
-export default ContoEconomicoPage; 
+export default ContoEconomicoPage;
