@@ -1,49 +1,127 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { loadMagazzinoData, loadFromLocalStorage } from '../lib/magazzinoStorage';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { getSupplierOrders } from '../lib/supplierOrders';
+import { loadLargeData } from '../lib/dataManager';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid, Legend } from 'recharts';
+import { 
+  ArrowLeft, Package, DollarSign, TrendingUp, TrendingDown, 
+  Calendar, Truck, ShoppingCart, Edit, Save, X, Camera,
+  BarChart3, History, AlertCircle, CheckCircle, Clock,
+  Hash, Tag, Building, Layers, Calculator, RefreshCw,
+  ChevronDown, ChevronUp, ExternalLink
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 
 function formatDateTime(isoString) {
+  if (!isoString) return { date: '-', time: '-' };
   const d = new Date(isoString);
   const date = d.toLocaleDateString('it-IT');
   const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   return { date, time };
 }
 
+function formatCurrency(value) {
+  return parseFloat(value || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+}
+
 export default function MagazzinoDetailPage() {
   const { sku } = useParams();
   const navigate = useNavigate();
+  
+  // Stati prodotto
   const [prodotto, setProdotto] = useState(null);
   const [foto, setFoto] = useState(null);
   const [storico, setStorico] = useState([]);
   const [marca, setMarca] = useState('');
-  const [isEditingMarca, setIsEditingMarca] = useState(false);
   const [tipologia, setTipologia] = useState('');
+  const [fornitore, setFornitore] = useState('');
+  const [note, setNote] = useState('');
+  const [codiceBarcode, setCodiceBarcode] = useState('');
+  const [ubicazione, setUbicazione] = useState('');
+  
+  // Stati editing
+  const [isEditingMarca, setIsEditingMarca] = useState(false);
   const [isEditingTipologia, setIsEditingTipologia] = useState(false);
+  const [isEditingFornitore, setIsEditingFornitore] = useState(false);
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [isEditingBarcode, setIsEditingBarcode] = useState(false);
+  const [isEditingUbicazione, setIsEditingUbicazione] = useState(false);
+  
+  // Dati correlati
+  const [ordiniFornitore, setOrdiniFornitore] = useState([]);
+  const [ordiniShopify, setOrdiniShopify] = useState([]);
+  
+  // UI
+  const [expandedSections, setExpandedSections] = useState({
+    info: true,
+    storico: true,
+    ordini: true,
+    vendite: true,
+    grafico: true
+  });
+  const [loading, setLoading] = useState(true);
 
+  // Carica tutti i dati
   useEffect(() => {
-    const loadProductData = async () => {
+    const loadAllData = async () => {
+      setLoading(true);
       try {
+        // Prodotto dal magazzino
         const magazzino = await loadMagazzinoData();
-        setProdotto(magazzino.find(p => p.sku === sku));
-        // Carica la foto da localStorage se presente
-        const saved = localStorage.getItem(`foto_${sku}`);
-        if (saved) setFoto(saved);
-        // Carica marca da localStorage se presente
-        const savedMarca = localStorage.getItem(`marca_${sku}`);
-        if (savedMarca) setMarca(savedMarca);
-        // Carica tipologia da localStorage se presente
-        const savedTipologia = localStorage.getItem(`tipologia_${sku}`);
-        if (savedTipologia) setTipologia(savedTipologia);
-        // Carica storico da localStorage
+        const prod = magazzino.find(p => p.sku === sku);
+        setProdotto(prod);
+        
+        // Foto
+        const savedFoto = localStorage.getItem(`foto_${sku}`);
+        if (savedFoto) setFoto(savedFoto);
+        
+        // Campi aggiuntivi
+        setMarca(localStorage.getItem(`marca_${sku}`) || prod?.marca || '');
+        setTipologia(localStorage.getItem(`tipologia_${sku}`) || prod?.tipologia || '');
+        setFornitore(localStorage.getItem(`fornitore_${sku}`) || prod?.fornitore || '');
+        setNote(localStorage.getItem(`note_${sku}`) || prod?.note || '');
+        setCodiceBarcode(localStorage.getItem(`barcode_${sku}`) || prod?.barcode || '');
+        setUbicazione(localStorage.getItem(`ubicazione_${sku}`) || prod?.ubicazione || '');
+        
+        // Storico caricamenti
         const allStorico = loadFromLocalStorage('magazzino_storico', {});
         setStorico(allStorico[sku] || []);
+        
+        // Ordini fornitori che contengono questo prodotto
+        const supplierOrders = getSupplierOrders();
+        const ordiniConProdotto = supplierOrders.filter(order => 
+          order.products?.some(p => p.sku === sku)
+        );
+        setOrdiniFornitore(ordiniConProdotto);
+        
+        // Ordini Shopify
+        const shopifyOrders = await loadLargeData('shopify_orders') || [];
+        const ordiniConVendita = shopifyOrders.filter(order => {
+          const items = order.line_items || order.products || order.items || [];
+          return items.some(item => 
+            item.sku === sku || 
+            item.variant_id?.toString() === sku ||
+            item.product_id?.toString() === sku
+          );
+        });
+        setOrdiniShopify(ordiniConVendita);
+        
       } catch (error) {
-        console.error('Errore nel caricare dati prodotto:', error);
+        console.error('Errore caricamento dati:', error);
       }
+      setLoading(false);
     };
-    loadProductData();
+    
+    loadAllData();
   }, [sku]);
+
+  // Handlers per salvare i campi
+  const handleSaveField = (field, value, setter, setEditing) => {
+    localStorage.setItem(`${field}_${sku}`, value);
+    setter(value);
+    setEditing(false);
+  };
 
   const handleFotoChange = (e) => {
     const file = e.target.files[0];
@@ -56,141 +134,626 @@ export default function MagazzinoDetailPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleMarcaSave = () => {
-    localStorage.setItem(`marca_${sku}`, marca);
-    setIsEditingMarca(false);
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const handleTipologiaSave = () => {
-    localStorage.setItem(`tipologia_${sku}`, tipologia);
-    setIsEditingTipologia(false);
-  };
+  // Calcoli statistiche
+  const stats = useMemo(() => {
+    if (!storico || storico.length === 0) {
+      return {
+        totaleCaricato: prodotto?.quantita || 0,
+        prezzoMedio: prodotto?.prezzo || 0,
+        prezzoMin: prodotto?.prezzo || 0,
+        prezzoMax: prodotto?.prezzo || 0,
+        differenzaPrezzo: 0,
+        percentualeDiff: 0,
+        ultimoCarico: null,
+        primoCarico: null,
+        numeroCarichi: 0
+      };
+    }
 
-  const priceChartData = (Array.isArray(storico) ? storico : []).map(entry => ({
-    date: formatDateTime(entry.data).date + ' ' + formatDateTime(entry.data).time,
-    prezzo: entry.prezzo
-  }));
+    const prezzi = storico.map(s => s.prezzo);
+    const quantita = storico.map(s => s.quantita);
+    const prezzoMin = Math.min(...prezzi);
+    const prezzoMax = Math.max(...prezzi);
+    const prezzoMedio = prezzi.reduce((a, b) => a + b, 0) / prezzi.length;
+    const totaleCaricato = quantita.reduce((a, b) => a + b, 0);
+    
+    const ultimoPrezzo = storico[storico.length - 1]?.prezzo || 0;
+    const primoPrezzo = storico[0]?.prezzo || 0;
+    const differenzaPrezzo = ultimoPrezzo - primoPrezzo;
+    const percentualeDiff = primoPrezzo > 0 ? ((differenzaPrezzo / primoPrezzo) * 100) : 0;
 
-  if (!prodotto) return <div>Prodotto non trovato</div>;
+    return {
+      totaleCaricato,
+      prezzoMedio,
+      prezzoMin,
+      prezzoMax,
+      differenzaPrezzo,
+      percentualeDiff,
+      ultimoCarico: storico[storico.length - 1],
+      primoCarico: storico[0],
+      numeroCarichi: storico.length
+    };
+  }, [storico, prodotto]);
 
-  return (
-    <div className="max-w-2xl mx-auto py-8">
-      <button onClick={() => navigate('/magazzino')} className="mb-4 text-blue-600 underline">
-        Torna al magazzino
-      </button>
-      <div className="flex flex-col sm:flex-row items-start gap-6 mb-6">
-        <div className="flex flex-col items-center">
-          {foto ? (
-            <img src={foto} alt="Foto prodotto" className="w-40 h-40 object-contain rounded shadow mb-2" />
-          ) : (
-            <div className="w-40 h-40 flex items-center justify-center bg-muted rounded shadow mb-2 text-muted-foreground">
-              Nessuna foto
-            </div>
-          )}
-          <label className="block">
-            <span className="sr-only">Carica foto</span>
-            <input type="file" accept="image/*" onChange={handleFotoChange} className="block w-full text-sm" />
-          </label>
+  // Vendite dal Shopify
+  const venditeStats = useMemo(() => {
+    let totaleVenduto = 0;
+    let ricavoTotale = 0;
+    
+    ordiniShopify.forEach(order => {
+      const items = order.line_items || order.products || order.items || [];
+      items.forEach(item => {
+        if (item.sku === sku || item.variant_id?.toString() === sku) {
+          totaleVenduto += item.quantity || 1;
+          ricavoTotale += (parseFloat(item.price) || 0) * (item.quantity || 1);
+        }
+      });
+    });
+    
+    return {
+      totaleVenduto,
+      ricavoTotale,
+      numeroOrdini: ordiniShopify.length,
+      prezzoMedioVendita: totaleVenduto > 0 ? ricavoTotale / totaleVenduto : 0
+    };
+  }, [ordiniShopify, sku]);
+
+  // Dati per grafico prezzi
+  const priceChartData = useMemo(() => {
+    return (storico || []).map((entry, idx) => ({
+      name: formatDateTime(entry.data).date,
+      prezzo: entry.prezzo,
+      quantita: entry.quantita
+    }));
+  }, [storico]);
+
+  // Campo editabile
+  const EditableField = ({ label, value, setValue, isEditing, setEditing, field, icon: Icon }) => (
+    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+      <div className="flex items-center gap-2 text-gray-600">
+        {Icon && <Icon className="w-4 h-4" />}
+        <span>{label}:</span>
+      </div>
+      {isEditing ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="px-2 py-1 border rounded text-sm w-40"
+            autoFocus
+          />
+          <button 
+            onClick={() => handleSaveField(field, value, setValue, setEditing)} 
+            className="p-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+          >
+            <Save className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => setEditing(false)} 
+            className="p-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold mb-2">{prodotto.nome}</h1>
-          <div className="mb-2">SKU: <b>{prodotto.sku}</b></div>
-          <div className="mb-2">Quantità: <b>{prodotto.quantita}</b></div>
-          <div className="mb-2">Prezzo: <b>€{prodotto.prezzo.toFixed(2)}</b></div>
-          <div className="mb-2">
-            Marca: 
-            {isEditingMarca ? (
-              <div className="inline-flex items-center gap-2 ml-2">
-                <input
-                  type="text"
-                  value={marca}
-                  onChange={(e) => setMarca(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm"
-                  placeholder="Inserisci marca"
-                />
-                <button onClick={handleMarcaSave} className="bg-primary text-primary-foreground px-2 py-1 rounded text-sm">✓</button>
-                <button onClick={() => setIsEditingMarca(false)} className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-sm">✗</button>
-              </div>
-            ) : (
-              <span className="ml-2">
-                <b>{marca || 'Non specificata'}</b>
-                <button onClick={() => setIsEditingMarca(true)} className="ml-2 text-blue-600 underline text-sm">Modifica</button>
-              </span>
-            )}
-          </div>
-          <div className="mb-2">
-            Tipologia: 
-            {isEditingTipologia ? (
-              <div className="inline-flex items-center gap-2 ml-2">
-                <input
-                  type="text"
-                  value={tipologia}
-                  onChange={(e) => setTipologia(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm"
-                  placeholder="Inserisci tipologia"
-                />
-                <button onClick={handleTipologiaSave} className="bg-primary text-primary-foreground px-2 py-1 rounded text-sm">✓</button>
-                <button onClick={() => setIsEditingTipologia(false)} className="bg-secondary text-secondary-foreground px-2 py-1 rounded text-sm">✗</button>
-              </div>
-            ) : (
-              <span className="ml-2">
-                <b>{tipologia || 'Non specificata'}</b>
-                <button onClick={() => setIsEditingTipologia(true)} className="ml-2 text-blue-600 underline text-sm">Modifica</button>
-              </span>
-            )}
-          </div>
-          <div className="mb-4">Valore magazzino: <b>€{(prodotto.quantita * prodotto.prezzo).toFixed(2)}</b></div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{value || 'Non specificato'}</span>
+          <button 
+            onClick={() => setEditing(true)} 
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
         </div>
-      </div>
-      <div className="mt-8">
-        <h2 className="text-lg font-bold mb-2">Storico Caricamenti</h2>
-        <table className="w-full border-collapse border border-border">
-          <thead>
-            <tr className="bg-muted/50">
-              <th className="border border-border px-4 py-2 text-left font-medium">Data</th>
-              <th className="border border-border px-4 py-2 text-left font-medium">Ora</th>
-              <th className="border border-border px-4 py-2 text-left font-medium">Quantità</th>
-              <th className="border border-border px-4 py-2 text-left font-medium">Prezzo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(Array.isArray(storico) ? storico : []).length === 0 ? (
-              <tr>
-                <td colSpan={4} className="border border-border px-4 py-4 text-center text-muted-foreground">
-                  Nessun caricamento registrato
-                </td>
-              </tr>
-            ) : (
-              (Array.isArray(storico) ? storico : []).map((entry, idx) => {
-                const { date, time } = formatDateTime(entry.data);
-                return (
-                  <tr key={idx}>
-                    <td className="border border-border px-4 py-2">{date}</td>
-                    <td className="border border-border px-4 py-2">{time}</td>
-                    <td className="border border-border px-4 py-2">{entry.quantita}</td>
-                    <td className="border border-border px-4 py-2">€{entry.prezzo.toFixed(2)}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-8">
-        <h2 className="text-lg font-bold mb-2">Andamento Prezzo</h2>
-        {priceChartData.length > 1 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={priceChartData}>
-              <XAxis dataKey="date" fontSize={12} />
-              <YAxis domain={['auto', 'auto']} fontSize={12} />
-              <Tooltip />
-              <Line type="monotone" dataKey="prezzo" stroke="#2563eb" strokeWidth={2} dot />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="text-muted-foreground text-center py-8">Non ci sono abbastanza dati per il grafico</div>
-        )}
-      </div>
+      )}
     </div>
   );
-} 
+
+  // Sezione espandibile
+  const SectionHeader = ({ title, section, icon: Icon, badge }) => (
+    <button 
+      onClick={() => toggleSection(section)}
+      className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+    >
+      <div className="flex items-center gap-3">
+        {Icon && <Icon className="w-5 h-5 text-[#c68776]" />}
+        <span className="font-semibold text-lg">{title}</span>
+        {badge && (
+          <span className="px-2 py-0.5 bg-[#c68776]/10 text-[#c68776] text-xs rounded-full font-medium">
+            {badge}
+          </span>
+        )}
+      </div>
+      {expandedSections[section] ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+    </button>
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-8 h-8 animate-spin text-[#c68776]" />
+      </div>
+    );
+  }
+
+  if (!prodotto) {
+    return (
+      <div className="text-center py-16">
+        <AlertCircle className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+        <p className="text-xl font-medium text-gray-600">Prodotto non trovato</p>
+        <button 
+          onClick={() => navigate('/magazzino')} 
+          className="mt-4 px-4 py-2 bg-[#c68776] text-white rounded-lg hover:bg-[#b07567]"
+        >
+          Torna al Magazzino
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <button 
+          onClick={() => navigate('/magazzino')} 
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          <span>Torna al Magazzino</span>
+        </button>
+      </div>
+
+      {/* Hero Card - Prodotto */}
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-r from-[#c68776] to-[#d4a097] p-6 text-white">
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Foto */}
+            <div className="flex-shrink-0">
+              <div className="relative group">
+                {foto ? (
+                  <img 
+                    src={foto} 
+                    alt={prodotto.nome} 
+                    className="w-40 h-40 object-contain bg-white rounded-lg shadow-lg"
+                  />
+                ) : (
+                  <div className="w-40 h-40 bg-white/20 rounded-lg flex items-center justify-center">
+                    <Package className="w-16 h-16 text-white/50" />
+                  </div>
+                )}
+                <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-lg">
+                  <Camera className="w-8 h-8 text-white" />
+                  <input type="file" accept="image/*" onChange={handleFotoChange} className="hidden" />
+                </label>
+              </div>
+            </div>
+
+            {/* Info principali */}
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold mb-2">{prodotto.nome}</h1>
+              <div className="flex flex-wrap gap-4 text-white/90">
+                <div className="flex items-center gap-2">
+                  <Hash className="w-4 h-4" />
+                  <span>SKU: <strong>{prodotto.sku}</strong></span>
+                </div>
+                {codiceBarcode && (
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4" />
+                    <span>Barcode: <strong>{codiceBarcode}</strong></span>
+                  </div>
+                )}
+              </div>
+              
+              {/* KPI inline */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                <div className="bg-white/20 rounded-lg p-3">
+                  <p className="text-white/70 text-sm">Quantità</p>
+                  <p className="text-2xl font-bold">{prodotto.quantita}</p>
+                </div>
+                <div className="bg-white/20 rounded-lg p-3">
+                  <p className="text-white/70 text-sm">Prezzo Acquisto</p>
+                  <p className="text-2xl font-bold">{formatCurrency(prodotto.prezzo)}</p>
+                </div>
+                <div className="bg-white/20 rounded-lg p-3">
+                  <p className="text-white/70 text-sm">Valore Stock</p>
+                  <p className="text-2xl font-bold">{formatCurrency(prodotto.quantita * prodotto.prezzo)}</p>
+                </div>
+                <div className="bg-white/20 rounded-lg p-3">
+                  <p className="text-white/70 text-sm">Venduti</p>
+                  <p className="text-2xl font-bold">{venditeStats.totaleVenduto}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* KPI Cards Dettagliate */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Prezzo Medio Acquisto</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.prezzoMedio)}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Min: {formatCurrency(stats.prezzoMin)} | Max: {formatCurrency(stats.prezzoMax)}
+                </p>
+              </div>
+              <Calculator className="w-8 h-8 text-[#c68776]" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Variazione Prezzo</p>
+                <p className={`text-2xl font-bold ${stats.differenzaPrezzo >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {stats.differenzaPrezzo >= 0 ? '+' : ''}{formatCurrency(stats.differenzaPrezzo)}
+                </p>
+                <p className={`text-xs mt-1 ${stats.percentualeDiff >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                  {stats.percentualeDiff >= 0 ? '+' : ''}{stats.percentualeDiff.toFixed(1)}% dal primo carico
+                </p>
+              </div>
+              {stats.differenzaPrezzo >= 0 ? (
+                <TrendingUp className="w-8 h-8 text-red-500" />
+              ) : (
+                <TrendingDown className="w-8 h-8 text-green-500" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Totale Caricato</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totaleCaricato} pz</p>
+                <p className="text-xs text-gray-400 mt-1">{stats.numeroCarichi} caricamenti</p>
+              </div>
+              <Truck className="w-8 h-8 text-[#c68776]" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Ricavo Vendite</p>
+                <p className="text-2xl font-bold text-emerald-600">{formatCurrency(venditeStats.ricavoTotale)}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Prezzo medio: {formatCurrency(venditeStats.prezzoMedioVendita)}
+                </p>
+              </div>
+              <ShoppingCart className="w-8 h-8 text-emerald-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Informazioni Prodotto */}
+      <Card>
+        <SectionHeader title="Informazioni Prodotto" section="info" icon={Package} />
+        {expandedSections.info && (
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+              <EditableField 
+                label="Marca" 
+                value={marca} 
+                setValue={setMarca} 
+                isEditing={isEditingMarca} 
+                setEditing={setIsEditingMarca}
+                field="marca"
+                icon={Tag}
+              />
+              <EditableField 
+                label="Tipologia" 
+                value={tipologia} 
+                setValue={setTipologia} 
+                isEditing={isEditingTipologia} 
+                setEditing={setIsEditingTipologia}
+                field="tipologia"
+                icon={Layers}
+              />
+              <EditableField 
+                label="Fornitore" 
+                value={fornitore} 
+                setValue={setFornitore} 
+                isEditing={isEditingFornitore} 
+                setEditing={setIsEditingFornitore}
+                field="fornitore"
+                icon={Building}
+              />
+              <EditableField 
+                label="Ubicazione" 
+                value={ubicazione} 
+                setValue={setUbicazione} 
+                isEditing={isEditingUbicazione} 
+                setEditing={setIsEditingUbicazione}
+                field="ubicazione"
+                icon={Package}
+              />
+              <EditableField 
+                label="Codice Barcode" 
+                value={codiceBarcode} 
+                setValue={setCodiceBarcode} 
+                isEditing={isEditingBarcode} 
+                setEditing={setIsEditingBarcode}
+                field="barcode"
+                icon={Hash}
+              />
+              <div className="md:col-span-2">
+                <EditableField 
+                  label="Note" 
+                  value={note} 
+                  setValue={setNote} 
+                  isEditing={isEditingNote} 
+                  setEditing={setIsEditingNote}
+                  field="note"
+                  icon={Edit}
+                />
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Grafico Prezzi */}
+      <Card>
+        <SectionHeader title="Andamento Prezzi" section="grafico" icon={BarChart3} badge={`${priceChartData.length} punti`} />
+        {expandedSections.grafico && (
+          <CardContent>
+            {priceChartData.length > 1 ? (
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={priceChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" fontSize={12} stroke="#888" />
+                    <YAxis fontSize={12} stroke="#888" tickFormatter={(v) => `€${v}`} />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        name === 'prezzo' ? formatCurrency(value) : `${value} pz`,
+                        name === 'prezzo' ? 'Prezzo' : 'Quantità'
+                      ]}
+                    />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="prezzo" 
+                      stroke="#c68776" 
+                      strokeWidth={2} 
+                      dot={{ fill: '#c68776' }}
+                      name="Prezzo"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <BarChart3 className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                <p>Non ci sono abbastanza dati per il grafico</p>
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Storico Caricamenti */}
+      <Card>
+        <SectionHeader title="Storico Entrate a Magazzino" section="storico" icon={History} badge={`${storico.length} carichi`} />
+        {expandedSections.storico && (
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-3 font-semibold">Data</th>
+                    <th className="text-left p-3 font-semibold">Ora</th>
+                    <th className="text-right p-3 font-semibold">Quantità</th>
+                    <th className="text-right p-3 font-semibold">Prezzo Unit.</th>
+                    <th className="text-right p-3 font-semibold">Valore Totale</th>
+                    <th className="text-right p-3 font-semibold">Δ Prezzo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {storico.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-gray-500">
+                        <History className="w-12 h-12 mx-auto text-gray-300 mb-2" />
+                        Nessun caricamento registrato
+                      </td>
+                    </tr>
+                  ) : (
+                    storico.map((entry, idx) => {
+                      const { date, time } = formatDateTime(entry.data);
+                      const prevPrezzo = idx > 0 ? storico[idx - 1].prezzo : entry.prezzo;
+                      const diffPrezzo = entry.prezzo - prevPrezzo;
+                      const diffPercent = prevPrezzo > 0 ? ((diffPrezzo / prevPrezzo) * 100) : 0;
+                      
+                      return (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="p-3">{date}</td>
+                          <td className="p-3 text-gray-500">{time}</td>
+                          <td className="p-3 text-right font-medium">{entry.quantita} pz</td>
+                          <td className="p-3 text-right">{formatCurrency(entry.prezzo)}</td>
+                          <td className="p-3 text-right font-medium">{formatCurrency(entry.quantita * entry.prezzo)}</td>
+                          <td className="p-3 text-right">
+                            {idx > 0 ? (
+                              <span className={`inline-flex items-center gap-1 ${diffPrezzo > 0 ? 'text-red-600' : diffPrezzo < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                {diffPrezzo > 0 ? <TrendingUp className="w-3 h-3" /> : diffPrezzo < 0 ? <TrendingDown className="w-3 h-3" /> : null}
+                                {diffPrezzo !== 0 ? `${diffPrezzo > 0 ? '+' : ''}${diffPercent.toFixed(1)}%` : '-'}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    }).reverse()
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Ordini Fornitore */}
+      <Card>
+        <SectionHeader title="Ordini Fornitore" section="ordini" icon={Truck} badge={`${ordiniFornitore.length} ordini`} />
+        {expandedSections.ordini && (
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-3 font-semibold">N. Ordine</th>
+                    <th className="text-left p-3 font-semibold">Fornitore</th>
+                    <th className="text-left p-3 font-semibold">Data</th>
+                    <th className="text-center p-3 font-semibold">Stato</th>
+                    <th className="text-right p-3 font-semibold">Qtà Ordinata</th>
+                    <th className="text-right p-3 font-semibold">Prezzo</th>
+                    <th className="p-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordiniFornitore.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-8 text-gray-500">
+                        <Truck className="w-12 h-12 mx-auto text-gray-300 mb-2" />
+                        Nessun ordine fornitore per questo prodotto
+                      </td>
+                    </tr>
+                  ) : (
+                    ordiniFornitore.map(order => {
+                      const prodInOrdine = order.products?.find(p => p.sku === sku);
+                      const statusColors = {
+                        bozza: 'bg-gray-100 text-gray-700',
+                        confermato: 'bg-blue-100 text-blue-700',
+                        in_transito: 'bg-yellow-100 text-yellow-700',
+                        ricevuto: 'bg-green-100 text-green-700',
+                        parziale: 'bg-orange-100 text-orange-700',
+                        pagato: 'bg-purple-100 text-purple-700'
+                      };
+                      
+                      return (
+                        <tr key={order.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 font-medium">{order.orderNumber || order.id}</td>
+                          <td className="p-3">{order.supplier || '-'}</td>
+                          <td className="p-3 text-gray-500">{formatDateTime(order.createdAt).date}</td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[order.status] || 'bg-gray-100'}`}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">{prodInOrdine?.quantity || prodInOrdine?.quantita || '-'} pz</td>
+                          <td className="p-3 text-right">{formatCurrency(prodInOrdine?.price || prodInOrdine?.prezzo)}</td>
+                          <td className="p-3">
+                            <button 
+                              onClick={() => navigate(`/ordini-fornitori/${order.id}`)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-700"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Vendite Shopify */}
+      <Card>
+        <SectionHeader title="Vendite (Shopify)" section="vendite" icon={ShoppingCart} badge={`${ordiniShopify.length} ordini`} />
+        {expandedSections.vendite && (
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-3 font-semibold">Ordine</th>
+                    <th className="text-left p-3 font-semibold">Data</th>
+                    <th className="text-left p-3 font-semibold">Cliente</th>
+                    <th className="text-center p-3 font-semibold">Stato</th>
+                    <th className="text-right p-3 font-semibold">Qtà</th>
+                    <th className="text-right p-3 font-semibold">Prezzo Unit.</th>
+                    <th className="text-right p-3 font-semibold">Totale</th>
+                    <th className="p-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordiniShopify.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-8 text-gray-500">
+                        <ShoppingCart className="w-12 h-12 mx-auto text-gray-300 mb-2" />
+                        Nessuna vendita per questo prodotto
+                      </td>
+                    </tr>
+                  ) : (
+                    ordiniShopify.slice(0, 20).map(order => {
+                      const items = order.line_items || order.products || order.items || [];
+                      const item = items.find(i => i.sku === sku || i.variant_id?.toString() === sku);
+                      const qty = item?.quantity || 1;
+                      const price = parseFloat(item?.price) || 0;
+                      
+                      const statusColors = {
+                        paid: 'bg-green-100 text-green-700',
+                        pending: 'bg-yellow-100 text-yellow-700',
+                        refunded: 'bg-red-100 text-red-700'
+                      };
+                      const status = order.financial_status || order.financialStatus || 'pending';
+                      
+                      return (
+                        <tr key={order.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 font-medium">#{order.order_number || order.orderNumber || order.name}</td>
+                          <td className="p-3 text-gray-500">{formatDateTime(order.created_at || order.createdAt).date}</td>
+                          <td className="p-3">{order.customerName || order.customer?.first_name || '-'}</td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[status] || 'bg-gray-100'}`}>
+                              {status === 'paid' ? 'Pagato' : status === 'pending' ? 'In attesa' : status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">{qty} pz</td>
+                          <td className="p-3 text-right">{formatCurrency(price)}</td>
+                          <td className="p-3 text-right font-medium text-emerald-600">{formatCurrency(qty * price)}</td>
+                          <td className="p-3">
+                            <button 
+                              onClick={() => navigate(`/ordini/${order.id}`)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-700"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+              {ordiniShopify.length > 20 && (
+                <div className="text-center py-4 text-gray-500 text-sm">
+                  Mostrati i primi 20 ordini di {ordiniShopify.length} totali
+                </div>
+              )}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  );
+}
