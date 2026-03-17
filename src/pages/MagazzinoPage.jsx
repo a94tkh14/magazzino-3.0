@@ -393,27 +393,58 @@ const MagazzinoPage = () => {
           const variantId = item.variant_id?.toString() || '';
           const variantTitle = item.variant_title || '';
           
-          if (sku || name) {
-            const key = sku || `${name}_${variantId}`;
+          // Funzione per pulire il nome (rimuove apostrofi e caratteri speciali)
+          const cleanName = (str) => {
+            if (!str) return '';
+            return str
+              .replace(/[''`´]/g, '') // Rimuove apostrofi
+              .replace(/\s+/g, ' ')   // Normalizza spazi
+              .trim();
+          };
+          
+          const cleanedName = cleanName(name);
+          const cleanedVariantTitle = cleanName(variantTitle);
+          
+          if (sku || cleanedName) {
+            // Crea chiave per deduplicazione: priorità a SKU, poi nome normalizzato
+            const normalizedName = cleanedName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const key = sku || `name_${normalizedName}_${variantId}`;
             
             if (!productsMap.has(key)) {
-              productsMap.set(key, {
-                sku: sku || variantId || `SHOP_${Date.now()}_${productsMap.size}`,
-                nome: variantTitle ? `${name} - ${variantTitle}` : name,
-                prezzo: price,
-                quantita: 0, // Da impostare manualmente
-                marca: vendor,
-                tipologia: '',
-                productId,
-                variantId,
-                ordersCount: 1,
-                totalSold: item.quantity || 1
-              });
+              // Controlla anche se esiste già con nome simile (senza SKU)
+              let isDuplicate = false;
+              if (!sku) {
+                for (const [existingKey, existingProduct] of productsMap.entries()) {
+                  const existingNormalized = existingProduct.nome.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  if (existingNormalized === normalizedName) {
+                    // È un duplicato, aggiorna solo le statistiche
+                    existingProduct.ordersCount += 1;
+                    existingProduct.totalSold += (item.quantity || 1);
+                    if (price > 0) existingProduct.prezzo = price;
+                    isDuplicate = true;
+                    break;
+                  }
+                }
+              }
+              
+              if (!isDuplicate) {
+                productsMap.set(key, {
+                  sku: sku || variantId || `SHOP_${Date.now()}_${productsMap.size}`,
+                  nome: cleanedVariantTitle ? `${cleanedName} - ${cleanedVariantTitle}` : cleanedName,
+                  prezzo: price,
+                  quantita: 0,
+                  marca: vendor,
+                  tipologia: '',
+                  productId,
+                  variantId,
+                  ordersCount: 1,
+                  totalSold: item.quantity || 1
+                });
+              }
             } else {
               const existing = productsMap.get(key);
               existing.ordersCount += 1;
               existing.totalSold += (item.quantity || 1);
-              // Aggiorna prezzo se più recente
               if (price > 0) existing.prezzo = price;
             }
           }
@@ -492,12 +523,18 @@ const MagazzinoPage = () => {
         continue;
       }
 
+      // Pulisce il nome da apostrofi e caratteri speciali
+      const cleanName = (str) => {
+        if (!str) return '';
+        return str.replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
+      };
+      
       const newItem = {
         sku: product.sku,
-        nome: product.nome,
-        quantita: 0, // Quantità da impostare manualmente
+        nome: cleanName(product.nome),
+        quantita: 0,
         prezzo: product.prezzo || 0,
-        marca: product.marca || '',
+        marca: cleanName(product.marca || ''),
         tipologia: product.tipologia || '',
         anagrafica: ''
       };

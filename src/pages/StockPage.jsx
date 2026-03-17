@@ -683,14 +683,20 @@ const StockPage = () => {
 
         const existingProduct = existingProducts.get(product.sku);
         
+        // Pulisce il nome da apostrofi e caratteri speciali
+        const cleanText = (str) => {
+          if (!str) return '';
+          return str.replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
+        };
+        
         const productData = {
           sku: product.sku,
-          nome: product.nome,
+          nome: cleanText(product.nome),
           quantita: product.quantita || (existingProduct?.quantita || 0),
           prezzo: product.prezzo || (existingProduct?.prezzo || 0),
           prezzoOriginale: product.prezzoOriginale,
-          marca: product.marca || (existingProduct?.marca || ''),
-          tipologia: product.tipologia || (existingProduct?.tipologia || ''),
+          marca: cleanText(product.marca || (existingProduct?.marca || '')),
+          tipologia: cleanText(product.tipologia || (existingProduct?.tipologia || '')),
           tags: product.tags,
           barcode: product.barcode || (existingProduct?.barcode || ''),
           peso: product.peso,
