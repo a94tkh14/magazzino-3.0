@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { loadMagazzinoData } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
-import { TrendingUp, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw, Wallet, Target, Landmark, DollarSign } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPrice } from '../lib/utils';
 import { addDays, startOfDay, endOfDay, subDays, subMonths, subYears, format } from 'date-fns';
@@ -398,6 +398,13 @@ const DashboardPage = () => {
     received: 0
   });
 
+  // Dati Conto Economico (Prima Nota)
+  const [contoEconomicoData, setContoEconomicoData] = useState({
+    movimenti: [],
+    contiBancari: [],
+    movimentiBanca: []
+  });
+
   useEffect(() => {
     const loadSupplierStats = async () => {
       try {
@@ -418,6 +425,96 @@ const DashboardPage = () => {
     };
     loadSupplierStats();
   }, []);
+
+  // Carica dati Conto Economico
+  useEffect(() => {
+    const loadContoEconomico = () => {
+      try {
+        const movimenti = JSON.parse(localStorage.getItem('conto_economico_movimenti') || '[]');
+        const contiBancari = JSON.parse(localStorage.getItem('conti_bancari') || '[]');
+        const movimentiBanca = JSON.parse(localStorage.getItem('movimenti_banca') || '[]');
+        
+        setContoEconomicoData({
+          movimenti,
+          contiBancari,
+          movimentiBanca
+        });
+      } catch (error) {
+        console.error('Errore caricamento Conto Economico:', error);
+      }
+    };
+    
+    loadContoEconomico();
+    
+    // Aggiorna quando cambiano i dati
+    const handleStorageChange = (e) => {
+      if (e.key === 'conto_economico_movimenti' || e.key === 'conti_bancari' || e.key === 'movimenti_banca') {
+        loadContoEconomico();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Calcola statistiche Conto Economico per periodo
+  const contoEconomicoStats = useMemo(() => {
+    const { movimenti, contiBancari, movimentiBanca } = contoEconomicoData;
+    
+    // Filtra movimenti per periodo
+    const filteredMovimenti = movimenti.filter(m => {
+      const date = new Date(m.data);
+      return date >= mainDateRange.startDate && date <= mainDateRange.endDate;
+    });
+    
+    // Calcola totali
+    const totDare = filteredMovimenti
+      .filter(m => m.tipo === 'dare')
+      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    
+    const totAvere = filteredMovimenti
+      .filter(m => m.tipo === 'avere')
+      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    
+    // Calcola saldo banca
+    let saldoBanca = 0;
+    contiBancari.forEach(c => {
+      saldoBanca += parseFloat(c.saldoIniziale || 0);
+    });
+    movimentiBanca.forEach(m => {
+      if (m.tipo === 'entrata') {
+        saldoBanca += parseFloat(m.importo || 0);
+      } else {
+        saldoBanca -= parseFloat(m.importo || 0);
+      }
+    });
+    
+    // Movimenti banca nel periodo
+    const filteredMovBanca = movimentiBanca.filter(m => {
+      const date = new Date(m.data);
+      return date >= mainDateRange.startDate && date <= mainDateRange.endDate;
+    });
+    
+    const entrateBanca = filteredMovBanca
+      .filter(m => m.tipo === 'entrata')
+      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    
+    const usciteBanca = filteredMovBanca
+      .filter(m => m.tipo === 'uscita')
+      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    
+    return {
+      ricavi: totAvere,
+      costi: totDare,
+      ebitda: totAvere - totDare,
+      margine: totAvere > 0 ? ((totAvere - totDare) / totAvere * 100) : 0,
+      saldoBanca,
+      entrateBanca,
+      usciteBanca,
+      movimentiCount: filteredMovimenti.length,
+      contiBancariCount: contiBancari.length
+    };
+  }, [contoEconomicoData, mainDateRange]);
 
   // Configurazione soglia scorte basse
   const [lowStockThreshold, setLowStockThreshold] = useState(() => {
@@ -732,6 +829,83 @@ const DashboardPage = () => {
             <div className="text-2xl font-bold text-blue-600">{csvStats.totalOrders}</div>
             <p className="text-xs text-muted-foreground">
               Totale ordini
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* EBITDA e Conto Economico */}
+      <Card className={`${contoEconomicoStats.ebitda >= 0 ? 'bg-gradient-to-r from-blue-600 to-blue-700' : 'bg-gradient-to-r from-orange-600 to-red-600'}`}>
+        <CardContent className="py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between text-white">
+            <div>
+              <p className="text-lg opacity-90">EBITDA - Risultato Operativo (Prima Nota)</p>
+              <p className="text-4xl font-bold my-2">{formatPrice(contoEconomicoStats.ebitda)}</p>
+              <p className="text-sm opacity-80">
+                Ricavi: {formatPrice(contoEconomicoStats.ricavi)} - Costi: {formatPrice(contoEconomicoStats.costi)} = Margine: {contoEconomicoStats.margine.toFixed(1)}%
+              </p>
+            </div>
+            <div className="mt-4 md:mt-0 flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-sm opacity-80">Saldo Banca</p>
+                <p className="text-2xl font-bold">{formatPrice(contoEconomicoStats.saldoBanca)}</p>
+              </div>
+              <Target className="w-12 h-12 opacity-80" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* KPI Conto Economico */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-emerald-700">Ricavi (Avere)</CardTitle>
+            <TrendingUp className="h-4 w-4 text-emerald-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-800">{formatPrice(contoEconomicoStats.ricavi)}</div>
+            <p className="text-xs text-emerald-600">
+              Da Prima Nota nel periodo
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-red-700">Costi (Dare)</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-800">{formatPrice(contoEconomicoStats.costi)}</div>
+            <p className="text-xs text-red-600">
+              Da Prima Nota nel periodo
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-indigo-700">Saldo Banca Totale</CardTitle>
+            <Landmark className="h-4 w-4 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-indigo-800">{formatPrice(contoEconomicoStats.saldoBanca)}</div>
+            <p className="text-xs text-indigo-600">
+              {contoEconomicoStats.contiBancariCount} conti bancari
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-purple-700">Movimenti Periodo</CardTitle>
+            <Wallet className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-800">{contoEconomicoStats.movimentiCount}</div>
+            <p className="text-xs text-purple-600">
+              Entrate: {formatPrice(contoEconomicoStats.entrateBanca)} | Uscite: {formatPrice(contoEconomicoStats.usciteBanca)}
             </p>
           </CardContent>
         </Card>
