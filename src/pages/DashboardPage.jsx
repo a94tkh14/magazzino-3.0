@@ -978,7 +978,6 @@ const DashboardPage = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
 
       {/* Grafico Confronto Periodi */}
       {showComparison && (
