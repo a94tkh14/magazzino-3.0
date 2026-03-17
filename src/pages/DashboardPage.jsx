@@ -534,15 +534,52 @@ const DashboardPage = () => {
     localStorage.setItem('lowStockThreshold', lowStockThreshold.toString());
   }, [lowStockThreshold]);
 
+  // Funzione per ricaricare tutti i dati
+  const handleRefreshAll = async () => {
+    setLoading(true);
+    try {
+      // Ricarica ordini
+      const ordersData = await loadShopifyOrdersData();
+      setCsvOrders(ordersData || []);
+      
+      // Ricarica magazzino
+      const magData = await loadMagazzinoData();
+      setMagazzinoData(magData || []);
+      
+      // Ricarica dati finanziari
+      const movimenti = await loadPrimaNotaData() || [];
+      const contiBancari = await loadContiBancariData() || [];
+      setContoEconomicoData({ movimenti, contiBancari, movimentiBanca: [] });
+      
+      alert(`✅ Dati aggiornati!\n\n📦 Ordini: ${ordersData?.length || 0}\n🏪 Prodotti: ${magData?.length || 0}\n📝 Movimenti: ${movimenti.length}`);
+    } catch (error) {
+      console.error('Errore refresh:', error);
+      alert('Errore: ' + error.message);
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            {csvOrders.length > 0 ? `${csvOrders.length} ordini sincronizzati` : 'Nessun ordine caricato'}
+          </p>
         </div>
         
-        {/* Controllo confronto */}
-        <div className="flex items-center gap-2">
+        {/* Pulsanti azioni */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefreshAll}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-[#c68776] text-white rounded-lg hover:bg-[#b07567] disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Caricamento...' : 'Aggiorna Dati'}
+          </button>
+          
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
