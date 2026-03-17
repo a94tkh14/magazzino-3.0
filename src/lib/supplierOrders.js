@@ -1,7 +1,16 @@
-// Gestione ordini fornitori
-import { loadFromLocalStorage, saveToLocalStorage } from './magazzinoStorage';
+// Gestione ordini fornitori - Sincronizzato con Firebase
+import { 
+  loadSupplierOrdersData, 
+  saveSupplierOrderData,
+  loadMagazzinoData,
+  saveSingleProduct,
+  addPrezzoToStoricoData
+} from './magazzinoStorage';
 
 const SUPPLIER_ORDERS_KEY = 'supplier_orders';
+
+// Cache locale per operazioni sincrone
+let ordersCache = null;
 
 // Stati degli ordini
 export const ORDER_STATUS = {
@@ -13,10 +22,52 @@ export const ORDER_STATUS = {
   PAID: 'pagato'
 };
 
-// Salva un nuovo ordine
-export const saveSupplierOrder = (order) => {
+// Carica ordini (prima da cache, poi da Firebase)
+export const getSupplierOrders = () => {
   try {
-    const existingOrders = getSupplierOrders();
+    // Se abbiamo cache, usa quella
+    if (ordersCache) return ordersCache;
+    // Fallback a localStorage per compatibilità sincrona
+    const orders = localStorage.getItem(SUPPLIER_ORDERS_KEY);
+    return orders ? JSON.parse(orders) : [];
+  } catch (error) {
+    console.error('Errore nel caricare ordini fornitori:', error);
+    return [];
+  }
+};
+
+// Carica ordini da Firebase (asincrono)
+export const getSupplierOrdersAsync = async () => {
+  try {
+    const orders = await loadSupplierOrdersData();
+    ordersCache = orders;
+    // Sync con localStorage
+    localStorage.setItem(SUPPLIER_ORDERS_KEY, JSON.stringify(orders));
+    return orders;
+  } catch (error) {
+    console.error('Errore nel caricare ordini fornitori da Firebase:', error);
+    return getSupplierOrders();
+  }
+};
+
+// Salva tutti gli ordini (locale + Firebase)
+const saveAllOrders = async (orders) => {
+  ordersCache = orders;
+  localStorage.setItem(SUPPLIER_ORDERS_KEY, JSON.stringify(orders));
+  // Salva su Firebase (ogni ordine)
+  for (const order of orders) {
+    try {
+      await saveSupplierOrderData(order);
+    } catch (err) {
+      console.error('Errore salvataggio ordine su Firebase:', err);
+    }
+  }
+};
+
+// Salva un nuovo ordine
+export const saveSupplierOrder = async (order) => {
+  try {
+    const existingOrders = await getSupplierOrdersAsync();
     const newOrder = {
       ...order,
       id: Date.now().toString(),
@@ -28,7 +79,7 @@ export const saveSupplierOrder = (order) => {
     };
     
     existingOrders.push(newOrder);
-    localStorage.setItem(SUPPLIER_ORDERS_KEY, JSON.stringify(existingOrders));
+    await saveAllOrders(existingOrders);
     return newOrder;
   } catch (error) {
     console.error('Errore nel salvare ordine fornitore:', error);
@@ -36,21 +87,10 @@ export const saveSupplierOrder = (order) => {
   }
 };
 
-// Carica tutti gli ordini
-export const getSupplierOrders = () => {
-  try {
-    const orders = localStorage.getItem(SUPPLIER_ORDERS_KEY);
-    return orders ? JSON.parse(orders) : [];
-  } catch (error) {
-    console.error('Errore nel caricare ordini fornitori:', error);
-    return [];
-  }
-};
-
 // Aggiorna un ordine esistente
-export const updateSupplierOrder = (orderId, updates) => {
+export const updateSupplierOrder = async (orderId, updates) => {
   try {
-    const orders = getSupplierOrders();
+    const orders = await getSupplierOrdersAsync();
     const orderIndex = orders.findIndex(order => order.id === orderId);
     
     if (orderIndex === -1) {
@@ -58,7 +98,7 @@ export const updateSupplierOrder = (orderId, updates) => {
     }
     
     orders[orderIndex] = { ...orders[orderIndex], ...updates };
-    localStorage.setItem(SUPPLIER_ORDERS_KEY, JSON.stringify(orders));
+    await saveAllOrders(orders);
     return orders[orderIndex];
   } catch (error) {
     console.error('Errore nell\'aggiornare ordine:', error);
@@ -77,34 +117,32 @@ export const getSupplierOrder = (orderId) => {
   }
 };
 
-// Aggiorna prezzo fornitore nel magazzino
-const updateMagazzinoPrezzoFornitore = (sku, newPrice, fornitore) => {
+// Aggiorna prezzo fornitore nel magazzino (ora usa Firebase)
+const updateMagazzinoPrezzoFornitore = async (sku, newPrice, fornitore) => {
   try {
-    const magazzino = loadFromLocalStorage('magazzino_data', []);
-    const productIndex = magazzino.findIndex(p => p.sku === sku);
+    const magazzino = await loadMagazzinoData();
+    const product = magazzino.find(p => p.sku === sku);
     
-    if (productIndex !== -1) {
-      // Aggiorna il prezzo di acquisto
-      magazzino[productIndex].prezzo = newPrice;
-      magazzino[productIndex].prezzoFornitore = newPrice;
-      magazzino[productIndex].ultimoAggiornamentoPrezzo = new Date().toISOString();
+    if (product) {
+      // Aggiorna il prodotto
+      product.prezzo = newPrice;
+      product.prezzoFornitore = newPrice;
+      product.ultimoAggiornamentoPrezzo = new Date().toISOString();
       if (fornitore) {
-        magazzino[productIndex].fornitore = fornitore;
+        product.fornitore = fornitore;
       }
       
-      saveToLocalStorage('magazzino_data', magazzino);
+      // Salva su Firebase
+      await saveSingleProduct(product);
       
-      // Salva anche nello storico prezzi fornitore
-      const storicoKey = `storico_prezzi_${sku}`;
-      const storicoPrezzi = loadFromLocalStorage(storicoKey, []);
-      storicoPrezzi.push({
+      // Salva nello storico prezzi (Firebase)
+      await addPrezzoToStoricoData(sku, {
         prezzo: newPrice,
         fornitore: fornitore,
         data: new Date().toISOString()
       });
-      saveToLocalStorage(storicoKey, storicoPrezzi);
       
-      console.log(`Aggiornato prezzo fornitore per ${sku}: ${newPrice}€`);
+      console.log(`✅ Aggiornato prezzo fornitore per ${sku}: ${newPrice}€`);
     }
   } catch (error) {
     console.error('Errore aggiornamento prezzo magazzino:', error);
@@ -112,7 +150,7 @@ const updateMagazzinoPrezzoFornitore = (sku, newPrice, fornitore) => {
 };
 
 // Registra ricezione di un prodotto
-export const receiveProduct = (orderId, sku, quantity) => {
+export const receiveProduct = async (orderId, sku, quantity) => {
   try {
     const order = getSupplierOrder(orderId);
     if (!order) throw new Error('Ordine non trovato');
@@ -131,15 +169,15 @@ export const receiveProduct = (orderId, sku, quantity) => {
         receivedAt: new Date().toISOString()
       });
       
-      // AGGIORNA PREZZO FORNITORE NEL MAGAZZINO
-      updateMagazzinoPrezzoFornitore(sku, product.price, order.supplier);
+      // AGGIORNA PREZZO FORNITORE NEL MAGAZZINO (Firebase)
+      await updateMagazzinoPrezzoFornitore(sku, product.price, order.supplier);
     }
     
     // Calcola totali
     const totalReceived = updatedReceivedItems.reduce((sum, item) => sum + item.quantity, 0);
     const totalSpent = updatedReceivedItems.reduce((sum, item) => {
-      const product = order.products.find(p => p.sku === item.sku);
-      return sum + (item.quantity * product.price);
+      const prod = order.products.find(p => p.sku === item.sku);
+      return sum + (item.quantity * prod.price);
     }, 0);
     
     // Determina nuovo stato
@@ -150,7 +188,7 @@ export const receiveProduct = (orderId, sku, quantity) => {
       newStatus = ORDER_STATUS.PARTIAL;
     }
     
-    return updateSupplierOrder(orderId, {
+    return await updateSupplierOrder(orderId, {
       receivedItems: updatedReceivedItems,
       totalReceived,
       totalSpent,
@@ -164,12 +202,12 @@ export const receiveProduct = (orderId, sku, quantity) => {
 };
 
 // Chiudi ordine parziale
-export const closePartialOrder = (orderId) => {
+export const closePartialOrder = async (orderId) => {
   try {
     const order = getSupplierOrder(orderId);
     if (!order) throw new Error('Ordine non trovato');
     
-    return updateSupplierOrder(orderId, {
+    return await updateSupplierOrder(orderId, {
       status: ORDER_STATUS.RECEIVED,
       closedAt: new Date().toISOString()
     });
@@ -180,9 +218,9 @@ export const closePartialOrder = (orderId) => {
 };
 
 // Marca ordine come pagato
-export const markOrderAsPaid = (orderId, paymentDate) => {
+export const markOrderAsPaid = async (orderId, paymentDate) => {
   try {
-    return updateSupplierOrder(orderId, {
+    return await updateSupplierOrder(orderId, {
       status: ORDER_STATUS.PAID,
       paidAt: paymentDate || new Date().toISOString()
     });
@@ -204,7 +242,7 @@ export const generateOrderNumber = () => {
 };
 
 // Elimina un ordine fornitore
-export const deleteSupplierOrder = (orderId) => {
+export const deleteSupplierOrder = async (orderId) => {
   try {
     const order = getSupplierOrder(orderId);
     if (!order) throw new Error('Ordine non trovato');
@@ -214,13 +252,18 @@ export const deleteSupplierOrder = (orderId) => {
       throw new Error('Non è possibile eliminare ordini ricevuti o pagati');
     }
     
-    const orders = getSupplierOrders();
-    const filteredOrders = orders.filter(order => order.id !== orderId);
-    localStorage.setItem(SUPPLIER_ORDERS_KEY, JSON.stringify(filteredOrders));
+    const orders = await getSupplierOrdersAsync();
+    const filteredOrders = orders.filter(o => o.id !== orderId);
+    await saveAllOrders(filteredOrders);
     
     return true;
   } catch (error) {
     console.error('Errore nell\'eliminare ordine:', error);
     throw error;
   }
-}; 
+};
+
+// Inizializza cache al primo accesso
+export const initSupplierOrdersCache = async () => {
+  await getSupplierOrdersAsync();
+};

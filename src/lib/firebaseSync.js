@@ -22,7 +22,15 @@ const COLLECTIONS = {
   PRIMA_NOTA: 'prima_nota',
   CONTI_BANCARI: 'conti_bancari',
   SETTINGS: 'settings',
-  STORICO: 'storico'
+  STORICO: 'storico',
+  // Nuove collezioni
+  FOTO_PRODOTTI: 'foto_prodotti',
+  STORICO_PREZZI: 'storico_prezzi',
+  MAGAZZINO_STORICO: 'magazzino_storico',
+  MOVIMENTI_BANCA: 'movimenti_banca',
+  COSTI: 'costi',
+  METRICHE_MARKETING: 'metriche_marketing',
+  APP_CONFIG: 'app_config'
 };
 
 // ============ FUNZIONI GENERICHE ============
@@ -258,6 +266,143 @@ export const loadStorico = async () => {
   return loadCollection(COLLECTIONS.STORICO);
 };
 
+// ============ FOTO PRODOTTI ============
+
+export const saveFotoProdotto = async (sku, fotoBase64) => {
+  return saveDocument(COLLECTIONS.FOTO_PRODOTTI, sku, { 
+    sku, 
+    foto: fotoBase64,
+    updatedAt: new Date().toISOString()
+  });
+};
+
+export const loadFotoProdotto = async (sku) => {
+  const doc = await loadDocument(COLLECTIONS.FOTO_PRODOTTI, sku);
+  return doc?.foto || null;
+};
+
+export const loadAllFotoProdotti = async () => {
+  return loadCollection(COLLECTIONS.FOTO_PRODOTTI);
+};
+
+// ============ STORICO PREZZI (per SKU) ============
+
+export const saveStoricoPrezzi = async (sku, prezziArray) => {
+  return saveDocument(COLLECTIONS.STORICO_PREZZI, sku, { 
+    sku, 
+    prezzi: prezziArray,
+    updatedAt: new Date().toISOString()
+  });
+};
+
+export const loadStoricoPrezzi = async (sku) => {
+  const doc = await loadDocument(COLLECTIONS.STORICO_PREZZI, sku);
+  return doc?.prezzi || [];
+};
+
+export const addPrezzoToStorico = async (sku, prezzoEntry) => {
+  const existing = await loadStoricoPrezzi(sku);
+  existing.push(prezzoEntry);
+  return saveStoricoPrezzi(sku, existing);
+};
+
+// ============ MAGAZZINO STORICO (carichi) ============
+
+export const saveMagazzinoStorico = async (storicoObj) => {
+  return saveDocument(COLLECTIONS.MAGAZZINO_STORICO, 'all_storico', { 
+    data: storicoObj,
+    updatedAt: new Date().toISOString()
+  });
+};
+
+export const loadMagazzinoStorico = async () => {
+  const doc = await loadDocument(COLLECTIONS.MAGAZZINO_STORICO, 'all_storico');
+  return doc?.data || {};
+};
+
+export const addMagazzinoStoricoEntry = async (sku, entry) => {
+  const existing = await loadMagazzinoStorico();
+  if (!existing[sku]) existing[sku] = [];
+  existing[sku].push(entry);
+  return saveMagazzinoStorico(existing);
+};
+
+// ============ MOVIMENTI BANCA ============
+
+export const saveMovimentiBanca = async (movimenti) => {
+  return saveBatch(COLLECTIONS.MOVIMENTI_BANCA, movimenti.map((m, i) => ({
+    ...m,
+    id: m.id || `mov_${Date.now()}_${i}`
+  })));
+};
+
+export const loadMovimentiBanca = async () => {
+  return loadCollection(COLLECTIONS.MOVIMENTI_BANCA);
+};
+
+export const saveMovimentoBanca = async (movimento) => {
+  const docId = movimento.id || `mov_${Date.now()}`;
+  return saveDocument(COLLECTIONS.MOVIMENTI_BANCA, docId, { ...movimento, id: docId });
+};
+
+export const deleteMovimentoBanca = async (movimentoId) => {
+  return deleteDocument(COLLECTIONS.MOVIMENTI_BANCA, movimentoId);
+};
+
+// ============ COSTI ============
+
+export const saveCosti = async (costi) => {
+  return saveBatch(COLLECTIONS.COSTI, costi.map((c, i) => ({
+    ...c,
+    id: c.id || `costo_${Date.now()}_${i}`
+  })));
+};
+
+export const loadCosti = async () => {
+  return loadCollection(COLLECTIONS.COSTI);
+};
+
+export const saveCosto = async (costo) => {
+  const docId = costo.id || `costo_${Date.now()}`;
+  return saveDocument(COLLECTIONS.COSTI, docId, { ...costo, id: docId });
+};
+
+export const deleteCosto = async (costoId) => {
+  return deleteDocument(COLLECTIONS.COSTI, costoId);
+};
+
+// ============ METRICHE MARKETING ============
+
+export const saveMetricheMarketing = async (metriche) => {
+  return saveBatch(COLLECTIONS.METRICHE_MARKETING, metriche.map((m, i) => ({
+    ...m,
+    id: m.id || `metrica_${Date.now()}_${i}`
+  })));
+};
+
+export const loadMetricheMarketing = async () => {
+  return loadCollection(COLLECTIONS.METRICHE_MARKETING);
+};
+
+export const saveMetricaMarketing = async (metrica) => {
+  const docId = metrica.id || `metrica_${Date.now()}`;
+  return saveDocument(COLLECTIONS.METRICHE_MARKETING, docId, { ...metrica, id: docId });
+};
+
+// ============ APP CONFIG (Logo, Nome, Google Ads, Meta, etc.) ============
+
+export const saveAppConfig = async (configKey, configData) => {
+  return saveDocument(COLLECTIONS.APP_CONFIG, configKey, configData);
+};
+
+export const loadAppConfig = async (configKey) => {
+  return loadDocument(COLLECTIONS.APP_CONFIG, configKey);
+};
+
+export const loadAllAppConfig = async () => {
+  return loadCollection(COLLECTIONS.APP_CONFIG);
+};
+
 // ============ MIGRAZIONE DA LOCALSTORAGE ============
 
 export const migrateFromLocalStorage = async () => {
@@ -267,6 +412,13 @@ export const migrateFromLocalStorage = async () => {
     supplierOrders: 0,
     primaNota: 0,
     contiBancari: 0,
+    movimentiBanca: 0,
+    costi: 0,
+    metriche: 0,
+    foto: 0,
+    storicoPrezzi: 0,
+    magazzinoStorico: 0,
+    appConfig: 0,
     errors: []
   };
 
@@ -320,6 +472,98 @@ export const migrateFromLocalStorage = async () => {
           await saveContoBancario(conto);
         }
         results.contiBancari = conti.length;
+      }
+    }
+
+    // Migra Movimenti Banca
+    const movBancaData = localStorage.getItem('movimenti_banca');
+    if (movBancaData) {
+      const movimenti = JSON.parse(movBancaData);
+      if (Array.isArray(movimenti) && movimenti.length > 0) {
+        await saveMovimentiBanca(movimenti);
+        results.movimentiBanca = movimenti.length;
+      }
+    }
+
+    // Migra Costi
+    const costiData = localStorage.getItem('costs');
+    if (costiData) {
+      const costi = JSON.parse(costiData);
+      if (Array.isArray(costi) && costi.length > 0) {
+        await saveCosti(costi);
+        results.costi = costi.length;
+      }
+    }
+
+    // Migra Metriche Marketing
+    const metricheData = localStorage.getItem('manualMetrics');
+    if (metricheData) {
+      const metriche = JSON.parse(metricheData);
+      if (Array.isArray(metriche) && metriche.length > 0) {
+        await saveMetricheMarketing(metriche);
+        results.metriche = metriche.length;
+      }
+    }
+
+    // Migra Magazzino Storico
+    const magazzinoStoricoData = localStorage.getItem('magazzino_storico');
+    if (magazzinoStoricoData) {
+      const storico = JSON.parse(magazzinoStoricoData);
+      if (storico && Object.keys(storico).length > 0) {
+        await saveMagazzinoStorico(storico);
+        results.magazzinoStorico = Object.keys(storico).length;
+      }
+    }
+
+    // Migra Foto Prodotti (cerca tutte le chiavi foto_*)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('foto_')) {
+        const sku = key.replace('foto_', '');
+        const foto = localStorage.getItem(key);
+        if (foto) {
+          await saveFotoProdotto(sku, foto);
+          results.foto++;
+        }
+      }
+    }
+
+    // Migra Storico Prezzi (cerca tutte le chiavi storico_prezzi_*)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('storico_prezzi_')) {
+        const sku = key.replace('storico_prezzi_', '');
+        const prezzi = JSON.parse(localStorage.getItem(key) || '[]');
+        if (prezzi.length > 0) {
+          await saveStoricoPrezzi(sku, prezzi);
+          results.storicoPrezzi++;
+        }
+      }
+    }
+
+    // Migra App Config (Logo, Nome, Google Ads, Meta, etc.)
+    const appConfigs = [
+      { key: 'appLogo', configKey: 'logo' },
+      { key: 'appName', configKey: 'name' },
+      { key: 'google_ads_config', configKey: 'google_ads' },
+      { key: 'meta_config', configKey: 'meta' },
+      { key: 'database_config', configKey: 'database' },
+      { key: 'costCategories', configKey: 'cost_categories' },
+      { key: 'lowStockThreshold', configKey: 'low_stock_threshold' }
+    ];
+
+    for (const { key, configKey } of appConfigs) {
+      const data = localStorage.getItem(key);
+      if (data) {
+        try {
+          const parsed = JSON.parse(data);
+          await saveAppConfig(configKey, { value: parsed });
+          results.appConfig++;
+        } catch {
+          // Se non è JSON, salva come stringa
+          await saveAppConfig(configKey, { value: data });
+          results.appConfig++;
+        }
       }
     }
 

@@ -1,6 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadMagazzinoData, loadFromLocalStorage, loadShopifyOrdersData, loadSupplierOrdersData, saveSingleProduct } from '../lib/magazzinoStorage';
+import { 
+  loadMagazzinoData, 
+  loadShopifyOrdersData, 
+  loadSupplierOrdersData, 
+  saveSingleProduct,
+  loadFotoProdottoData,
+  saveFotoProdottoData,
+  loadMagazzinoStoricoData,
+  loadStoricoPrezziData
+} from '../lib/magazzinoStorage';
 import { getSupplierOrders } from '../lib/supplierOrders';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid, Legend } from 'recharts';
 import { 
@@ -94,25 +103,32 @@ export default function MagazzinoDetailPage() {
           setEditPrezzo(prod.prezzo || 0);
         }
         
-        // Foto - prima da localStorage, poi dal prodotto (importato da Shopify)
-        const savedFoto = localStorage.getItem(`foto_${sku}`);
-        if (savedFoto) {
-          setFoto(savedFoto);
-        } else if (prod?.immagine) {
-          setFoto(prod.immagine);
+        // Foto - prima da Firebase, poi localStorage, poi dal prodotto
+        let loadedFoto = await loadFotoProdottoData(sku);
+        if (!loadedFoto && prod?.immagine) {
+          loadedFoto = prod.immagine;
+        }
+        if (loadedFoto) {
+          setFoto(loadedFoto);
         }
         
-        // Campi aggiuntivi - priorità: prodotto > localStorage
-        setMarca(prod?.marca || prod?.vendor || localStorage.getItem(`marca_${sku}`) || '');
-        setTipologia(prod?.tipologia || prod?.type || localStorage.getItem(`tipologia_${sku}`) || '');
-        setFornitore(prod?.fornitore || localStorage.getItem(`fornitore_${sku}`) || '');
-        setNote(prod?.note || localStorage.getItem(`note_${sku}`) || '');
-        setCodiceBarcode(prod?.barcode || localStorage.getItem(`barcode_${sku}`) || '');
-        setUbicazione(prod?.ubicazione || localStorage.getItem(`ubicazione_${sku}`) || '');
+        // Campi aggiuntivi - priorità: prodotto > Firebase
+        setMarca(prod?.marca || prod?.vendor || '');
+        setTipologia(prod?.tipologia || prod?.type || '');
+        setFornitore(prod?.fornitore || '');
+        setNote(prod?.note || '');
+        setCodiceBarcode(prod?.barcode || '');
+        setUbicazione(prod?.ubicazione || '');
         
-        // Storico caricamenti
-        const allStorico = loadFromLocalStorage('magazzino_storico', {});
+        // Storico caricamenti (da Firebase)
+        const allStorico = await loadMagazzinoStoricoData();
         setStorico(allStorico[sku] || []);
+        
+        // Storico prezzi fornitore (da Firebase)
+        const storicoPrezzi = await loadStoricoPrezziData(sku);
+        if (storicoPrezzi.length > 0) {
+          console.log(`📊 Storico prezzi caricato per ${sku}: ${storicoPrezzi.length} entries`);
+        }
         
         // Ordini fornitori che contengono questo prodotto (da Firebase)
         const supplierOrders = await loadSupplierOrdersData() || [];
@@ -189,20 +205,23 @@ export default function MagazzinoDetailPage() {
     setIsSaving(false);
   };
 
-  // Handlers per salvare i campi (legacy localStorage)
+  // Handlers per salvare i campi
   const handleSaveField = (field, value, setter, setEditing) => {
-    localStorage.setItem(`${field}_${sku}`, value);
     setter(value);
     setEditing(false);
   };
 
-  const handleFotoChange = (e) => {
+  // Salva foto su Firebase
+  const handleFotoChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setFoto(ev.target.result);
-      localStorage.setItem(`foto_${sku}`, ev.target.result);
+    reader.onload = async (ev) => {
+      const fotoBase64 = ev.target.result;
+      setFoto(fotoBase64);
+      // Salva su Firebase
+      await saveFotoProdottoData(sku, fotoBase64);
+      console.log('✅ Foto salvata su Firebase');
     };
     reader.readAsDataURL(file);
   };

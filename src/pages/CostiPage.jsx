@@ -6,6 +6,16 @@ import { getOrdersLimit } from '../config/shopify';
 import { Download, Upload, Trash2, Edit, Plus, Search, Filter, TrendingUp, Calendar, DollarSign, FileText, Eye, EyeOff, Truck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
+import { 
+  loadCostiData, 
+  saveCostoData, 
+  deleteCostoData,
+  loadMetricheMarketingData,
+  loadShopifyOrdersData,
+  loadSupplierOrdersData,
+  loadAppConfigData,
+  saveAppConfigData
+} from '../lib/magazzinoStorage';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -82,25 +92,47 @@ const CostiPage = () => {
   const [filterMinAmount, setFilterMinAmount] = useState('');
   const [sortBy, setSortBy] = useState('date_desc'); // Nuovo stato per ordinamento
 
-  // Carica i costi dal localStorage all'avvio
+  // Carica i costi da Firebase all'avvio
   useEffect(() => {
-    const allCosts = JSON.parse(localStorage.getItem('costs') || '[]');
-    setCosts(allCosts);
+    const loadCosts = async () => {
+      try {
+        const allCosts = await loadCostiData();
+        setCosts(allCosts);
+        console.log('✅ Costi caricati da Firebase:', allCosts.length);
+      } catch (error) {
+        console.error('❌ Errore caricamento costi:', error);
+        const localCosts = JSON.parse(localStorage.getItem('costs') || '[]');
+        setCosts(localCosts);
+      }
+    };
+    loadCosts();
   }, []);
 
-  // Carica le categorie di costo dalle impostazioni
+  // Carica le categorie di costo da Firebase
   useEffect(() => {
-    const loadCostCategories = () => {
-      const saved = localStorage.getItem('costCategories');
-      if (saved) {
-        const categories = JSON.parse(saved);
+    const loadCostCategories = async () => {
+      try {
+        const saved = await loadAppConfigData('cost_categories');
+        if (saved && Array.isArray(saved)) {
+          setCostCategories(saved);
+          if (saved.length > 0) {
+            setManualInvoice(prev => ({ ...prev, category: saved[0].value }));
+          }
+          return;
+        }
+      } catch (error) {
+        console.error('Errore caricamento categorie:', error);
+      }
+      
+      // Fallback a localStorage o default
+      const localSaved = localStorage.getItem('costCategories');
+      if (localSaved) {
+        const categories = JSON.parse(localSaved);
         setCostCategories(categories);
-        // Aggiorna la categoria predefinita nel form manuale
         if (categories.length > 0) {
           setManualInvoice(prev => ({ ...prev, category: categories[0].value }));
         }
       } else {
-        // Categorie predefinite se non sono state configurate
         const defaultCategories = [
           { value: 'marketing', label: 'Marketing', color: '#3B82F6' },
           { value: 'logistica', label: 'Logistica/Spedizioni', color: '#10B981' },
@@ -117,79 +149,85 @@ const CostiPage = () => {
   }, []);
 
   useEffect(() => {
-    // Carica metriche manuali (marketing)
-    const savedMetrics = localStorage.getItem('manualMetrics');
-    let manualMetrics = [];
-    if (savedMetrics) {
-      manualMetrics = JSON.parse(savedMetrics);
-    }
-    // Carica ordini Shopify
-    const savedOrders = localStorage.getItem('shopify_orders');
-    let orders = [];
-    if (savedOrders) {
-      orders = JSON.parse(savedOrders);
-    }
-    
-    // Calcola periodo selezionato
-    const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
-    
-    // Filtra metriche per periodo (come in MarketingPage)
-    const filteredMetrics = manualMetrics.filter(metric => {
-      const metricStartDate = new Date(metric.weekStart);
-      const metricEndDate = new Date(metric.weekStart);
-      metricEndDate.setDate(metricEndDate.getDate() + 6);
-      return metricStartDate <= endDate && metricEndDate >= startDate;
-    });
-    
-    // Somma spese marketing
-    const totalMarketing = filteredMetrics.reduce((sum, metric) =>
-      sum + (metric.googleAds?.spent || 0) + (metric.meta?.spent || 0) + (metric.tiktok?.spent || 0), 0
-    );
-    setMarketingCost(totalMarketing);
-    
-    // Filtra ordini per periodo
-    const filteredOrders = orders.filter(order => {
-      const orderDate = new Date(order.createdAt);
-      return orderDate >= startDate && orderDate <= endDate;
-    });
-    
-    // Calcola costi spedizione - TUTTI gli ordini (inclusi quelli che hanno pagato la spedizione)
-    let totalShipping = 0;
-    let ordersWithShipping = 0;
-    let ordersWithoutShipping = 0;
-    
-    filteredOrders.forEach(order => {
-      const shippingPaid = order.shippingPrice || 0;
-      const shippingType = safeToLowerCase(order.shippingType, '');
-      
-      // Calcola costo spedizione per TUTTI gli ordini
-      if (shippingType.includes('express a domicilio')) {
-        totalShipping += COSTO_EXPRESS;
-        ordersWithShipping++;
-      } else if (shippingType.includes('punto di ritiro')) {
-        totalShipping += COSTO_PUNTO_RITIRO;
-        ordersWithShipping++;
-      } else {
-        // Per ordini senza tipo spedizione specifico, usa costo standard
-        totalShipping += COSTO_EXPRESS;
-        ordersWithShipping++;
+    const loadAllData = async () => {
+      // Carica metriche manuali (marketing) da Firebase
+      let manualMetrics = [];
+      try {
+        manualMetrics = await loadMetricheMarketingData();
+      } catch (error) {
+        const savedMetrics = localStorage.getItem('manualMetrics');
+        if (savedMetrics) manualMetrics = JSON.parse(savedMetrics);
       }
-    });
+      
+      // Carica ordini Shopify da Firebase
+      let orders = [];
+      try {
+        orders = await loadShopifyOrdersData();
+      } catch (error) {
+        const savedOrders = localStorage.getItem('shopify_orders');
+        if (savedOrders) orders = JSON.parse(savedOrders);
+      }
     
-    setShippingCost(totalShipping);
+      // Calcola periodo selezionato
+      const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
+      
+      // Filtra metriche per periodo (come in MarketingPage)
+      const filteredMetrics = manualMetrics.filter(metric => {
+        const metricStartDate = new Date(metric.weekStart);
+        const metricEndDate = new Date(metric.weekStart);
+        metricEndDate.setDate(metricEndDate.getDate() + 6);
+        return metricStartDate <= endDate && metricEndDate >= startDate;
+      });
+      
+      // Somma spese marketing
+      const totalMarketing = filteredMetrics.reduce((sum, metric) =>
+        sum + (metric.googleAds?.spent || 0) + (metric.meta?.spent || 0) + (metric.tiktok?.spent || 0), 0
+      );
+      setMarketingCost(totalMarketing);
+      
+      // Filtra ordini per periodo
+      const filteredOrders = orders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= startDate && orderDate <= endDate;
+      });
+      
+      // Calcola costi spedizione - TUTTI gli ordini (inclusi quelli che hanno pagato la spedizione)
+      let totalShipping = 0;
+      let ordersWithShipping = 0;
+      
+      filteredOrders.forEach(order => {
+        const shippingType = safeToLowerCase(order.shippingType, '');
+        
+        // Calcola costo spedizione per TUTTI gli ordini
+        if (shippingType.includes('express a domicilio')) {
+          totalShipping += COSTO_EXPRESS;
+          ordersWithShipping++;
+        } else if (shippingType.includes('punto di ritiro')) {
+          totalShipping += COSTO_PUNTO_RITIRO;
+          ordersWithShipping++;
+        } else {
+          // Per ordini senza tipo spedizione specifico, usa costo standard
+          totalShipping += COSTO_EXPRESS;
+          ordersWithShipping++;
+        }
+      });
+      
+      setShippingCost(totalShipping);
+      
+      // Filtra costi manuali e OCR per periodo
+      const filteredCosts = costs.filter(cost => {
+        const costDate = new Date(cost.date);
+        return costDate >= startDate && costDate <= endDate;
+      });
+      
+      // Somma TUTTI i costi manuali e OCR nella sezione "Altri costi"
+      const totalOtherCosts = filteredCosts.reduce((sum, cost) => {
+        return sum + (parseFloat(cost.amount) || 0);
+      }, 0);
+      setOtherCosts(totalOtherCosts);
+    };
     
-    // Filtra costi manuali e OCR per periodo
-    const filteredCosts = costs.filter(cost => {
-      const costDate = new Date(cost.date);
-      return costDate >= startDate && costDate <= endDate;
-    });
-    
-    // Somma TUTTI i costi manuali e OCR nella sezione "Altri costi"
-    const totalOtherCosts = filteredCosts.reduce((sum, cost) => {
-      return sum + (parseFloat(cost.amount) || 0);
-    }, 0);
-    setOtherCosts(totalOtherCosts);
-    
+    loadAllData();
   }, [selectedDateRange, customStartDate, customEndDate, costs]);
 
   useEffect(() => {
@@ -280,9 +318,9 @@ const CostiPage = () => {
   };
 
   // Funzione per salvare un costo
-  const saveCost = (costData) => {
+  const saveCost = async (costData) => {
     const newCost = {
-      id: Date.now(),
+      id: Date.now().toString(),
       ...costData,
       createdAt: new Date().toISOString(),
       nominativo: costData.nominativo || 'Sistema',
@@ -290,10 +328,11 @@ const CostiPage = () => {
       fileData: costData.fileData || null
     };
 
-    const existingCosts = JSON.parse(localStorage.getItem('costs') || '[]');
-    const updatedCosts = [...existingCosts, newCost];
-    localStorage.setItem('costs', JSON.stringify(updatedCosts));
-    setCosts(updatedCosts); // Aggiorna la lista nello stato
+    // Salva su Firebase
+    await saveCostoData(newCost);
+    const updatedCosts = [...costs, newCost];
+    setCosts(updatedCosts);
+    localStorage.setItem('costs', JSON.stringify(updatedCosts)); // backup
 
     // Reset OCR result
     setOcrResult(null);
@@ -347,9 +386,9 @@ const CostiPage = () => {
     alert('Costo manuale salvato con successo!');
   };
 
-  // Funzione per caricare i costi dal localStorage
+  // Funzione per caricare i costi (usa stato)
   const loadCosts = () => {
-    return JSON.parse(localStorage.getItem('costs') || '[]');
+    return costs;
   };
 
   // Funzione per filtrare i costi per periodo
@@ -427,12 +466,13 @@ const CostiPage = () => {
   }, [selectedDateRange, customStartDate, customEndDate]);
 
   // Funzione per eliminare un costo
-  const deleteCost = (costId) => {
+  const deleteCost = async (costId) => {
     if (window.confirm('Sei sicuro di voler eliminare questo costo?')) {
-      const existingCosts = JSON.parse(localStorage.getItem('costs') || '[]');
-      const updatedCosts = existingCosts.filter(cost => cost.id !== costId);
-      localStorage.setItem('costs', JSON.stringify(updatedCosts));
-      setCosts(updatedCosts); // Aggiorna la lista nello stato
+      // Elimina da Firebase
+      await deleteCostoData(costId);
+      const updatedCosts = costs.filter(cost => cost.id !== costId);
+      setCosts(updatedCosts);
+      localStorage.setItem('costs', JSON.stringify(updatedCosts)); // backup
       
       // Forza il ricalcolo dei costi
       const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);

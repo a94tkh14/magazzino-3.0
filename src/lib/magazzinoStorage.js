@@ -9,6 +9,7 @@ import {
   saveShopifyOrdersBatch,
   loadSupplierOrders as loadSupplierOrdersFromFirebase,
   saveSupplierOrder as saveSupplierOrderToFirebase,
+  saveSupplierOrdersBatch as saveSupplierOrdersBatchToFirebase,
   loadPrimaNota as loadPrimaNotaFromFirebase,
   savePrimaNotaItem,
   savePrimaNotaBatch,
@@ -16,7 +17,31 @@ import {
   saveContoBancario,
   loadSettings as loadSettingsFromFirebase,
   saveSettings as saveSettingsToFirebase,
-  migrateFromLocalStorage
+  migrateFromLocalStorage,
+  // Nuove funzioni
+  saveFotoProdotto as saveFotoToFirebase,
+  loadFotoProdotto as loadFotoFromFirebase,
+  loadAllFotoProdotti,
+  saveStoricoPrezzi as saveStoricoPrezziToFirebase,
+  loadStoricoPrezzi as loadStoricoPrezziFromFirebase,
+  addPrezzoToStorico,
+  saveMagazzinoStorico as saveMagazzinoStoricoToFirebase,
+  loadMagazzinoStorico as loadMagazzinoStoricoFromFirebase,
+  addMagazzinoStoricoEntry,
+  saveMovimentiBanca as saveMovimentiBancaToFirebase,
+  loadMovimentiBanca as loadMovimentiBancaFromFirebase,
+  saveMovimentoBanca as saveMovimentoBancaToFirebase,
+  deleteMovimentoBanca as deleteMovimentoBancaFromFirebase,
+  saveCosti as saveCostiToFirebase,
+  loadCosti as loadCostiFromFirebase,
+  saveCosto as saveCostoToFirebase,
+  deleteCosto as deleteCostoFromFirebase,
+  saveMetricheMarketing as saveMetricheToFirebase,
+  loadMetricheMarketing as loadMetricheFromFirebase,
+  saveMetricaMarketing as saveMetricaToFirebase,
+  saveAppConfig,
+  loadAppConfig,
+  loadAllAppConfig
 } from './firebaseSync';
 
 // Cache locale per performance
@@ -351,6 +376,348 @@ export const migrateLocalDataToFirebase = async () => {
   } catch (error) {
     console.error('❌ Errore migrazione:', error);
     throw error;
+  }
+};
+
+// ============ FOTO PRODOTTI ============
+
+let fotoCache = {};
+
+export const saveFotoProdottoData = async (sku, fotoBase64) => {
+  try {
+    await saveFotoToFirebase(sku, fotoBase64);
+    fotoCache[sku] = fotoBase64;
+    localStorage.setItem(`foto_${sku}`, fotoBase64); // backup
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio foto:', error);
+    localStorage.setItem(`foto_${sku}`, fotoBase64);
+    return { success: false, error: error.message };
+  }
+};
+
+export const loadFotoProdottoData = async (sku) => {
+  try {
+    if (fotoCache[sku]) return fotoCache[sku];
+    const foto = await loadFotoFromFirebase(sku);
+    if (foto) {
+      fotoCache[sku] = foto;
+      return foto;
+    }
+    // Fallback localStorage
+    return localStorage.getItem(`foto_${sku}`);
+  } catch (error) {
+    console.error('❌ Errore caricamento foto:', error);
+    return localStorage.getItem(`foto_${sku}`);
+  }
+};
+
+export const preloadAllFoto = async () => {
+  try {
+    const allFoto = await loadAllFotoProdotti();
+    allFoto.forEach(item => {
+      if (item.sku && item.foto) {
+        fotoCache[item.sku] = item.foto;
+      }
+    });
+    return fotoCache;
+  } catch (error) {
+    console.error('❌ Errore preload foto:', error);
+    return {};
+  }
+};
+
+// ============ STORICO PREZZI ============
+
+export const loadStoricoPrezziData = async (sku) => {
+  try {
+    const prezzi = await loadStoricoPrezziFromFirebase(sku);
+    if (prezzi && prezzi.length > 0) return prezzi;
+    // Fallback localStorage
+    const local = localStorage.getItem(`storico_prezzi_${sku}`);
+    return local ? JSON.parse(local) : [];
+  } catch (error) {
+    console.error('❌ Errore caricamento storico prezzi:', error);
+    const local = localStorage.getItem(`storico_prezzi_${sku}`);
+    return local ? JSON.parse(local) : [];
+  }
+};
+
+export const addPrezzoToStoricoData = async (sku, prezzoEntry) => {
+  try {
+    await addPrezzoToStorico(sku, prezzoEntry);
+    // Backup locale
+    const local = JSON.parse(localStorage.getItem(`storico_prezzi_${sku}`) || '[]');
+    local.push(prezzoEntry);
+    localStorage.setItem(`storico_prezzi_${sku}`, JSON.stringify(local));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore aggiunta prezzo storico:', error);
+    const local = JSON.parse(localStorage.getItem(`storico_prezzi_${sku}`) || '[]');
+    local.push(prezzoEntry);
+    localStorage.setItem(`storico_prezzi_${sku}`, JSON.stringify(local));
+    return { success: false };
+  }
+};
+
+// ============ MAGAZZINO STORICO (carichi) ============
+
+let magazzinoStoricoCache = null;
+
+export const loadMagazzinoStoricoData = async () => {
+  try {
+    if (magazzinoStoricoCache) return magazzinoStoricoCache;
+    const storico = await loadMagazzinoStoricoFromFirebase();
+    if (storico && Object.keys(storico).length > 0) {
+      magazzinoStoricoCache = storico;
+      return storico;
+    }
+    // Fallback localStorage
+    const local = localStorage.getItem('magazzino_storico');
+    return local ? JSON.parse(local) : {};
+  } catch (error) {
+    console.error('❌ Errore caricamento magazzino storico:', error);
+    const local = localStorage.getItem('magazzino_storico');
+    return local ? JSON.parse(local) : {};
+  }
+};
+
+export const saveMagazzinoStoricoData = async (storicoObj) => {
+  try {
+    await saveMagazzinoStoricoToFirebase(storicoObj);
+    magazzinoStoricoCache = storicoObj;
+    localStorage.setItem('magazzino_storico', JSON.stringify(storicoObj));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio magazzino storico:', error);
+    localStorage.setItem('magazzino_storico', JSON.stringify(storicoObj));
+    return { success: false };
+  }
+};
+
+export const addMagazzinoStoricoData = async (sku, entry) => {
+  try {
+    await addMagazzinoStoricoEntry(sku, entry);
+    // Aggiorna cache
+    if (!magazzinoStoricoCache) magazzinoStoricoCache = {};
+    if (!magazzinoStoricoCache[sku]) magazzinoStoricoCache[sku] = [];
+    magazzinoStoricoCache[sku].push(entry);
+    // Backup locale
+    const local = JSON.parse(localStorage.getItem('magazzino_storico') || '{}');
+    if (!local[sku]) local[sku] = [];
+    local[sku].push(entry);
+    localStorage.setItem('magazzino_storico', JSON.stringify(local));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore aggiunta storico magazzino:', error);
+    return { success: false };
+  }
+};
+
+// ============ MOVIMENTI BANCA ============
+
+let movimentiBancaCache = null;
+
+export const loadMovimentiBancaData = async () => {
+  try {
+    if (movimentiBancaCache) return movimentiBancaCache;
+    console.log('🔄 Caricando movimenti banca da Firebase...');
+    const data = await loadMovimentiBancaFromFirebase();
+    movimentiBancaCache = data;
+    console.log(`✅ Movimenti banca caricati: ${data.length}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Errore caricamento movimenti banca:', error);
+    const local = localStorage.getItem('movimenti_banca');
+    return local ? JSON.parse(local) : [];
+  }
+};
+
+export const saveMovimentiBancaData = async (movimenti) => {
+  try {
+    await saveMovimentiBancaToFirebase(movimenti);
+    movimentiBancaCache = movimenti;
+    localStorage.setItem('movimenti_banca', JSON.stringify(movimenti));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio movimenti banca:', error);
+    localStorage.setItem('movimenti_banca', JSON.stringify(movimenti));
+    return { success: false };
+  }
+};
+
+export const saveMovimentoBancaData = async (movimento) => {
+  try {
+    await saveMovimentoBancaToFirebase(movimento);
+    if (movimentiBancaCache) {
+      const idx = movimentiBancaCache.findIndex(m => m.id === movimento.id);
+      if (idx >= 0) movimentiBancaCache[idx] = movimento;
+      else movimentiBancaCache.push(movimento);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio movimento:', error);
+    return { success: false };
+  }
+};
+
+// ============ COSTI ============
+
+let costiCache = null;
+
+export const loadCostiData = async () => {
+  try {
+    if (costiCache) return costiCache;
+    console.log('🔄 Caricando costi da Firebase...');
+    const data = await loadCostiFromFirebase();
+    costiCache = data;
+    console.log(`✅ Costi caricati: ${data.length}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Errore caricamento costi:', error);
+    const local = localStorage.getItem('costs');
+    return local ? JSON.parse(local) : [];
+  }
+};
+
+export const saveCostiData = async (costi) => {
+  try {
+    await saveCostiToFirebase(costi);
+    costiCache = costi;
+    localStorage.setItem('costs', JSON.stringify(costi));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio costi:', error);
+    localStorage.setItem('costs', JSON.stringify(costi));
+    return { success: false };
+  }
+};
+
+export const saveCostoData = async (costo) => {
+  try {
+    await saveCostoToFirebase(costo);
+    if (costiCache) {
+      const idx = costiCache.findIndex(c => c.id === costo.id);
+      if (idx >= 0) costiCache[idx] = costo;
+      else costiCache.push(costo);
+    }
+    // Backup locale
+    const local = JSON.parse(localStorage.getItem('costs') || '[]');
+    const localIdx = local.findIndex(c => c.id === costo.id);
+    if (localIdx >= 0) local[localIdx] = costo;
+    else local.push(costo);
+    localStorage.setItem('costs', JSON.stringify(local));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio costo:', error);
+    return { success: false };
+  }
+};
+
+export const deleteCostoData = async (costoId) => {
+  try {
+    await deleteCostoFromFirebase(costoId);
+    if (costiCache) {
+      costiCache = costiCache.filter(c => c.id !== costoId);
+    }
+    const local = JSON.parse(localStorage.getItem('costs') || '[]');
+    localStorage.setItem('costs', JSON.stringify(local.filter(c => c.id !== costoId)));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore eliminazione costo:', error);
+    return { success: false };
+  }
+};
+
+// ============ METRICHE MARKETING ============
+
+let metricheCache = null;
+
+export const loadMetricheMarketingData = async () => {
+  try {
+    if (metricheCache) return metricheCache;
+    console.log('🔄 Caricando metriche marketing da Firebase...');
+    const data = await loadMetricheFromFirebase();
+    metricheCache = data;
+    console.log(`✅ Metriche caricate: ${data.length}`);
+    return data;
+  } catch (error) {
+    console.error('❌ Errore caricamento metriche:', error);
+    const local = localStorage.getItem('manualMetrics');
+    return local ? JSON.parse(local) : [];
+  }
+};
+
+export const saveMetricheMarketingData = async (metriche) => {
+  try {
+    await saveMetricheToFirebase(metriche);
+    metricheCache = metriche;
+    localStorage.setItem('manualMetrics', JSON.stringify(metriche));
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio metriche:', error);
+    localStorage.setItem('manualMetrics', JSON.stringify(metriche));
+    return { success: false };
+  }
+};
+
+export const saveMetricaMarketingData = async (metrica) => {
+  try {
+    await saveMetricaToFirebase(metrica);
+    if (metricheCache) {
+      const idx = metricheCache.findIndex(m => m.id === metrica.id);
+      if (idx >= 0) metricheCache[idx] = metrica;
+      else metricheCache.push(metrica);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio metrica:', error);
+    return { success: false };
+  }
+};
+
+// ============ APP CONFIG ============
+
+let appConfigCache = {};
+
+export const loadAppConfigData = async (configKey) => {
+  try {
+    if (appConfigCache[configKey]) return appConfigCache[configKey];
+    const config = await loadAppConfig(configKey);
+    if (config?.value) {
+      appConfigCache[configKey] = config.value;
+      return config.value;
+    }
+    return null;
+  } catch (error) {
+    console.error(`❌ Errore caricamento config ${configKey}:`, error);
+    return null;
+  }
+};
+
+export const saveAppConfigData = async (configKey, value) => {
+  try {
+    await saveAppConfig(configKey, { value });
+    appConfigCache[configKey] = value;
+    return { success: true };
+  } catch (error) {
+    console.error(`❌ Errore salvataggio config ${configKey}:`, error);
+    return { success: false };
+  }
+};
+
+export const loadAllAppConfigData = async () => {
+  try {
+    const all = await loadAllAppConfig();
+    all.forEach(item => {
+      if (item.id && item.value !== undefined) {
+        appConfigCache[item.id] = item.value;
+      }
+    });
+    return appConfigCache;
+  } catch (error) {
+    console.error('❌ Errore caricamento config:', error);
+    return {};
   }
 };
 

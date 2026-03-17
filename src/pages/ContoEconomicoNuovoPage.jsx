@@ -10,6 +10,14 @@ import {
   Target, Banknote, CircleDollarSign
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { 
+  loadContiBancariData, 
+  saveContoBancarioData,
+  loadMovimentiBancaData,
+  saveMovimentiBancaData,
+  loadPrimaNotaData,
+  savePrimaNotaData
+} from '../lib/magazzinoStorage';
 
 // Piano dei Conti strutturato
 const PIANO_DEI_CONTI = {
@@ -203,31 +211,56 @@ const ContoEconomicoNuovoPage = () => {
     movimentoBancaId: ''
   });
 
-  // ==================== CARICAMENTO DATI ====================
+  // ==================== CARICAMENTO DATI (Firebase) ====================
   useEffect(() => {
-    const savedConti = localStorage.getItem('conti_bancari');
-    const savedMovBanca = localStorage.getItem('movimenti_banca');
-    const savedPrimaNota = localStorage.getItem('conto_economico_movimenti');
+    const loadAllData = async () => {
+      try {
+        const [conti, movBanca, primaNota] = await Promise.all([
+          loadContiBancariData(),
+          loadMovimentiBancaData(),
+          loadPrimaNotaData()
+        ]);
+        
+        if (conti && conti.length > 0) setContiBancari(conti);
+        if (movBanca && movBanca.length > 0) setMovimentiBanca(movBanca);
+        if (primaNota && primaNota.length > 0) setMovimentiPrimaNota(primaNota);
+        
+        console.log('✅ Dati conto economico caricati da Firebase');
+      } catch (error) {
+        console.error('❌ Errore caricamento dati:', error);
+        // Fallback localStorage
+        const savedConti = localStorage.getItem('conti_bancari');
+        const savedMovBanca = localStorage.getItem('movimenti_banca');
+        const savedPrimaNota = localStorage.getItem('conto_economico_movimenti');
+        
+        if (savedConti) setContiBancari(JSON.parse(savedConti));
+        if (savedMovBanca) setMovimentiBanca(JSON.parse(savedMovBanca));
+        if (savedPrimaNota) setMovimentiPrimaNota(JSON.parse(savedPrimaNota));
+      }
+    };
     
-    if (savedConti) setContiBancari(JSON.parse(savedConti));
-    if (savedMovBanca) setMovimentiBanca(JSON.parse(savedMovBanca));
-    if (savedPrimaNota) setMovimentiPrimaNota(JSON.parse(savedPrimaNota));
+    loadAllData();
   }, []);
 
-  // ==================== SALVATAGGIO ====================
-  const saveContiBancari = (data) => {
-    localStorage.setItem('conti_bancari', JSON.stringify(data));
+  // ==================== SALVATAGGIO (Firebase) ====================
+  const saveContiBancari = async (data) => {
     setContiBancari(data);
+    localStorage.setItem('conti_bancari', JSON.stringify(data));
+    for (const conto of data) {
+      await saveContoBancarioData(conto);
+    }
   };
   
-  const saveMovimentiBanca = (data) => {
-    localStorage.setItem('movimenti_banca', JSON.stringify(data));
+  const saveMovimentiBanca = async (data) => {
     setMovimentiBanca(data);
+    localStorage.setItem('movimenti_banca', JSON.stringify(data));
+    await saveMovimentiBancaData(data);
   };
   
-  const saveMovimentiPrimaNota = (data) => {
-    localStorage.setItem('conto_economico_movimenti', JSON.stringify(data));
+  const saveMovimentiPrimaNota = async (data) => {
     setMovimentiPrimaNota(data);
+    localStorage.setItem('conto_economico_movimenti', JSON.stringify(data));
+    await savePrimaNotaData(data);
   };
 
   // ==================== DATE RANGE ====================

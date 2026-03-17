@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Package, Tag, Settings, Download, Upload, ShoppingBag, Check, X, RefreshCw, Trash2, Image } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { loadMagazzinoData, saveMagazzinoData, saveSingleProduct, deleteProduct, saveToLocalStorage, loadFromLocalStorage, loadShopifyOrdersData } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, saveMagazzinoData, saveSingleProduct, deleteProduct, loadShopifyOrdersData, preloadAllFoto } from '../lib/magazzinoStorage';
 import { loadLargeData } from '../lib/dataManager';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
@@ -48,6 +48,9 @@ const MagazzinoPage = () => {
   const navigate = useNavigate();
   const lowStockThreshold = 5;
 
+  // Cache foto per visualizzazione veloce
+  const [fotoCache, setFotoCache] = useState({});
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -57,13 +60,15 @@ const MagazzinoPage = () => {
         console.log('📦 Magazzino caricato, prodotti:', dataArray.length);
         setMagazzinoData(dataArray);
         setFilteredData(dataArray);
+        
+        // Precarica foto da Firebase
+        const allFoto = await preloadAllFoto();
+        setFotoCache(allFoto);
+        console.log('📸 Foto precaricate:', Object.keys(allFoto).length);
       } catch (error) {
         console.error('Errore nel caricare i dati:', error);
-        // Fallback al localStorage
-        const data = loadFromLocalStorage('magazzino_data', []);
-        const localDataArray = Array.isArray(data) ? data : [];
-        setMagazzinoData(localDataArray);
-        setFilteredData(localDataArray);
+        setMagazzinoData([]);
+        setFilteredData([]);
       }
       setIsLoading(false);
     };
@@ -1245,7 +1250,7 @@ const MagazzinoPage = () => {
                 </thead>
                 <tbody>
                   {(Array.isArray(filteredData) ? filteredData : []).map((item, index) => {
-                    const foto = localStorage.getItem(`foto_${item.sku}`) || item.immagine;
+                    const foto = fotoCache[item.sku] || item.immagine;
                     return (
                     <tr 
                       key={index} 
