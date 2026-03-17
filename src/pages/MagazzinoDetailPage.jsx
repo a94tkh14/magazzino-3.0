@@ -1,15 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { loadMagazzinoData, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, loadFromLocalStorage, loadShopifyOrdersData, loadSupplierOrdersData, saveSingleProduct } from '../lib/magazzinoStorage';
 import { getSupplierOrders } from '../lib/supplierOrders';
-import { loadLargeData } from '../lib/dataManager';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid, Legend } from 'recharts';
 import { 
   ArrowLeft, Package, DollarSign, TrendingUp, TrendingDown, 
   Calendar, Truck, ShoppingCart, Edit, Save, X, Camera,
   BarChart3, History, AlertCircle, CheckCircle, Clock,
   Hash, Tag, Building, Layers, Calculator, RefreshCw,
-  ChevronDown, ChevronUp, ExternalLink
+  ChevronDown, ChevronUp, ExternalLink, Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 
@@ -33,6 +32,12 @@ export default function MagazzinoDetailPage() {
   const [prodotto, setProdotto] = useState(null);
   const [foto, setFoto] = useState(null);
   const [storico, setStorico] = useState([]);
+  
+  // Campi editabili principali
+  const [editNome, setEditNome] = useState('');
+  const [editSku, setEditSku] = useState('');
+  const [editQuantita, setEditQuantita] = useState(0);
+  const [editPrezzo, setEditPrezzo] = useState(0);
   const [marca, setMarca] = useState('');
   const [tipologia, setTipologia] = useState('');
   const [fornitore, setFornitore] = useState('');
@@ -41,12 +46,21 @@ export default function MagazzinoDetailPage() {
   const [ubicazione, setUbicazione] = useState('');
   
   // Stati editing
+  const [isEditingNome, setIsEditingNome] = useState(false);
+  const [isEditingSku, setIsEditingSku] = useState(false);
+  const [isEditingQuantita, setIsEditingQuantita] = useState(false);
+  const [isEditingPrezzo, setIsEditingPrezzo] = useState(false);
   const [isEditingMarca, setIsEditingMarca] = useState(false);
   const [isEditingTipologia, setIsEditingTipologia] = useState(false);
   const [isEditingFornitore, setIsEditingFornitore] = useState(false);
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [isEditingBarcode, setIsEditingBarcode] = useState(false);
   const [isEditingUbicazione, setIsEditingUbicazione] = useState(false);
+  
+  // Stati salvataggio e modalità modifica
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [isEditMode, setIsEditMode] = useState(false);
   
   // Dati correlati
   const [ordiniFornitore, setOrdiniFornitore] = useState([]);
@@ -72,6 +86,14 @@ export default function MagazzinoDetailPage() {
         const prod = magazzino.find(p => p.sku === sku);
         setProdotto(prod);
         
+        // Inizializza campi editabili principali
+        if (prod) {
+          setEditNome(prod.nome || '');
+          setEditSku(prod.sku || '');
+          setEditQuantita(prod.quantita || 0);
+          setEditPrezzo(prod.prezzo || 0);
+        }
+        
         // Foto - prima da localStorage, poi dal prodotto (importato da Shopify)
         const savedFoto = localStorage.getItem(`foto_${sku}`);
         if (savedFoto) {
@@ -80,27 +102,28 @@ export default function MagazzinoDetailPage() {
           setFoto(prod.immagine);
         }
         
-        // Campi aggiuntivi - priorità: localStorage > prodotto
-        setMarca(localStorage.getItem(`marca_${sku}`) || prod?.marca || prod?.vendor || '');
-        setTipologia(localStorage.getItem(`tipologia_${sku}`) || prod?.tipologia || prod?.type || '');
-        setFornitore(localStorage.getItem(`fornitore_${sku}`) || prod?.fornitore || '');
-        setNote(localStorage.getItem(`note_${sku}`) || prod?.note || '');
-        setCodiceBarcode(localStorage.getItem(`barcode_${sku}`) || prod?.barcode || '');
-        setUbicazione(localStorage.getItem(`ubicazione_${sku}`) || prod?.ubicazione || '');
+        // Campi aggiuntivi - priorità: prodotto > localStorage
+        setMarca(prod?.marca || prod?.vendor || localStorage.getItem(`marca_${sku}`) || '');
+        setTipologia(prod?.tipologia || prod?.type || localStorage.getItem(`tipologia_${sku}`) || '');
+        setFornitore(prod?.fornitore || localStorage.getItem(`fornitore_${sku}`) || '');
+        setNote(prod?.note || localStorage.getItem(`note_${sku}`) || '');
+        setCodiceBarcode(prod?.barcode || localStorage.getItem(`barcode_${sku}`) || '');
+        setUbicazione(prod?.ubicazione || localStorage.getItem(`ubicazione_${sku}`) || '');
         
         // Storico caricamenti
         const allStorico = loadFromLocalStorage('magazzino_storico', {});
         setStorico(allStorico[sku] || []);
         
-        // Ordini fornitori che contengono questo prodotto
-        const supplierOrders = getSupplierOrders();
+        // Ordini fornitori che contengono questo prodotto (da Firebase)
+        const supplierOrders = await loadSupplierOrdersData() || [];
         const ordiniConProdotto = supplierOrders.filter(order => 
           order.products?.some(p => p.sku === sku)
         );
         setOrdiniFornitore(ordiniConProdotto);
         
-        // Ordini Shopify
-        const shopifyOrders = await loadLargeData('shopify_orders') || [];
+        // Ordini Shopify (da Firebase)
+        const shopifyOrders = await loadShopifyOrdersData() || [];
+        console.log(`📦 Caricati ${shopifyOrders.length} ordini Shopify da Firebase per SKU: ${sku}`);
         const ordiniConVendita = shopifyOrders.filter(order => {
           const items = order.line_items || order.products || order.items || [];
           return items.some(item => 
@@ -109,6 +132,7 @@ export default function MagazzinoDetailPage() {
             item.product_id?.toString() === sku
           );
         });
+        console.log(`🎯 Trovati ${ordiniConVendita.length} ordini con questo SKU`);
         setOrdiniShopify(ordiniConVendita);
         
       } catch (error) {
@@ -120,7 +144,52 @@ export default function MagazzinoDetailPage() {
     loadAllData();
   }, [sku]);
 
-  // Handlers per salvare i campi
+  // Salva prodotto completo su Firebase
+  const handleSaveProduct = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      const updatedProduct = {
+        ...prodotto,
+        nome: editNome,
+        sku: editSku,
+        quantita: editQuantita,
+        prezzo: editPrezzo,
+        marca: marca,
+        tipologia: tipologia,
+        fornitore: fornitore,
+        note: note,
+        barcode: codiceBarcode,
+        ubicazione: ubicazione,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      await saveSingleProduct(updatedProduct);
+      setProdotto(updatedProduct);
+      
+      // Reset editing states
+      setIsEditingNome(false);
+      setIsEditingSku(false);
+      setIsEditingQuantita(false);
+      setIsEditingPrezzo(false);
+      setIsEditingMarca(false);
+      setIsEditingTipologia(false);
+      setIsEditingFornitore(false);
+      setIsEditingNote(false);
+      setIsEditingBarcode(false);
+      setIsEditingUbicazione(false);
+      
+      setSaveMessage('✓ Salvato');
+      setTimeout(() => setSaveMessage(''), 2000);
+      console.log('✅ Prodotto salvato su Firebase:', updatedProduct);
+    } catch (error) {
+      console.error('❌ Errore salvataggio:', error);
+      setSaveMessage('Errore!');
+    }
+    setIsSaving(false);
+  };
+
+  // Handlers per salvare i campi (legacy localStorage)
   const handleSaveField = (field, value, setter, setEditing) => {
     localStorage.setItem(`${field}_${sku}`, value);
     setter(value);
@@ -183,37 +252,53 @@ export default function MagazzinoDetailPage() {
     };
   }, [storico, prodotto]);
 
-  // Vendite dal Shopify
+  // Vendite dal Shopify + dati salvati nel prodotto
   const venditeStats = useMemo(() => {
     let totaleVenduto = 0;
     let ricavoTotale = 0;
     let ultimoPrezzoVendita = 0;
     let ultimaVenditaData = null;
+    let numeroOrdini = 0;
     
-    // Ordina per data per trovare l'ultima vendita
-    const ordiniOrdinati = [...ordiniShopify].sort((a, b) => {
-      const dataA = new Date(a.created_at || a.createdAt);
-      const dataB = new Date(b.created_at || b.createdAt);
-      return dataB - dataA;
-    });
-    
-    ordiniOrdinati.forEach((order, idx) => {
-      const items = order.line_items || order.products || order.items || [];
-      items.forEach(item => {
-        if (item.sku === sku || item.variant_id?.toString() === sku) {
-          const qty = item.quantity || 1;
-          const price = parseFloat(item.price) || 0;
-          totaleVenduto += qty;
-          ricavoTotale += price * qty;
-          
-          // Prendi il prezzo dell'ultima vendita
-          if (idx === 0 && ultimoPrezzoVendita === 0) {
-            ultimoPrezzoVendita = price;
-            ultimaVenditaData = order.created_at || order.createdAt;
-          }
-        }
+    // Prima prova a calcolare dagli ordini Shopify
+    if (ordiniShopify.length > 0) {
+      const ordiniOrdinati = [...ordiniShopify].sort((a, b) => {
+        const dataA = new Date(a.created_at || a.createdAt);
+        const dataB = new Date(b.created_at || b.createdAt);
+        return dataB - dataA;
       });
-    });
+      
+      ordiniOrdinati.forEach((order, idx) => {
+        const items = order.line_items || order.products || order.items || [];
+        items.forEach(item => {
+          if (item.sku === sku || item.variant_id?.toString() === sku) {
+            const qty = item.quantity || 1;
+            const price = parseFloat(item.price) || 0;
+            totaleVenduto += qty;
+            ricavoTotale += price * qty;
+            
+            if (idx === 0 && ultimoPrezzoVendita === 0) {
+              ultimoPrezzoVendita = price;
+              ultimaVenditaData = order.created_at || order.createdAt;
+            }
+          }
+        });
+      });
+      numeroOrdini = ordiniShopify.length;
+    } 
+    
+    // Se non ci sono ordini, usa i dati salvati nel prodotto (dal Match SKU)
+    if (totaleVenduto === 0 && prodotto) {
+      totaleVenduto = prodotto.quantitaVenduta || 0;
+      ricavoTotale = prodotto.ricavoTotale || 0;
+      ultimoPrezzoVendita = prodotto.prezzoVendita || 0;
+      ultimaVenditaData = prodotto.ultimoOrdine || null;
+      numeroOrdini = prodotto.ordiniTotali || 0;
+      
+      if (totaleVenduto > 0) {
+        console.log('📊 Usando dati vendite salvati nel prodotto:', { totaleVenduto, ricavoTotale, ultimoPrezzoVendita });
+      }
+    }
     
     // Calcola margine usando il prezzo di acquisto corrente
     const costoAcquisto = prodotto?.prezzo || stats.prezzoMedio || 0;
@@ -225,7 +310,7 @@ export default function MagazzinoDetailPage() {
     return {
       totaleVenduto,
       ricavoTotale,
-      numeroOrdini: ordiniShopify.length,
+      numeroOrdini,
       prezzoMedioVendita: totaleVenduto > 0 ? ricavoTotale / totaleVenduto : 0,
       ultimoPrezzoVendita,
       ultimaVenditaData,
@@ -371,9 +456,52 @@ export default function MagazzinoDetailPage() {
           <ArrowLeft className="w-5 h-5" />
           <span>Torna al Magazzino</span>
         </button>
+        
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              setLoading(true);
+              const { invalidateCache, loadShopifyOrdersData } = await import('../lib/magazzinoStorage');
+              invalidateCache();
+              const orders = await loadShopifyOrdersData(true);
+              const ordiniConVendita = orders.filter(order => {
+                const items = order.line_items || order.products || order.items || [];
+                return items.some(item => 
+                  item.sku === sku || 
+                  item.variant_id?.toString() === sku ||
+                  item.product_id?.toString() === sku
+                );
+              });
+              setOrdiniShopify(ordiniConVendita);
+              setLoading(false);
+            }}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Ricarica
+          </button>
+          
+          {!isEditMode ? (
+            <button
+              onClick={() => setIsEditMode(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#c68776] text-white rounded-lg hover:bg-[#b07567] transition-colors"
+            >
+              <Edit className="w-4 h-4" />
+              Modifica
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsEditMode(false)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Annulla
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Hero Card - Prodotto */}
+      {/* Hero Card - Prodotto EDITABILE */}
       <Card className="overflow-hidden">
         <div className="bg-gradient-to-r from-[#c68776] to-[#d4a097] p-6 text-white">
           <div className="flex flex-col md:flex-row gap-6">
@@ -400,36 +528,112 @@ export default function MagazzinoDetailPage() {
 
             {/* Info principali */}
             <div className="flex-1">
-              <h1 className="text-3xl font-bold mb-2">{prodotto.nome}</h1>
+              {/* Nome */}
+              <div className="mb-2">
+                {isEditMode ? (
+                  <input
+                    type="text"
+                    value={editNome}
+                    onChange={(e) => setEditNome(e.target.value)}
+                    className="text-3xl font-bold bg-white/20 rounded px-2 py-1 w-full text-white placeholder-white/50 border border-white/30"
+                    placeholder="Nome prodotto"
+                  />
+                ) : (
+                  <h1 className="text-3xl font-bold">
+                    {editNome || prodotto.nome}
+                  </h1>
+                )}
+              </div>
+              
+              {/* SKU, Barcode, Marca */}
               <div className="flex flex-wrap gap-4 text-white/90 mb-2">
+                {/* SKU */}
                 <div className="flex items-center gap-2">
                   <Hash className="w-4 h-4" />
-                  <span>SKU: <strong>{prodotto.sku}</strong></span>
+                  <span>SKU: </span>
+                  {isEditMode ? (
+                    <input
+                      type="text"
+                      value={editSku}
+                      onChange={(e) => setEditSku(e.target.value)}
+                      className="font-bold bg-white/20 rounded px-2 py-0.5 w-40 text-white border border-white/30"
+                    />
+                  ) : (
+                    <strong>{editSku || prodotto.sku}</strong>
+                  )}
                 </div>
-                {(codiceBarcode || prodotto.barcode) && (
-                  <div className="flex items-center gap-2">
-                    <Tag className="w-4 h-4" />
-                    <span>Barcode: <strong>{codiceBarcode || prodotto.barcode}</strong></span>
-                  </div>
-                )}
-                {marca && (
-                  <div className="flex items-center gap-2">
-                    <Building className="w-4 h-4" />
-                    <span>Marca: <strong>{marca}</strong></span>
-                  </div>
-                )}
+                
+                {/* Barcode */}
+                <div className="flex items-center gap-2">
+                  <Tag className="w-4 h-4" />
+                  <span>Barcode: </span>
+                  {isEditMode ? (
+                    <input
+                      type="text"
+                      value={codiceBarcode}
+                      onChange={(e) => setCodiceBarcode(e.target.value)}
+                      className="font-bold bg-white/20 rounded px-2 py-0.5 w-40 text-white border border-white/30"
+                    />
+                  ) : (
+                    <strong>{codiceBarcode || 'N/D'}</strong>
+                  )}
+                </div>
+                
+                {/* Marca */}
+                <div className="flex items-center gap-2">
+                  <Building className="w-4 h-4" />
+                  <span>Marca: </span>
+                  {isEditMode ? (
+                    <input
+                      type="text"
+                      value={marca}
+                      onChange={(e) => setMarca(e.target.value)}
+                      className="font-bold bg-white/20 rounded px-2 py-0.5 w-32 text-white border border-white/30"
+                    />
+                  ) : (
+                    <strong>{marca || 'N/D'}</strong>
+                  )}
+                </div>
               </div>
               
               {/* KPI inline - Riga 1: Stock e Quantità */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                {/* Quantità */}
                 <div className="bg-white/20 rounded-lg p-3">
                   <p className="text-white/70 text-xs uppercase">Quantità in Stock</p>
-                  <p className="text-3xl font-bold">{prodotto.quantita}</p>
+                  {isEditMode ? (
+                    <input
+                      type="number"
+                      min="0"
+                      value={editQuantita}
+                      onChange={(e) => setEditQuantita(parseInt(e.target.value) || 0)}
+                      className="text-3xl font-bold bg-white/30 rounded px-2 w-full text-white text-center border border-white/30"
+                    />
+                  ) : (
+                    <p className="text-3xl font-bold">{editQuantita}</p>
+                  )}
                 </div>
+                
+                {/* Prezzo */}
                 <div className="bg-white/20 rounded-lg p-3">
-                  <p className="text-white/70 text-xs uppercase">Ultimo Costo Acquisto</p>
-                  <p className="text-3xl font-bold">{formatCurrency(prodotto.prezzo)}</p>
+                  <p className="text-white/70 text-xs uppercase">Costo Acquisto</p>
+                  {isEditMode ? (
+                    <div className="flex items-center">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editPrezzo}
+                        onChange={(e) => setEditPrezzo(parseFloat(e.target.value) || 0)}
+                        className="text-2xl font-bold bg-white/30 rounded px-2 w-full text-white text-right border border-white/30"
+                      />
+                      <span className="ml-1">€</span>
+                    </div>
+                  ) : (
+                    <p className="text-3xl font-bold">{formatCurrency(editPrezzo)}</p>
+                  )}
                 </div>
+                
                 <div className="bg-white/20 rounded-lg p-3">
                   <p className="text-white/70 text-xs uppercase">Prezzo Vendita</p>
                   <p className="text-3xl font-bold">
@@ -457,7 +661,7 @@ export default function MagazzinoDetailPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <div className="bg-white/20 rounded-lg p-3">
                   <p className="text-white/70 text-xs uppercase">Valore Stock</p>
-                  <p className="text-2xl font-bold">{formatCurrency(prodotto.quantita * prodotto.prezzo)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(editQuantita * editPrezzo)}</p>
                 </div>
                 <div className="bg-white/20 rounded-lg p-3">
                   <p className="text-white/70 text-xs uppercase">Venduti Totale</p>
@@ -473,6 +677,39 @@ export default function MagazzinoDetailPage() {
                   <p className="text-2xl font-bold">{formatCurrency(venditeStats.margineTotale)}</p>
                 </div>
               </div>
+              
+              {/* Pulsante Salva - solo in modalità modifica */}
+              {isEditMode && (
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      await handleSaveProduct();
+                      setIsEditMode(false);
+                    }}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 bg-white text-[#c68776] px-6 py-2 rounded-lg font-semibold hover:bg-white/90 disabled:opacity-50 transition-all shadow-lg"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Save className="w-5 h-5" />
+                    )}
+                    Salva Modifiche
+                  </button>
+                  <button
+                    onClick={() => setIsEditMode(false)}
+                    className="flex items-center gap-2 bg-white/20 text-white px-4 py-2 rounded-lg font-medium hover:bg-white/30 transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                    Annulla
+                  </button>
+                  {saveMessage && (
+                    <span className={`font-medium ${saveMessage.includes('Errore') ? 'text-red-300' : 'text-green-300'}`}>
+                      {saveMessage}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

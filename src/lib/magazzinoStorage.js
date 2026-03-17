@@ -127,21 +127,28 @@ export const invalidateCache = () => {
 
 // ============ ORDINI SHOPIFY ============
 
-export const loadShopifyOrdersData = async () => {
+export const loadShopifyOrdersData = async (forceReload = false) => {
   try {
-    if (shopifyOrdersCache && (Date.now() - lastCacheUpdate) < CACHE_TTL) {
+    if (!forceReload && shopifyOrdersCache && shopifyOrdersCache.length > 0 && (Date.now() - lastCacheUpdate) < CACHE_TTL) {
+      console.log(`📦 Usando cache ordini Shopify (${shopifyOrdersCache.length} ordini)`);
       return shopifyOrdersCache;
     }
     
     console.log('🔄 Caricando ordini Shopify da Firebase...');
     const data = await loadShopifyOrdersFromFirebase();
     shopifyOrdersCache = data;
-    console.log(`✅ Ordini Shopify caricati: ${data.length}`);
+    lastCacheUpdate = Date.now();
+    console.log(`✅ Ordini Shopify caricati da Firebase: ${data.length}`);
     return data;
   } catch (error) {
     console.error('❌ Errore caricamento ordini Shopify:', error);
     const localData = localStorage.getItem('shopify_orders');
-    return localData ? JSON.parse(localData) : [];
+    if (localData) {
+      const parsed = JSON.parse(localData);
+      console.log(`⚠️ Fallback a localStorage: ${parsed.length} ordini`);
+      return parsed;
+    }
+    return [];
   }
 };
 
@@ -162,21 +169,28 @@ export const saveShopifyOrdersData = async (orders) => {
 
 // ============ ORDINI FORNITORI ============
 
-export const loadSupplierOrdersData = async () => {
+export const loadSupplierOrdersData = async (forceReload = false) => {
   try {
-    if (supplierOrdersCache && (Date.now() - lastCacheUpdate) < CACHE_TTL) {
+    if (!forceReload && supplierOrdersCache && supplierOrdersCache.length > 0 && (Date.now() - lastCacheUpdate) < CACHE_TTL) {
+      console.log(`📦 Usando cache ordini fornitori (${supplierOrdersCache.length} ordini)`);
       return supplierOrdersCache;
     }
     
     console.log('🔄 Caricando ordini fornitori da Firebase...');
     const data = await loadSupplierOrdersFromFirebase();
     supplierOrdersCache = data;
-    console.log(`✅ Ordini fornitori caricati: ${data.length}`);
+    lastCacheUpdate = Date.now();
+    console.log(`✅ Ordini fornitori caricati da Firebase: ${data.length}`);
     return data;
   } catch (error) {
     console.error('❌ Errore caricamento ordini fornitori:', error);
     const localData = localStorage.getItem('supplier_orders');
-    return localData ? JSON.parse(localData) : [];
+    if (localData) {
+      const parsed = JSON.parse(localData);
+      console.log(`⚠️ Fallback a localStorage: ${parsed.length} ordini`);
+      return parsed;
+    }
+    return [];
   }
 };
 

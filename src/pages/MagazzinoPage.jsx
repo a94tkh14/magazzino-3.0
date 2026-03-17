@@ -561,6 +561,40 @@ const MagazzinoPage = () => {
     setSelectedForImport([]);
   };
 
+  // Modifica inline di quantità o prezzo
+  const handleInlineEdit = async (sku, field, value) => {
+    try {
+      // Aggiorna stato locale immediatamente
+      const updatedProducts = magazzinoData.map(product => {
+        if (product.sku === sku) {
+          return { ...product, [field]: value };
+        }
+        return product;
+      });
+      
+      setMagazzinoData(updatedProducts);
+      setFilteredData(updatedProducts.filter(item => {
+        return safeIncludes(item.sku, searchTerm) || safeIncludes(item.nome, searchTerm);
+      }));
+      
+      // Salva su Firebase (debounced - salva dopo 500ms senza modifiche)
+      if (window.inlineEditTimeout) {
+        clearTimeout(window.inlineEditTimeout);
+      }
+      
+      window.inlineEditTimeout = setTimeout(async () => {
+        const productToSave = updatedProducts.find(p => p.sku === sku);
+        if (productToSave) {
+          await saveSingleProduct(productToSave);
+          console.log(`✅ Salvato ${sku}: ${field} = ${value}`);
+        }
+      }, 500);
+      
+    } catch (error) {
+      console.error('Errore modifica inline:', error);
+    }
+  };
+
   // Funzione per pulire testo da apostrofi e caratteri speciali
   const cleanText = (str) => {
     if (!str) return '';
@@ -715,6 +749,29 @@ const MagazzinoPage = () => {
     }
   };
 
+  // Svuota tutte le quantità (imposta a 0)
+  const handleResetQuantities = async () => {
+    if (!confirm('Vuoi davvero azzerare TUTTE le quantità del magazzino? I prodotti rimarranno ma con quantità 0.')) {
+      return;
+    }
+    
+    try {
+      const updatedProducts = magazzinoData.map(product => ({
+        ...product,
+        quantita: 0
+      }));
+      
+      await saveMagazzinoData(updatedProducts);
+      setMagazzinoData(updatedProducts);
+      setFilteredData(updatedProducts);
+      
+      alert(`✅ Quantità azzerate per ${updatedProducts.length} prodotti!`);
+    } catch (error) {
+      console.error('Errore azzeramento quantità:', error);
+      alert('Errore: ' + error.message);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -753,14 +810,24 @@ const MagazzinoPage = () => {
             + Aggiungi prodotto
           </Button>
           {magazzinoData.length > 0 && (
-            <Button 
-              variant="outline" 
-              className="border-red-300 text-red-600 hover:bg-red-50"
-              onClick={() => setShowDeleteAllModal(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Svuota
-            </Button>
+            <>
+              <Button 
+                variant="outline" 
+                className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                onClick={handleResetQuantities}
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Azzera Quantità
+              </Button>
+              <Button 
+                variant="outline" 
+                className="border-red-300 text-red-600 hover:bg-red-50"
+                onClick={() => setShowDeleteAllModal(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Svuota Tutto
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1212,19 +1279,33 @@ const MagazzinoPage = () => {
                           {item.sku}
                         </span>
                       </td>
-                      {/* Quantità */}
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          item.quantita <= 0 ? 'bg-red-100 text-red-800' :
-                          item.quantita <= 5 ? 'bg-orange-100 text-orange-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {item.quantita}
-                        </span>
+                      {/* Quantità - Editabile */}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.quantita}
+                          onChange={(e) => handleInlineEdit(item.sku, 'quantita', parseInt(e.target.value) || 0)}
+                          className={`w-20 px-2 py-1 text-center rounded border font-medium ${
+                            item.quantita <= 0 ? 'bg-red-50 border-red-300 text-red-800' :
+                            item.quantita <= 5 ? 'bg-orange-50 border-orange-300 text-orange-800' :
+                            'bg-green-50 border-green-300 text-green-800'
+                          }`}
+                        />
                       </td>
-                      {/* Prezzo */}
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {formatPrice(item.prezzo)}
+                      {/* Prezzo - Editabile */}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.prezzo || 0}
+                            onChange={(e) => handleInlineEdit(item.sku, 'prezzo', parseFloat(e.target.value) || 0)}
+                            className="w-24 px-2 py-1 text-right rounded border border-gray-300 font-medium"
+                          />
+                          <span className="text-gray-500">€</span>
+                        </div>
                       </td>
                       {/* Marca */}
                       <td className="px-4 py-3 text-sm text-gray-600">
