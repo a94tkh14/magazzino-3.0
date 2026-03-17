@@ -394,7 +394,7 @@ const ContoEconomicoPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Conto Economico</h1>
+          <h1 className="text-3xl font-bold">Cruscotto di Monitoraggio</h1>
           <p className="text-muted-foreground">
             Analisi completa ricavi, costi e profittabilità • {orders.length} ordini caricati
           </p>
@@ -570,7 +570,7 @@ const ContoEconomicoPage = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            📊 Dashboard Economico - Vista {viewMode === 'week' ? 'Settimanale' : viewMode === 'month' ? 'Mensile' : 'Trimestrale'}
+            📊 Cruscotto di Monitoraggio - Vista {viewMode === 'week' ? 'Settimanale' : viewMode === 'month' ? 'Mensile' : 'Trimestrale'}
           </CardTitle>
           <CardDescription>
             Analisi dettagliata per periodo
