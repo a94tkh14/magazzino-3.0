@@ -107,7 +107,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
     { 
       key: 'conto-economico',
       icon: Calculator, 
-      label: 'Conto Economico',
+      label: 'Cruscotto',
       path: '/conto-economico'
     },
     { 

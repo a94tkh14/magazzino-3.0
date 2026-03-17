@@ -56,7 +56,7 @@ const Navbar = () => {
     { path: '/ordini-fornitori', icon: Truck, label: 'Ordini Fornitori' },
     { path: '/marketing', icon: TrendingUp, label: 'Marketing' },
     { path: '/costi', icon: DollarSign, label: 'Costi' },
-    { path: '/conto-economico', icon: Calculator, label: 'Conto Economico' },
+    { path: '/conto-economico', icon: Calculator, label: 'Cruscotto' },
     { path: '/settings', icon: Settings, label: 'Impostazioni' },
   ];
 
