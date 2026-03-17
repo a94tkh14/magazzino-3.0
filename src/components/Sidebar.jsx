@@ -147,7 +147,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
             />
           ) : (
             <div className={cn(
-              "bg-purple-700 rounded-lg flex items-center justify-center transition-all duration-300",
+              "bg-[#c68776] rounded-lg flex items-center justify-center transition-all duration-300",
               isCollapsed ? "h-8 w-8" : "h-12 w-12"
             )}>
               {isCollapsed ? (
@@ -188,7 +188,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
                   className={cn(
                     'flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors group',
                     isActive
-                      ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-600'
+                      ? 'bg-[#c68776]/10 text-[#c68776] border-r-2 border-[#c68776]'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   )}
                   title={isCollapsed ? item.label : undefined}
@@ -196,7 +196,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
                   <div className="flex items-center space-x-3">
                     <Icon className={cn(
                       'h-5 w-5',
-                      isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+                      isActive ? 'text-[#c68776]' : 'text-gray-400 group-hover:text-gray-600'
                     )} />
                     {!isCollapsed && <span>{item.label}</span>}
                   </div>
@@ -216,7 +216,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
       <div className="p-4 border-t border-gray-200">
         <button
           onClick={onToggle}
-          className="w-full flex items-center justify-center p-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 transition-all duration-200 border border-blue-200 hover:border-blue-300"
+          className="w-full flex items-center justify-center p-3 rounded-lg bg-[#c68776]/10 hover:bg-[#c68776]/20 text-[#c68776] hover:text-[#b07567] transition-all duration-200 border border-[#c68776]/30 hover:border-[#c68776]/50"
           title={isCollapsed ? "Espandi sidebar" : "Collassa sidebar"}
         >
           {isCollapsed ? (
