@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Package, Tag, Settings } from 'lucide-react';
+import { Search, Package, Tag, Settings, Download, Upload, ShoppingBag, Check, X, RefreshCw } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { saveMagazzino, loadMagazzino } from '../lib/firebase';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { saveToLocalStorage, loadFromLocalStorage } from '../lib/magazzinoStorage';
+import { loadLargeData } from '../lib/dataManager';
 import { useNavigate } from 'react-router-dom';
 import ProductAnagrafica from '../components/ProductAnagrafica';
 import Button from '../components/ui/button';
@@ -35,6 +36,13 @@ const MagazzinoPage = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalData, setOriginalData] = useState([]);
   const [pendingChanges, setPendingChanges] = useState({});
+  
+  // Stati per importazione Shopify
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [shopifyProducts, setShopifyProducts] = useState([]);
+  const [selectedForImport, setSelectedForImport] = useState([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importSearch, setImportSearch] = useState('');
 
   const navigate = useNavigate();
   const lowStockThreshold = 5;
@@ -390,6 +398,158 @@ const MagazzinoPage = () => {
     };
   };
 
+  // Funzione per caricare prodotti da Shopify
+  const loadShopifyProducts = async () => {
+    setImportLoading(true);
+    try {
+      const orders = await loadLargeData('shopify_orders') || [];
+      
+      // Estrai prodotti unici dagli ordini
+      const productsMap = new Map();
+      
+      orders.forEach(order => {
+        const items = order.line_items || order.products || order.items || [];
+        items.forEach(item => {
+          const sku = item.sku || item.variant_id?.toString() || '';
+          const name = item.name || item.title || 'Prodotto senza nome';
+          const price = parseFloat(item.price) || 0;
+          const vendor = item.vendor || '';
+          const productId = item.product_id?.toString() || '';
+          const variantId = item.variant_id?.toString() || '';
+          const variantTitle = item.variant_title || '';
+          
+          if (sku || name) {
+            const key = sku || `${name}_${variantId}`;
+            
+            if (!productsMap.has(key)) {
+              productsMap.set(key, {
+                sku: sku || variantId || `SHOP_${Date.now()}_${productsMap.size}`,
+                nome: variantTitle ? `${name} - ${variantTitle}` : name,
+                prezzo: price,
+                quantita: 0, // Da impostare manualmente
+                marca: vendor,
+                tipologia: '',
+                productId,
+                variantId,
+                ordersCount: 1,
+                totalSold: item.quantity || 1
+              });
+            } else {
+              const existing = productsMap.get(key);
+              existing.ordersCount += 1;
+              existing.totalSold += (item.quantity || 1);
+              // Aggiorna prezzo se più recente
+              if (price > 0) existing.prezzo = price;
+            }
+          }
+        });
+      });
+      
+      // Converti in array e ordina per vendite
+      const products = Array.from(productsMap.values())
+        .sort((a, b) => b.totalSold - a.totalSold);
+      
+      setShopifyProducts(products);
+      setSelectedForImport([]);
+      
+    } catch (error) {
+      console.error('Errore caricamento prodotti Shopify:', error);
+      alert('Errore nel caricare i prodotti da Shopify');
+    }
+    setImportLoading(false);
+  };
+
+  // Apri modal importazione
+  const handleOpenImportModal = () => {
+    setShowImportModal(true);
+    loadShopifyProducts();
+  };
+
+  // Toggle selezione prodotto per import
+  const toggleSelectForImport = (sku) => {
+    setSelectedForImport(prev => {
+      if (prev.includes(sku)) {
+        return prev.filter(s => s !== sku);
+      } else {
+        return [...prev, sku];
+      }
+    });
+  };
+
+  // Seleziona tutti / Deseleziona tutti
+  const toggleSelectAll = () => {
+    const filteredProducts = getFilteredShopifyProducts();
+    if (selectedForImport.length === filteredProducts.length) {
+      setSelectedForImport([]);
+    } else {
+      setSelectedForImport(filteredProducts.map(p => p.sku));
+    }
+  };
+
+  // Filtra prodotti Shopify per ricerca
+  const getFilteredShopifyProducts = () => {
+    if (!importSearch) return shopifyProducts;
+    const term = importSearch.toLowerCase();
+    return shopifyProducts.filter(p => 
+      p.nome?.toLowerCase().includes(term) ||
+      p.sku?.toLowerCase().includes(term) ||
+      p.marca?.toLowerCase().includes(term)
+    );
+  };
+
+  // Importa prodotti selezionati
+  const handleImportSelected = async () => {
+    if (selectedForImport.length === 0) {
+      alert('Seleziona almeno un prodotto da importare');
+      return;
+    }
+
+    const productsToImport = shopifyProducts.filter(p => selectedForImport.includes(p.sku));
+    const existingSkus = new Set(magazzinoData.map(p => p.sku));
+    
+    let imported = 0;
+    let skipped = 0;
+    const newProducts = [];
+
+    for (const product of productsToImport) {
+      if (existingSkus.has(product.sku)) {
+        skipped++;
+        continue;
+      }
+
+      const newItem = {
+        sku: product.sku,
+        nome: product.nome,
+        quantita: 0, // Quantità da impostare manualmente
+        prezzo: product.prezzo || 0,
+        marca: product.marca || '',
+        tipologia: product.tipologia || '',
+        anagrafica: ''
+      };
+
+      try {
+        const result = await saveMagazzino(newItem);
+        if (result.success) {
+          newProducts.push({ ...newItem, id: result.id });
+          imported++;
+        }
+      } catch (error) {
+        console.error('Errore importazione prodotto:', product.sku, error);
+      }
+    }
+
+    if (newProducts.length > 0) {
+      const updated = [...magazzinoData, ...newProducts];
+      setMagazzinoData(updated);
+      setFilteredData(updated);
+      saveToLocalStorage('magazzino_data', updated);
+    }
+
+    alert(`Importazione completata!\n✅ Importati: ${imported}\n⏭️ Saltati (già esistenti): ${skipped}`);
+    setShowImportModal(false);
+    setSelectedForImport([]);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -413,7 +573,11 @@ const MagazzinoPage = () => {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Package className="h-4 w-4" />
           <span>{magazzinoData.length} prodotti</span>
-          <Button className="ml-4" onClick={() => setShowAddModal(true)}>
+          <Button className="ml-4 bg-[#c68776] hover:bg-[#b07567]" onClick={handleOpenImportModal}>
+            <ShoppingBag className="h-4 w-4 mr-2" />
+            Importa da Ordini
+          </Button>
+          <Button onClick={() => setShowAddModal(true)}>
             + Aggiungi prodotto
           </Button>
         </div>
@@ -511,6 +675,173 @@ const MagazzinoPage = () => {
                 <Button type="submit">Salva</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL IMPORTAZIONE DA SHOPIFY */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b bg-gradient-to-r from-[#c68776] to-[#b07567] text-white rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="h-8 w-8" />
+                  <div>
+                    <h2 className="text-2xl font-bold">Importa Prodotti da Shopify</h2>
+                    <p className="text-white/80 text-sm">Seleziona i prodotti da aggiungere al magazzino</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowImportModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Barra di ricerca e azioni */}
+            <div className="p-4 border-b bg-gray-50 flex flex-wrap items-center gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Cerca prodotto per nome, SKU o marca..."
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#c68776] focus:border-transparent"
+                    value={importSearch}
+                    onChange={(e) => setImportSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSelectAll}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium"
+                >
+                  {selectedForImport.length === getFilteredShopifyProducts().length ? 'Deseleziona Tutti' : 'Seleziona Tutti'}
+                </button>
+                <button
+                  onClick={loadShopifyProducts}
+                  className="p-2 border rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Ricarica prodotti"
+                >
+                  <RefreshCw className={`h-4 w-4 ${importLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Statistiche */}
+            <div className="px-4 py-2 bg-blue-50 border-b flex items-center gap-4 text-sm">
+              <span className="text-blue-700 font-medium">
+                {shopifyProducts.length} prodotti trovati
+              </span>
+              <span className="text-gray-500">•</span>
+              <span className="text-green-700 font-medium">
+                {selectedForImport.length} selezionati per importazione
+              </span>
+              {magazzinoData.length > 0 && (
+                <>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-orange-700 font-medium">
+                    {shopifyProducts.filter(p => magazzinoData.some(m => m.sku === p.sku)).length} già in magazzino
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Lista prodotti */}
+            <div className="flex-1 overflow-auto p-4">
+              {importLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <RefreshCw className="h-12 w-12 animate-spin mx-auto text-[#c68776] mb-4" />
+                    <p className="text-gray-600">Caricamento prodotti dagli ordini Shopify...</p>
+                  </div>
+                </div>
+              ) : getFilteredShopifyProducts().length === 0 ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center text-gray-500">
+                    <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="font-medium">Nessun prodotto trovato</p>
+                    <p className="text-sm mt-1">Sincronizza prima gli ordini da Shopify nella pagina Ordini</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {getFilteredShopifyProducts().map((product) => {
+                    const isSelected = selectedForImport.includes(product.sku);
+                    const alreadyExists = magazzinoData.some(m => m.sku === product.sku);
+                    
+                    return (
+                      <div
+                        key={product.sku}
+                        onClick={() => !alreadyExists && toggleSelectForImport(product.sku)}
+                        className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                          alreadyExists 
+                            ? 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-60' 
+                            : isSelected 
+                              ? 'bg-[#c68776]/10 border-[#c68776] ring-2 ring-[#c68776]' 
+                              : 'hover:border-[#c68776] hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900 truncate">{product.nome}</h4>
+                            <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                              <span className="bg-gray-200 px-2 py-0.5 rounded">SKU: {product.sku}</span>
+                              {product.marca && (
+                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{product.marca}</span>
+                              )}
+                            </div>
+                            <div className="mt-2 flex items-center gap-4 text-sm">
+                              <span className="text-green-700 font-medium">€{(product.prezzo || 0).toFixed(2)}</span>
+                              <span className="text-gray-500">Venduti: {product.totalSold}</span>
+                              <span className="text-gray-400 text-xs">({product.ordersCount} ordini)</span>
+                            </div>
+                          </div>
+                          <div className="ml-3 flex-shrink-0">
+                            {alreadyExists ? (
+                              <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
+                                Già in magazzino
+                              </span>
+                            ) : isSelected ? (
+                              <div className="w-6 h-6 bg-[#c68776] rounded-full flex items-center justify-center">
+                                <Check className="h-4 w-4 text-white" />
+                              </div>
+                            ) : (
+                              <div className="w-6 h-6 border-2 border-gray-300 rounded-full" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer con azioni */}
+            <div className="p-4 border-t bg-gray-50 rounded-b-xl flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                I prodotti verranno importati con quantità 0 (da aggiornare manualmente)
+              </p>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setShowImportModal(false)}>
+                  Annulla
+                </Button>
+                <Button 
+                  onClick={handleImportSelected}
+                  disabled={selectedForImport.length === 0}
+                  className="bg-[#c68776] hover:bg-[#b07567] disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Importa {selectedForImport.length} prodotti
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
