@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import Button from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { saveSettings, loadSettings } from '../lib/firebaseSync';
 import { 
   ShoppingCart, 
   CheckCircle, 
@@ -13,7 +14,8 @@ import {
   Settings,
   TestTube,
   AlertTriangle,
-  Info
+  Info,
+  CloudUpload
 } from 'lucide-react';
 
 const ShopifyConfig = () => {
@@ -28,16 +30,34 @@ const ShopifyConfig = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Carica configurazione salvata
+  // Carica configurazione salvata (prima da Firebase, poi localStorage)
   useEffect(() => {
-    const saved = localStorage.getItem('shopify_config');
-    if (saved) {
+    const loadConfig = async () => {
       try {
-        setShopifyConfig(JSON.parse(saved));
+        // Prima prova da Firebase
+        const firebaseSettings = await loadSettings();
+        if (firebaseSettings && firebaseSettings.shopify_config) {
+          console.log('✅ Configurazione Shopify caricata da Firebase');
+          setShopifyConfig(firebaseSettings.shopify_config);
+          // Salva anche in localStorage come cache
+          localStorage.setItem('shopify_config', JSON.stringify(firebaseSettings.shopify_config));
+          return;
+        }
       } catch (error) {
-        console.error('Errore nel caricamento configurazione Shopify:', error);
+        console.error('Errore caricamento config da Firebase:', error);
       }
-    }
+      
+      // Fallback a localStorage
+      const saved = localStorage.getItem('shopify_config');
+      if (saved) {
+        try {
+          setShopifyConfig(JSON.parse(saved));
+        } catch (error) {
+          console.error('Errore nel caricamento configurazione Shopify:', error);
+        }
+      }
+    };
+    loadConfig();
   }, []);
 
   const handleSaveConfig = async () => {
@@ -51,18 +71,25 @@ const ShopifyConfig = () => {
 
     setIsSaving(true);
     try {
+      // Salva in localStorage
       localStorage.setItem('shopify_config', JSON.stringify(shopifyConfig));
+      
+      // Salva anche su Firebase per sincronizzazione tra dispositivi
+      await saveSettings({ shopify_config: shopifyConfig });
+      console.log('✅ Configurazione Shopify salvata su Firebase');
+      
       setTestResult({
         success: true,
-        message: 'Configurazione Shopify salvata con successo!'
+        message: 'Configurazione Shopify salvata su cloud! Disponibile su tutti i dispositivi.'
       });
       
       // Pulisci il messaggio dopo 3 secondi
       setTimeout(() => setTestResult(null), 3000);
     } catch (error) {
+      console.error('Errore salvataggio Firebase:', error);
       setTestResult({
-        success: false,
-        error: 'Errore nel salvare la configurazione'
+        success: true,
+        message: 'Salvato localmente. Sincronizzazione cloud fallita.'
       });
     } finally {
       setIsSaving(false);
@@ -283,7 +310,7 @@ const ShopifyConfig = () => {
           <Button 
             onClick={handleSaveConfig} 
             disabled={isSaving || !shopifyConfig.shopDomain || !shopifyConfig.accessToken}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="bg-[#c68776] hover:bg-[#b07567]"
           >
             {isSaving ? (
               <>
@@ -292,7 +319,8 @@ const ShopifyConfig = () => {
               </>
             ) : (
               <>
-                💾 Salva Configurazione
+                <CloudUpload className="h-4 w-4 mr-2" />
+                Salva su Cloud
               </>
             )}
           </Button>
