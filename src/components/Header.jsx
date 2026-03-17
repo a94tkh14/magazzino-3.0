@@ -55,14 +55,9 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
             )}
           </button>
           
-          {/* Logo MVL Ufficiale */}
-          <div className="flex items-center space-x-3">
-            {/* Immagine logo MVL */}
-            <img 
-              src="/MVL solo scirtta.png" 
-              alt="Logo MVL" 
-              className="h-16 w-auto object-contain"
-            />
+          {/* Logo MV Hub */}
+          <div className="flex items-center">
+            <span className="text-2xl font-bold text-white tracking-wide">MV Hub</span>
           </div>
         </div>
 

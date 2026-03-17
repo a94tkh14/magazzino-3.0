@@ -20,7 +20,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [logo, setLogo] = useState(null);
-  const [appName, setAppName] = useState('MVL');
+  const [appName, setAppName] = useState('MV Hub');
   // Carica il logo e il nome dal localStorage all'avvio
   useEffect(() => {
     const savedLogo = localStorage.getItem('appLogo');
@@ -139,7 +139,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           {logo ? (
             <img
               src={logo}
-              alt="Logo MVL"
+              alt="Logo MV Hub"
               className={cn(
                 "object-contain transition-all duration-300",
                 isCollapsed ? "h-8 w-8" : "h-12 w-12"
@@ -148,26 +148,19 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           ) : (
             <div className={cn(
               "bg-[#c68776] rounded-lg flex items-center justify-center transition-all duration-300",
-              isCollapsed ? "h-8 w-8" : "h-12 w-12"
+              isCollapsed ? "h-8 w-8" : "h-10 w-10"
             )}>
-              {isCollapsed ? (
-                <span className="text-white font-bold text-lg">M</span>
-              ) : (
-                <div className="flex flex-col items-center text-white">
-                  <span className="font-bold text-lg">MVL</span>
-                  <span className="text-xs">LOGISTICA</span>
-                </div>
-              )}
+              <span className="text-white font-bold text-sm">MV</span>
             </div>
           )}
           
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="text-lg font-bold text-gray-900">
-                MVL
+                MV Hub
               </span>
               <span className="text-xs text-gray-500">
-                Il tuo partner di logistica
+                Gestionale
               </span>
             </div>
           )}
