@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Warehouse, Package, ShoppingCart, DollarSign, Settings, BarChart3, Truck, TrendingUp, Calculator } from 'lucide-react';
+import { Warehouse, Package, ShoppingCart, DollarSign, Settings, BarChart3, Truck, TrendingUp, Calculator, BookOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const Navbar = () => {
@@ -57,6 +57,7 @@ const Navbar = () => {
     { path: '/marketing', icon: TrendingUp, label: 'Marketing' },
     { path: '/costi', icon: DollarSign, label: 'Costi' },
     { path: '/conto-economico', icon: Calculator, label: 'Cruscotto' },
+    { path: '/prima-nota', icon: BookOpen, label: 'Conto Economico' },
     { path: '/settings', icon: Settings, label: 'Impostazioni' },
   ];
 

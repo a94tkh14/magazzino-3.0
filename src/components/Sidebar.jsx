@@ -11,7 +11,8 @@ import {
   TrendingUp, 
   Calculator,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BookOpen
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -109,6 +110,12 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
       icon: Calculator, 
       label: 'Cruscotto',
       path: '/conto-economico'
+    },
+    { 
+      key: 'prima-nota',
+      icon: BookOpen, 
+      label: 'Conto Economico',
+      path: '/prima-nota'
     },
     { 
       key: 'settings',
