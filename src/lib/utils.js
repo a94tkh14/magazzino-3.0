@@ -26,14 +26,19 @@ export const safeToFixed = (value, decimals = 2, fallback = '0.00') => {
 };
 
 /**
- * Formatta un prezzo in modo sicuro
+ * Formatta un prezzo in modo sicuro (senza decimali, simbolo € dopo)
  * @param {number|string|undefined|null} price - Il prezzo da formattare
- * @param {string} currency - La valuta (default: '€')
  * @returns {string} Il prezzo formattato
  */
-export const formatPrice = (price, currency = '€') => {
-  const formatted = safeToFixed(price, 2, '0.00');
-  return `${currency}${formatted}`;
+export const formatPrice = (price) => {
+  if (price === null || price === undefined || price === '') {
+    return '0 €';
+  }
+  const num = parseFloat(price);
+  if (isNaN(num)) {
+    return '0 €';
+  }
+  return `${Math.round(num).toLocaleString('it-IT')} €`;
 };
 
 /**

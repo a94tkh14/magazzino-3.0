@@ -686,12 +686,7 @@ const DashboardPage = () => {
                   <Tooltip 
                     formatter={(value, name) => {
                       if (name === 'revenue') {
-                        return [new Intl.NumberFormat('it-IT', {
-                          style: 'currency',
-                          currency: 'EUR',
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        }).format(value), 'Fatturato'];
+                        return [`${Math.round(value).toLocaleString('it-IT')} €`, 'Fatturato'];
                       }
                       return [value, name === 'orders' ? 'Ordini' : 'Prodotti'];
                     }}
@@ -747,12 +742,7 @@ const DashboardPage = () => {
                     Nel periodo selezionato
                   </div>
                   <div className="text-lg font-semibold text-green-600">
-                    {new Intl.NumberFormat('it-IT', {
-                      style: 'currency',
-                      currency: 'EUR',
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
-                    }).format(csvStats.totalValue)}
+                    {formatPrice(csvStats.totalValue)}
                   </div>
                   <div className="text-sm text-gray-500">
                     Fatturato totale
@@ -785,12 +775,7 @@ const DashboardPage = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{new Intl.NumberFormat('it-IT', {
-              style: 'currency',
-              currency: 'EUR',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            }).format(csvStats.totalValue)}</div>
+            <div className="text-2xl font-bold">{formatPrice(csvStats.totalValue)}</div>
             <p className="text-xs text-muted-foreground">
               Fatturato totale
             </p>
@@ -803,12 +788,7 @@ const DashboardPage = () => {
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{new Intl.NumberFormat('it-IT', {
-              style: 'currency',
-              currency: 'EUR',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            }).format(csvStats.totalOrders > 0 ? csvStats.totalValue / csvStats.totalOrders : 0)}</div>
+            <div className="text-2xl font-bold">{formatPrice(csvStats.totalOrders > 0 ? csvStats.totalValue / csvStats.totalOrders : 0)}</div>
             <p className="text-xs text-muted-foreground">
               Per ordine
             </p>
@@ -821,12 +801,7 @@ const DashboardPage = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{new Intl.NumberFormat('it-IT', {
-              style: 'currency',
-              currency: 'EUR',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            }).format(csvStats.totalDiscounts)}</div>
+            <div className="text-2xl font-bold text-orange-600">{formatPrice(csvStats.totalDiscounts)}</div>
             <p className="text-xs text-muted-foreground">
               Sconti applicati
             </p>
@@ -1022,12 +997,7 @@ const DashboardPage = () => {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{new Intl.NumberFormat('it-IT', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2
-                }).format(csvStats.totalValue)}</div>
+                <div className="text-2xl font-bold">{formatPrice(csvStats.totalValue)}</div>
                 <p className="text-xs text-muted-foreground">
                   Somma ordini
                 </p>
@@ -1040,12 +1010,7 @@ const DashboardPage = () => {
                 <TruckIcon className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{new Intl.NumberFormat('it-IT', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2
-                }).format(csvStats.totalShippingPaid)}</div>
+                <div className="text-2xl font-bold">{formatPrice(csvStats.totalShippingPaid)}</div>
                 <p className="text-xs text-muted-foreground">
                   Costi spedizione
                 </p>
@@ -1058,12 +1023,7 @@ const DashboardPage = () => {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">{new Intl.NumberFormat('it-IT', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2
-                }).format(csvStats.totalDiscounts)}</div>
+                <div className="text-2xl font-bold text-green-600">{formatPrice(csvStats.totalDiscounts)}</div>
                 <p className="text-xs text-muted-foreground">
                   Sconti applicati
                 </p>
@@ -1076,12 +1036,7 @@ const DashboardPage = () => {
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{new Intl.NumberFormat('it-IT', {
-                  style: 'currency',
-                  currency: 'EUR',
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2
-                }).format(csvStats.totalGeneral)}</div>
+                <div className="text-2xl font-bold text-blue-600">{formatPrice(csvStats.totalGeneral)}</div>
                 <p className="text-xs text-muted-foreground">
                   Valore + Spedizione - Sconti
                 </p>
@@ -1229,36 +1184,15 @@ const DashboardPage = () => {
                   </div>
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
                     <span className="text-sm font-medium">Valore:</span>
-                    <span className="font-bold text-blue-600">
-                      {new Intl.NumberFormat('it-IT', {
-                        style: 'currency',
-                        currency: 'EUR',
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      }).format(csvStats.totalValue)}
-                    </span>
+                    <span className="font-bold text-blue-600">{formatPrice(csvStats.totalValue)}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
                     <span className="text-sm font-medium">Spedizioni:</span>
-                    <span className="font-bold text-blue-600">
-                      {new Intl.NumberFormat('it-IT', {
-                        style: 'currency',
-                        currency: 'EUR',
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      }).format(csvStats.totalShippingPaid)}
-                    </span>
+                    <span className="font-bold text-blue-600">{formatPrice(csvStats.totalShippingPaid)}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded">
                     <span className="text-sm font-medium">Sconti:</span>
-                    <span className="font-bold text-green-600">
-                      {new Intl.NumberFormat('it-IT', {
-                        style: 'currency',
-                        currency: 'EUR',
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      }).format(csvStats.totalDiscounts)}
-                    </span>
+                    <span className="font-bold text-green-600">{formatPrice(csvStats.totalDiscounts)}</span>
                   </div>
                 </div>
               </div>
@@ -1289,36 +1223,15 @@ const DashboardPage = () => {
                         </div>
                         <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
                           <span className="text-sm font-medium">Valore:</span>
-                          <span className="font-bold text-orange-600">
-                            {new Intl.NumberFormat('it-IT', {
-                              style: 'currency',
-                              currency: 'EUR',
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2
-                            }).format(comparisonStats.totalValue)}
-                          </span>
+                          <span className="font-bold text-orange-600">{formatPrice(comparisonStats.totalValue)}</span>
                         </div>
                         <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
                           <span className="text-sm font-medium">Spedizioni:</span>
-                          <span className="font-bold text-orange-600">
-                            {new Intl.NumberFormat('it-IT', {
-                              style: 'currency',
-                              currency: 'EUR',
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2
-                            }).format(comparisonStats.totalShippingPaid)}
-                          </span>
+                          <span className="font-bold text-orange-600">{formatPrice(comparisonStats.totalShippingPaid)}</span>
                         </div>
                         <div className="flex justify-between items-center p-3 bg-orange-50 rounded">
                           <span className="text-sm font-medium">Sconti:</span>
-                          <span className="font-bold text-green-600">
-                            {new Intl.NumberFormat('it-IT', {
-                              style: 'currency',
-                              currency: 'EUR',
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2
-                            }).format(comparisonStats.totalDiscounts)}
-                          </span>
+                          <span className="font-bold text-green-600">{formatPrice(comparisonStats.totalDiscounts)}</span>
                         </div>
                       </>
                     );
