@@ -72,13 +72,17 @@ export default function MagazzinoDetailPage() {
         const prod = magazzino.find(p => p.sku === sku);
         setProdotto(prod);
         
-        // Foto
+        // Foto - prima da localStorage, poi dal prodotto (importato da Shopify)
         const savedFoto = localStorage.getItem(`foto_${sku}`);
-        if (savedFoto) setFoto(savedFoto);
+        if (savedFoto) {
+          setFoto(savedFoto);
+        } else if (prod?.immagine) {
+          setFoto(prod.immagine);
+        }
         
-        // Campi aggiuntivi
-        setMarca(localStorage.getItem(`marca_${sku}`) || prod?.marca || '');
-        setTipologia(localStorage.getItem(`tipologia_${sku}`) || prod?.tipologia || '');
+        // Campi aggiuntivi - priorità: localStorage > prodotto
+        setMarca(localStorage.getItem(`marca_${sku}`) || prod?.marca || prod?.vendor || '');
+        setTipologia(localStorage.getItem(`tipologia_${sku}`) || prod?.tipologia || prod?.type || '');
         setFornitore(localStorage.getItem(`fornitore_${sku}`) || prod?.fornitore || '');
         setNote(localStorage.getItem(`note_${sku}`) || prod?.note || '');
         setCodiceBarcode(localStorage.getItem(`barcode_${sku}`) || prod?.barcode || '');
@@ -183,24 +187,54 @@ export default function MagazzinoDetailPage() {
   const venditeStats = useMemo(() => {
     let totaleVenduto = 0;
     let ricavoTotale = 0;
+    let ultimoPrezzoVendita = 0;
+    let ultimaVenditaData = null;
     
-    ordiniShopify.forEach(order => {
+    // Ordina per data per trovare l'ultima vendita
+    const ordiniOrdinati = [...ordiniShopify].sort((a, b) => {
+      const dataA = new Date(a.created_at || a.createdAt);
+      const dataB = new Date(b.created_at || b.createdAt);
+      return dataB - dataA;
+    });
+    
+    ordiniOrdinati.forEach((order, idx) => {
       const items = order.line_items || order.products || order.items || [];
       items.forEach(item => {
         if (item.sku === sku || item.variant_id?.toString() === sku) {
-          totaleVenduto += item.quantity || 1;
-          ricavoTotale += (parseFloat(item.price) || 0) * (item.quantity || 1);
+          const qty = item.quantity || 1;
+          const price = parseFloat(item.price) || 0;
+          totaleVenduto += qty;
+          ricavoTotale += price * qty;
+          
+          // Prendi il prezzo dell'ultima vendita
+          if (idx === 0 && ultimoPrezzoVendita === 0) {
+            ultimoPrezzoVendita = price;
+            ultimaVenditaData = order.created_at || order.createdAt;
+          }
         }
       });
     });
+    
+    // Calcola margine usando il prezzo di acquisto corrente
+    const costoAcquisto = prodotto?.prezzo || stats.prezzoMedio || 0;
+    const prezzoVendita = ultimoPrezzoVendita || (totaleVenduto > 0 ? ricavoTotale / totaleVenduto : 0);
+    const margineUnitario = prezzoVendita - costoAcquisto;
+    const marginePercentuale = prezzoVendita > 0 ? (margineUnitario / prezzoVendita) * 100 : 0;
+    const margineTotale = margineUnitario * totaleVenduto;
     
     return {
       totaleVenduto,
       ricavoTotale,
       numeroOrdini: ordiniShopify.length,
-      prezzoMedioVendita: totaleVenduto > 0 ? ricavoTotale / totaleVenduto : 0
+      prezzoMedioVendita: totaleVenduto > 0 ? ricavoTotale / totaleVenduto : 0,
+      ultimoPrezzoVendita,
+      ultimaVenditaData,
+      costoAcquisto,
+      margineUnitario,
+      marginePercentuale,
+      margineTotale
     };
-  }, [ordiniShopify, sku]);
+  }, [ordiniShopify, sku, prodotto, stats.prezzoMedio]);
 
   // Dati per grafico prezzi
   const priceChartData = useMemo(() => {
@@ -320,11 +354,11 @@ export default function MagazzinoDetailPage() {
                   <img 
                     src={foto} 
                     alt={prodotto.nome} 
-                    className="w-40 h-40 object-contain bg-white rounded-lg shadow-lg"
+                    className="w-48 h-48 object-contain bg-white rounded-lg shadow-lg"
                   />
                 ) : (
-                  <div className="w-40 h-40 bg-white/20 rounded-lg flex items-center justify-center">
-                    <Package className="w-16 h-16 text-white/50" />
+                  <div className="w-48 h-48 bg-white/20 rounded-lg flex items-center justify-center">
+                    <Package className="w-20 h-20 text-white/50" />
                   </div>
                 )}
                 <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-lg">
@@ -337,36 +371,76 @@ export default function MagazzinoDetailPage() {
             {/* Info principali */}
             <div className="flex-1">
               <h1 className="text-3xl font-bold mb-2">{prodotto.nome}</h1>
-              <div className="flex flex-wrap gap-4 text-white/90">
+              <div className="flex flex-wrap gap-4 text-white/90 mb-2">
                 <div className="flex items-center gap-2">
                   <Hash className="w-4 h-4" />
                   <span>SKU: <strong>{prodotto.sku}</strong></span>
                 </div>
-                {codiceBarcode && (
+                {(codiceBarcode || prodotto.barcode) && (
                   <div className="flex items-center gap-2">
                     <Tag className="w-4 h-4" />
-                    <span>Barcode: <strong>{codiceBarcode}</strong></span>
+                    <span>Barcode: <strong>{codiceBarcode || prodotto.barcode}</strong></span>
+                  </div>
+                )}
+                {marca && (
+                  <div className="flex items-center gap-2">
+                    <Building className="w-4 h-4" />
+                    <span>Marca: <strong>{marca}</strong></span>
                   </div>
                 )}
               </div>
               
-              {/* KPI inline */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+              {/* KPI inline - Riga 1: Stock e Quantità */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                 <div className="bg-white/20 rounded-lg p-3">
-                  <p className="text-white/70 text-sm">Quantità</p>
-                  <p className="text-2xl font-bold">{prodotto.quantita}</p>
+                  <p className="text-white/70 text-xs uppercase">Quantità in Stock</p>
+                  <p className="text-3xl font-bold">{prodotto.quantita}</p>
                 </div>
                 <div className="bg-white/20 rounded-lg p-3">
-                  <p className="text-white/70 text-sm">Prezzo Acquisto</p>
-                  <p className="text-2xl font-bold">{formatCurrency(prodotto.prezzo)}</p>
+                  <p className="text-white/70 text-xs uppercase">Ultimo Costo Acquisto</p>
+                  <p className="text-3xl font-bold">{formatCurrency(prodotto.prezzo)}</p>
                 </div>
                 <div className="bg-white/20 rounded-lg p-3">
-                  <p className="text-white/70 text-sm">Valore Stock</p>
+                  <p className="text-white/70 text-xs uppercase">Prezzo Vendita</p>
+                  <p className="text-3xl font-bold">
+                    {venditeStats.ultimoPrezzoVendita > 0 
+                      ? formatCurrency(venditeStats.ultimoPrezzoVendita) 
+                      : <span className="text-white/50 text-lg">N/D</span>
+                    }
+                  </p>
+                </div>
+                <div className={`rounded-lg p-3 ${venditeStats.marginePercentuale >= 0 ? 'bg-green-500/40' : 'bg-red-500/40'}`}>
+                  <p className="text-white/70 text-xs uppercase">Margine</p>
+                  <p className="text-3xl font-bold">
+                    {venditeStats.ultimoPrezzoVendita > 0 
+                      ? `${venditeStats.marginePercentuale.toFixed(1)}%` 
+                      : <span className="text-white/50 text-lg">N/D</span>
+                    }
+                  </p>
+                  {venditeStats.ultimoPrezzoVendita > 0 && (
+                    <p className="text-white/80 text-xs">{formatCurrency(venditeStats.margineUnitario)}/pz</p>
+                  )}
+                </div>
+              </div>
+
+              {/* KPI inline - Riga 2: Vendite e Valore */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                <div className="bg-white/20 rounded-lg p-3">
+                  <p className="text-white/70 text-xs uppercase">Valore Stock</p>
                   <p className="text-2xl font-bold">{formatCurrency(prodotto.quantita * prodotto.prezzo)}</p>
                 </div>
                 <div className="bg-white/20 rounded-lg p-3">
-                  <p className="text-white/70 text-sm">Venduti</p>
-                  <p className="text-2xl font-bold">{venditeStats.totaleVenduto}</p>
+                  <p className="text-white/70 text-xs uppercase">Venduti Totale</p>
+                  <p className="text-2xl font-bold">{venditeStats.totaleVenduto} pz</p>
+                  <p className="text-white/70 text-xs">{venditeStats.numeroOrdini} ordini</p>
+                </div>
+                <div className="bg-white/20 rounded-lg p-3">
+                  <p className="text-white/70 text-xs uppercase">Ricavo Vendite</p>
+                  <p className="text-2xl font-bold">{formatCurrency(venditeStats.ricavoTotale)}</p>
+                </div>
+                <div className={`rounded-lg p-3 ${venditeStats.margineTotale >= 0 ? 'bg-green-500/40' : 'bg-red-500/40'}`}>
+                  <p className="text-white/70 text-xs uppercase">Profitto Totale</p>
+                  <p className="text-2xl font-bold">{formatCurrency(venditeStats.margineTotale)}</p>
                 </div>
               </div>
             </div>
@@ -374,72 +448,127 @@ export default function MagazzinoDetailPage() {
         </div>
       </Card>
 
-      {/* KPI Cards Dettagliate */}
+      {/* KPI Cards Dettagliate - Confronto Acquisto vs Vendita */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        {/* Confronto Prezzi */}
+        <Card className="border-l-4 border-l-blue-500">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Prezzo Medio Acquisto</p>
+                <p className="text-sm text-gray-500">Costo Acquisto (Storico)</p>
                 <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.prezzoMedio)}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Min: {formatCurrency(stats.prezzoMin)} | Max: {formatCurrency(stats.prezzoMax)}
-                </p>
+                <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                  <p>Min: {formatCurrency(stats.prezzoMin)}</p>
+                  <p>Max: {formatCurrency(stats.prezzoMax)}</p>
+                </div>
               </div>
-              <Calculator className="w-8 h-8 text-[#c68776]" />
+              <Calculator className="w-8 h-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-emerald-500">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Variazione Prezzo</p>
-                <p className={`text-2xl font-bold ${stats.differenzaPrezzo >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {stats.differenzaPrezzo >= 0 ? '+' : ''}{formatCurrency(stats.differenzaPrezzo)}
+                <p className="text-sm text-gray-500">Prezzo Vendita Medio</p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {venditeStats.prezzoMedioVendita > 0 
+                    ? formatCurrency(venditeStats.prezzoMedioVendita)
+                    : 'N/D'
+                  }
                 </p>
-                <p className={`text-xs mt-1 ${stats.percentualeDiff >= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                  {stats.percentualeDiff >= 0 ? '+' : ''}{stats.percentualeDiff.toFixed(1)}% dal primo carico
-                </p>
+                {venditeStats.ultimoPrezzoVendita > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Ultimo: {formatCurrency(venditeStats.ultimoPrezzoVendita)}
+                  </p>
+                )}
               </div>
-              {stats.differenzaPrezzo >= 0 ? (
-                <TrendingUp className="w-8 h-8 text-red-500" />
+              <DollarSign className="w-8 h-8 text-emerald-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={`border-l-4 ${venditeStats.marginePercentuale >= 20 ? 'border-l-green-500' : venditeStats.marginePercentuale >= 0 ? 'border-l-yellow-500' : 'border-l-red-500'}`}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Margine Unitario</p>
+                <p className={`text-2xl font-bold ${venditeStats.margineUnitario >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {venditeStats.ultimoPrezzoVendita > 0 
+                    ? formatCurrency(venditeStats.margineUnitario)
+                    : 'N/D'
+                  }
+                </p>
+                {venditeStats.ultimoPrezzoVendita > 0 && (
+                  <p className={`text-xs mt-1 font-medium ${venditeStats.marginePercentuale >= 20 ? 'text-green-500' : venditeStats.marginePercentuale >= 0 ? 'text-yellow-600' : 'text-red-500'}`}>
+                    {venditeStats.marginePercentuale.toFixed(1)}% del prezzo
+                  </p>
+                )}
+              </div>
+              {venditeStats.margineUnitario >= 0 ? (
+                <TrendingUp className="w-8 h-8 text-green-500" />
               ) : (
-                <TrendingDown className="w-8 h-8 text-green-500" />
+                <TrendingDown className="w-8 h-8 text-red-500" />
               )}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-purple-500">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Totale Caricato</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totaleCaricato} pz</p>
-                <p className="text-xs text-gray-400 mt-1">{stats.numeroCarichi} caricamenti</p>
-              </div>
-              <Truck className="w-8 h-8 text-[#c68776]" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Ricavo Vendite</p>
-                <p className="text-2xl font-bold text-emerald-600">{formatCurrency(venditeStats.ricavoTotale)}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Prezzo medio: {formatCurrency(venditeStats.prezzoMedioVendita)}
+                <p className="text-sm text-gray-500">Variazione Costo</p>
+                <p className={`text-2xl font-bold ${stats.differenzaPrezzo > 0 ? 'text-red-600' : stats.differenzaPrezzo < 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                  {stats.numeroCarichi > 1 
+                    ? `${stats.differenzaPrezzo >= 0 ? '+' : ''}${formatCurrency(stats.differenzaPrezzo)}`
+                    : 'N/D'
+                  }
                 </p>
+                {stats.numeroCarichi > 1 && (
+                  <p className={`text-xs mt-1 ${stats.percentualeDiff > 0 ? 'text-red-500' : stats.percentualeDiff < 0 ? 'text-green-500' : 'text-gray-500'}`}>
+                    {stats.percentualeDiff >= 0 ? '+' : ''}{stats.percentualeDiff.toFixed(1)}% ({stats.numeroCarichi} carichi)
+                  </p>
+                )}
               </div>
-              <ShoppingCart className="w-8 h-8 text-emerald-500" />
+              <BarChart3 className="w-8 h-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Riepilogo Performance */}
+      {venditeStats.totaleVenduto > 0 && (
+        <Card className="bg-gradient-to-r from-gray-50 to-gray-100">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-medium">Pezzi Venduti</p>
+                <p className="text-2xl font-bold text-gray-800">{venditeStats.totaleVenduto}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-medium">Ordini</p>
+                <p className="text-2xl font-bold text-gray-800">{venditeStats.numeroOrdini}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-medium">Ricavo Totale</p>
+                <p className="text-2xl font-bold text-blue-600">{formatCurrency(venditeStats.ricavoTotale)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-medium">Costo Totale</p>
+                <p className="text-2xl font-bold text-gray-600">{formatCurrency(venditeStats.costoAcquisto * venditeStats.totaleVenduto)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-medium">Profitto Netto</p>
+                <p className={`text-2xl font-bold ${venditeStats.margineTotale >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(venditeStats.margineTotale)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Informazioni Prodotto */}
       <Card>
