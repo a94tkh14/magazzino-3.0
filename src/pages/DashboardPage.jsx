@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { loadMagazzinoData } from '../lib/magazzinoStorage';
-import { loadLargeData } from '../lib/dataManager';
+import { loadMagazzinoData, loadShopifyOrdersData, loadPrimaNotaData, loadContiBancariData } from '../lib/magazzinoStorage';
 import { TrendingUp, TrendingDown, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw, Wallet, Target, Landmark, DollarSign } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPrice } from '../lib/utils';
@@ -129,12 +128,14 @@ const DashboardPage = () => {
     return days;
   };
 
-  // Carica gli ordini CSV
+  // Carica gli ordini da Firebase
   useEffect(() => {
     const loadOrders = async () => {
       try {
-        // Carica ordini CSV
-        const csvOrdersData = await loadLargeData('shopify_orders');
+        // Carica ordini da Firebase
+        console.log('🔄 Dashboard: Caricando ordini da Firebase...');
+        const csvOrdersData = await loadShopifyOrdersData();
+        console.log(`✅ Dashboard: Caricati ${csvOrdersData?.length || 0} ordini`);
         setCsvOrders(csvOrdersData || []);
         
         // Calcola statistiche ordini CSV
@@ -439,13 +440,16 @@ const DashboardPage = () => {
     loadSupplierStats();
   }, []);
 
-  // Carica dati Conto Economico
+  // Carica dati Conto Economico da Firebase
   useEffect(() => {
-    const loadContoEconomico = () => {
+    const loadContoEconomico = async () => {
       try {
-        const movimenti = JSON.parse(localStorage.getItem('conto_economico_movimenti') || '[]');
-        const contiBancari = JSON.parse(localStorage.getItem('conti_bancari') || '[]');
+        console.log('🔄 Dashboard: Caricando dati finanziari da Firebase...');
+        const movimenti = await loadPrimaNotaData() || [];
+        const contiBancari = await loadContiBancariData() || [];
         const movimentiBanca = JSON.parse(localStorage.getItem('movimenti_banca') || '[]');
+        
+        console.log(`✅ Dashboard: Prima Nota: ${movimenti.length}, Conti: ${contiBancari.length}`);
         
         setContoEconomicoData({
           movimenti,
@@ -458,16 +462,6 @@ const DashboardPage = () => {
     };
     
     loadContoEconomico();
-    
-    // Aggiorna quando cambiano i dati
-    const handleStorageChange = (e) => {
-      if (e.key === 'conto_economico_movimenti' || e.key === 'conti_bancari' || e.key === 'movimenti_banca') {
-        loadContoEconomico();
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   // Calcola statistiche Conto Economico per periodo
