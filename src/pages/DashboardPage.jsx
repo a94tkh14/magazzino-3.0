@@ -62,7 +62,10 @@ const DashboardPage = () => {
   // Funzione per filtrare ordini per data
   const filterOrdersByDateRange = (orders, startDate, endDate) => {
     return orders.filter(order => {
-      const orderDate = new Date(order.created_at);
+      const dateStr = order.created_at || order.createdAt;
+      if (!dateStr) return false;
+      const orderDate = new Date(dateStr);
+      if (isNaN(orderDate.getTime())) return false;
       return orderDate >= startDate && orderDate <= endDate;
     });
   };
@@ -77,17 +80,21 @@ const DashboardPage = () => {
     while (currentDate <= endDate) {
       const dayKey = format(currentDate, 'yyyy-MM-dd');
       const dayOrders = orders.filter(order => {
-        const orderDate = new Date(order.created_at);
+        const dateStr = order.created_at || order.createdAt;
+        if (!dateStr) return false;
+        const orderDate = new Date(dateStr);
+        if (isNaN(orderDate.getTime())) return false;
         return format(orderDate, 'yyyy-MM-dd') === dayKey;
       });
 
       const dayStats = {
         date: format(currentDate, 'dd/MM'),
         orders: dayOrders.length,
-        revenue: dayOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
+        revenue: dayOrders.reduce((sum, order) => sum + (parseFloat(order.total_price) || parseFloat(order.totalPrice) || 0), 0),
         products: dayOrders.reduce((sum, order) => {
-          if (order.products && order.products.length > 0) {
-            return sum + order.products.reduce((prodSum, product) => prodSum + (product.quantity || 0), 0);
+          const items = order.products || order.line_items || order.items || [];
+          if (items.length > 0) {
+            return sum + items.reduce((prodSum, product) => prodSum + (parseInt(product.quantity) || 0), 0);
           }
           return sum;
         }, 0)
@@ -97,15 +104,19 @@ const DashboardPage = () => {
       if (comparisonOrders && comparisonStartDate && comparisonEndDate) {
         const comparisonDayKey = format(currentDate, 'yyyy-MM-dd');
         const comparisonDayOrders = comparisonOrders.filter(order => {
-          const orderDate = new Date(order.created_at);
+          const dateStr = order.created_at || order.createdAt;
+          if (!dateStr) return false;
+          const orderDate = new Date(dateStr);
+          if (isNaN(orderDate.getTime())) return false;
           return format(orderDate, 'yyyy-MM-dd') === comparisonDayKey;
         });
 
         dayStats.comparisonOrders = comparisonDayOrders.length;
-        dayStats.comparisonRevenue = comparisonDayOrders.reduce((sum, order) => sum + (order.total_price || 0), 0);
+        dayStats.comparisonRevenue = comparisonDayOrders.reduce((sum, order) => sum + (parseFloat(order.total_price) || parseFloat(order.totalPrice) || 0), 0);
         dayStats.comparisonProducts = comparisonDayOrders.reduce((sum, order) => {
-          if (order.products && order.products.length > 0) {
-            return sum + order.products.reduce((prodSum, product) => prodSum + (product.quantity || 0), 0);
+          const items = order.products || order.line_items || order.items || [];
+          if (items.length > 0) {
+            return sum + items.reduce((prodSum, product) => prodSum + (parseInt(product.quantity) || 0), 0);
           }
           return sum;
         }, 0);
@@ -132,10 +143,11 @@ const DashboardPage = () => {
           
           const csvStatsData = {
             totalOrders: filteredCsvOrders.length,
-            totalValue: filteredCsvOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
-            totalShippingPaid: filteredCsvOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
-            totalDiscounts: filteredCsvOrders.reduce((sum, order) => sum + (order.discount_amount || 0), 0),
-            totalGeneral: 0
+            totalValue: filteredCsvOrders.reduce((sum, order) => sum + (parseFloat(order.total_price) || parseFloat(order.totalPrice) || 0), 0),
+            totalShippingPaid: filteredCsvOrders.reduce((sum, order) => sum + (parseFloat(order.shipping_cost) || parseFloat(order.shippingPrice) || 0), 0),
+            totalDiscounts: filteredCsvOrders.reduce((sum, order) => sum + (parseFloat(order.discount_amount) || parseFloat(order.total_discounts) || 0), 0),
+            totalGeneral: 0,
+            allOrdersCount: csvOrdersData.length
           };
           
           csvStatsData.totalGeneral = csvStatsData.totalValue + csvStatsData.totalShippingPaid - csvStatsData.totalDiscounts;
@@ -218,10 +230,11 @@ const DashboardPage = () => {
       
       const csvStatsData = {
         totalOrders: filteredCsvOrders.length,
-        totalValue: filteredCsvOrders.reduce((sum, order) => sum + (order.total_price || 0), 0),
-        totalShippingPaid: filteredCsvOrders.reduce((sum, order) => sum + (order.shipping_cost || 0), 0),
-        totalDiscounts: filteredCsvOrders.reduce((sum, order) => sum + (order.discount_amount || 0), 0),
-        totalGeneral: 0
+        totalValue: filteredCsvOrders.reduce((sum, order) => sum + (parseFloat(order.total_price) || parseFloat(order.totalPrice) || 0), 0),
+        totalShippingPaid: filteredCsvOrders.reduce((sum, order) => sum + (parseFloat(order.shipping_cost) || parseFloat(order.shippingPrice) || 0), 0),
+        totalDiscounts: filteredCsvOrders.reduce((sum, order) => sum + (parseFloat(order.discount_amount) || parseFloat(order.total_discounts) || 0), 0),
+        totalGeneral: 0,
+        allOrdersCount: csvOrders.length
       };
       
       csvStatsData.totalGeneral = csvStatsData.totalValue + csvStatsData.totalShippingPaid - csvStatsData.totalDiscounts;
@@ -834,7 +847,44 @@ const DashboardPage = () => {
         </Card>
       </div>
 
-      {/* EBITDA e Conto Economico */}
+      {/* CRUSCOTTO VENDITE SHOPIFY - Grande Card Riepilogativa */}
+      <Card className="bg-gradient-to-r from-[#c68776] to-[#d4a097] border-0 shadow-lg">
+        <CardContent className="py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between text-white">
+            <div>
+              <p className="text-lg opacity-90 flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5" />
+                Cruscotto Vendite Shopify
+              </p>
+              <p className="text-4xl font-bold my-2">{formatPrice(csvStats.totalValue)}</p>
+              <p className="text-sm opacity-80">
+                {csvStats.totalOrders} ordini nel periodo | Media: {formatPrice(csvStats.totalOrders > 0 ? csvStats.totalValue / csvStats.totalOrders : 0)}/ordine
+              </p>
+              {csvStats.allOrdersCount && csvStats.allOrdersCount !== csvStats.totalOrders && (
+                <p className="text-xs opacity-70 mt-1">
+                  ({csvStats.allOrdersCount} ordini totali sincronizzati)
+                </p>
+              )}
+            </div>
+            <div className="mt-4 md:mt-0 grid grid-cols-3 gap-4 text-center">
+              <div className="bg-white/20 rounded-lg p-3">
+                <p className="text-sm opacity-80">Ordini</p>
+                <p className="text-2xl font-bold">{csvStats.totalOrders}</p>
+              </div>
+              <div className="bg-white/20 rounded-lg p-3">
+                <p className="text-sm opacity-80">Spedizioni</p>
+                <p className="text-2xl font-bold">{formatPrice(csvStats.totalShippingPaid)}</p>
+              </div>
+              <div className="bg-white/20 rounded-lg p-3">
+                <p className="text-sm opacity-80">Sconti</p>
+                <p className="text-2xl font-bold">{formatPrice(csvStats.totalDiscounts)}</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* EBITDA e Conto Economico (Prima Nota) */}
       <Card className={`${contoEconomicoStats.ebitda >= 0 ? 'bg-gradient-to-r from-blue-600 to-blue-700' : 'bg-gradient-to-r from-orange-600 to-red-600'}`}>
         <CardContent className="py-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between text-white">
