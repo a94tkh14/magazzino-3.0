@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import Button from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,6 +8,8 @@ import MagazzinoReset from '../components/MagazzinoReset';
 import ShopifyConfig from '../components/ShopifyConfig';
 import ShopifyDebug from '../components/ShopifyDebug';
 import CSVUpload from '../components/CSVUpload';
+import { saveLargeData, loadLargeData } from '../lib/dataManager';
+import { downloadAllShopifyOrders, convertShopifyOrder, getShopifyCredentials } from '../lib/shopifyAPI';
 import { 
   Settings, 
   Database, 
@@ -18,10 +20,21 @@ import {
   Download,
   Trash2,
   Save,
-  RefreshCw
+  RefreshCw,
+  ShoppingCart,
+  CheckCircle,
+  AlertCircle,
+  StopCircle
 } from 'lucide-react';
 
 export default function SettingsPage() {
+  // Stati per sincronizzazione Shopify
+  const [isSyncingShopify, setIsSyncingShopify] = useState(false);
+  const [shopifySyncProgress, setShopifySyncProgress] = useState(null);
+  const [shopifySyncMessage, setShopifySyncMessage] = useState('');
+  const [shopifySyncError, setShopifySyncError] = useState('');
+  const [ordersCount, setOrdersCount] = useState(0);
+  const abortControllerRef = useRef(null);
 
   const [googleAdsConfig, setGoogleAdsConfig] = useState({
     clientId: '',
@@ -45,7 +58,18 @@ export default function SettingsPage() {
 
   // Carica le configurazioni salvate quando la pagina si apre
   useEffect(() => {
-
+    // Carica conteggio ordini salvati
+    const loadOrdersCount = async () => {
+      try {
+        const orders = await loadLargeData('shopify_orders');
+        if (orders) {
+          setOrdersCount(orders.length);
+        }
+      } catch (error) {
+        console.error('Errore caricamento ordini:', error);
+      }
+    };
+    loadOrdersCount();
 
     // Carica configurazione Google Ads
     const savedGoogleAds = localStorage.getItem('google_ads_config');
@@ -155,6 +179,83 @@ export default function SettingsPage() {
     window.alert('Restore avviato...');
   };
 
+  // Funzione per sincronizzare TUTTI gli ordini Shopify
+  const handleSyncAllShopifyOrders = async () => {
+    if (!window.confirm('Vuoi sincronizzare TUTTI gli ordini da Shopify?\n\nQuesto scaricherà tutti gli ordini disponibili e potrebbe richiedere diversi minuti.')) {
+      return;
+    }
+
+    setIsSyncingShopify(true);
+    setShopifySyncError('');
+    setShopifySyncMessage('');
+    setShopifySyncProgress({ currentPage: 0, ordersDownloaded: 0, currentStatus: 'Inizializzazione...' });
+
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Configura prima la connessione Shopify sopra.');
+      }
+
+      // Scarica tutti gli ordini
+      const allOrders = await downloadAllShopifyOrders(
+        (progress) => {
+          setShopifySyncProgress(progress);
+        },
+        abortControllerRef.current
+      );
+
+      if (allOrders.length === 0) {
+        setShopifySyncMessage('Nessun ordine trovato su Shopify');
+        return;
+      }
+
+      // Converti e salva
+      const convertedOrders = allOrders.map(convertShopifyOrder);
+      await saveLargeData('shopify_orders', convertedOrders);
+      
+      setOrdersCount(convertedOrders.length);
+      setShopifySyncMessage(`Sincronizzazione completata! ${convertedOrders.length} ordini scaricati e salvati.`);
+
+    } catch (err) {
+      if (err.message.includes('annullato')) {
+        setShopifySyncMessage('Sincronizzazione annullata');
+      } else {
+        setShopifySyncError(`Errore: ${err.message}`);
+      }
+    } finally {
+      setIsSyncingShopify(false);
+      setShopifySyncProgress(null);
+      abortControllerRef.current = null;
+    }
+  };
+
+  // Annulla sincronizzazione
+  const handleCancelShopifySync = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setShopifySyncMessage('Annullamento in corso...');
+    }
+  };
+
+  // Elimina tutti gli ordini salvati
+  const handleClearShopifyOrders = async () => {
+    if (!window.confirm('Sei sicuro di voler eliminare TUTTI gli ordini salvati?\n\nQuesta azione non può essere annullata.')) {
+      return;
+    }
+
+    try {
+      await saveLargeData('shopify_orders', []);
+      setOrdersCount(0);
+      setShopifySyncMessage('Tutti gli ordini sono stati eliminati');
+    } catch (error) {
+      setShopifySyncError('Errore durante l\'eliminazione degli ordini');
+    }
+  };
+
   // Reset tutte le impostazioni ai valori predefiniti
   const handleResetSettings = () => {
     if (window.confirm('⚠️ Sei sicuro di voler resettare tutte le impostazioni? Questa azione non può essere annullata.')) {
@@ -223,6 +324,111 @@ export default function SettingsPage() {
 
         <TabsContent value="integrations" className="space-y-6">
           <ShopifyConfig />
+          
+          {/* Sezione Sincronizzazione Ordini Shopify */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <ShoppingCart className="h-5 w-5" />
+                <span>Sincronizzazione Ordini Shopify</span>
+              </CardTitle>
+              <CardDescription>
+                Scarica e sincronizza tutti gli ordini dal tuo store Shopify
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Statistiche ordini */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Ordini attualmente salvati</p>
+                    <p className="text-2xl font-bold text-gray-900">{ordersCount.toLocaleString()}</p>
+                  </div>
+                  <Database className="h-8 w-8 text-blue-600" />
+                </div>
+              </div>
+
+              {/* Progress durante sincronizzazione */}
+              {shopifySyncProgress && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-blue-800 font-medium">
+                      <RefreshCw className="w-4 h-4 inline mr-2 animate-spin" />
+                      Sincronizzazione in corso...
+                    </span>
+                    <span className="text-blue-600 text-sm font-bold">
+                      {shopifySyncProgress.ordersDownloaded} ordini
+                    </span>
+                  </div>
+                  <p className="text-sm text-blue-700 mb-2">{shopifySyncProgress.currentStatus}</p>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min((shopifySyncProgress.currentPage || 0) * 5, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Messaggi di successo/errore */}
+              {shopifySyncMessage && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center">
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                  <span className="text-green-800">{shopifySyncMessage}</span>
+                </div>
+              )}
+
+              {shopifySyncError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center">
+                  <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+                  <span className="text-red-800">{shopifySyncError}</span>
+                </div>
+              )}
+
+              {/* Pulsanti azione */}
+              <div className="flex flex-wrap gap-2">
+                {!isSyncingShopify ? (
+                  <Button 
+                    onClick={handleSyncAllShopifyOrders}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Scarica TUTTI gli Ordini
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleCancelShopifySync}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <StopCircle className="h-4 w-4 mr-2" />
+                    Annulla Sincronizzazione
+                  </Button>
+                )}
+
+                <Button 
+                  onClick={handleClearShopifyOrders}
+                  variant="outline"
+                  className="border-red-200 text-red-700 hover:bg-red-50"
+                  disabled={isSyncingShopify || ordersCount === 0}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Elimina Ordini Salvati
+                </Button>
+              </div>
+
+              {/* Info importante */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                <p className="font-medium mb-1">⚠️ Importante:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>La sincronizzazione scarica TUTTI gli ordini disponibili su Shopify</li>
+                  <li>Potrebbero essere necessari diversi minuti per store con molti ordini</li>
+                  <li>Gli ordini esistenti verranno sostituiti con quelli nuovi</li>
+                  <li>Assicurati di avere configurato correttamente le credenziali Shopify sopra</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
           <ShopifyDebug />
 
 

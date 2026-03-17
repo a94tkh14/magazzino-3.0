@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { loadLargeData, saveLargeData } from '../lib/dataManager';
 import { safeIncludes } from '../lib/utils';
-import { convertShopifyOrder, getShopifyCredentials } from '../lib/shopifyAPI';
-import { RefreshCw, AlertCircle, Database, TrendingUp, Clock, Archive, Eye } from 'lucide-react';
+import { convertShopifyOrder, getShopifyCredentials, downloadAllShopifyOrders } from '../lib/shopifyAPI';
+import { RefreshCw, AlertCircle, Database, TrendingUp, Clock, Archive, Eye, Download, StopCircle, CheckCircle } from 'lucide-react';
 import OrderDetailPage from './OrderDetailPage';
 
 // Componenti UI semplificati
@@ -53,11 +53,14 @@ const Input = ({ type = 'text', placeholder = '', value, onChange, className = '
 const OrdiniPage = () => {
   const [ordini, setOrdini] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [syncProgress, setSyncProgress] = useState(null);
+  const abortControllerRef = useRef(null);
 
   // Carica ordini al mount
   useEffect(() => {
@@ -83,6 +86,72 @@ const OrdiniPage = () => {
     } catch (error) {
       console.error('Errore salvataggio ordini:', error);
       throw error;
+    }
+  };
+
+  // Funzione per sincronizzare TUTTI gli ordini da Shopify
+  const handleSyncAllOrders = async () => {
+    if (!window.confirm('Vuoi sincronizzare TUTTI gli ordini da Shopify? Questo potrebbe richiedere diversi minuti.')) {
+      return;
+    }
+
+    setIsSyncingAll(true);
+    setError('');
+    setMessage('');
+    setSyncProgress({ currentPage: 0, ordersDownloaded: 0, currentStatus: 'Inizializzazione...' });
+
+    // Crea AbortController per permettere l'annullamento
+    abortControllerRef.current = new AbortController();
+
+    try {
+      console.log('🚀 INIZIO SINCRONIZZAZIONE COMPLETA ORDINI SHOPIFY...');
+      
+      // Verifica credenziali
+      try {
+        getShopifyCredentials();
+      } catch (credError) {
+        throw new Error('Credenziali Shopify non configurate. Vai nelle Impostazioni per configurarle.');
+      }
+
+      // Scarica tutti gli ordini con progresso
+      const allOrders = await downloadAllShopifyOrders(
+        (progress) => {
+          setSyncProgress(progress);
+        },
+        abortControllerRef.current
+      );
+
+      if (allOrders.length === 0) {
+        setMessage('ℹ️ Nessun ordine trovato su Shopify');
+        return;
+      }
+
+      // Converti e salva tutti gli ordini
+      const convertedOrders = allOrders.map(convertShopifyOrder);
+      await saveOrders(convertedOrders);
+      
+      setMessage(`✅ Sincronizzazione completata! ${convertedOrders.length} ordini totali scaricati e salvati.`);
+      console.log(`🎉 Sincronizzazione completata: ${convertedOrders.length} ordini`);
+
+    } catch (err) {
+      if (err.message.includes('annullato')) {
+        setMessage('⚠️ Sincronizzazione annullata dall\'utente');
+      } else {
+        console.error('❌ ERRORE SINCRONIZZAZIONE:', err);
+        setError(`Errore sincronizzazione: ${err.message}`);
+      }
+    } finally {
+      setIsSyncingAll(false);
+      setSyncProgress(null);
+      abortControllerRef.current = null;
+    }
+  };
+
+  // Funzione per annullare la sincronizzazione
+  const handleCancelSync = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setMessage('⏳ Annullamento in corso...');
     }
   };
 
@@ -215,14 +284,57 @@ const OrdiniPage = () => {
         <div className="flex gap-2">
           <Button
             onClick={handleSyncRecentOrders}
-            disabled={isLoading}
+            disabled={isLoading || isSyncingAll}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Sincronizza Recenti
           </Button>
+          
+          {!isSyncingAll ? (
+            <Button
+              onClick={handleSyncAllOrders}
+              disabled={isLoading || isSyncingAll}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Scarica TUTTI gli Ordini
+            </Button>
+          ) : (
+            <Button
+              onClick={handleCancelSync}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <StopCircle className="w-4 h-4 mr-2" />
+              Annulla
+            </Button>
+          )}
         </div>
       </div>
+      
+      {/* Progress Bar durante sincronizzazione */}
+      {syncProgress && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-blue-800 font-medium">
+              <RefreshCw className="w-4 h-4 inline mr-2 animate-spin" />
+              Sincronizzazione in corso...
+            </span>
+            <span className="text-blue-600 text-sm">
+              {syncProgress.ordersDownloaded} ordini scaricati
+            </span>
+          </div>
+          <div className="text-sm text-blue-700 mb-2">
+            {syncProgress.currentStatus}
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${Math.min((syncProgress.currentPage || 0) * 5, 100)}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       {/* Messaggi */}
       {error && (

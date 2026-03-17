@@ -30,7 +30,7 @@ exports.handler = async (event, context) => {
     const { 
       shopDomain, 
       accessToken, 
-      apiVersion = '2023-10',
+      apiVersion = '2024-01',
       limit = 250,
       status = 'any',
       pageInfo = null,
@@ -53,21 +53,20 @@ exports.handler = async (event, context) => {
     let url;
     
     if (pageInfo) {
-      // Se pageInfo è fornito, assicurati che sia un URL assoluto
-      if (pageInfo.startsWith('http')) {
-        url = pageInfo;
-      } else {
-        // Se è relativo, costruisci l'URL completo
-        url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?${pageInfo}`;
-      }
-      console.log(`📄 Using pageInfo URL: ${url}`);
+      // IMPORTANTE: Quando si usa page_info, NON si possono usare altri parametri tranne limit
+      // Il page_info contiene già tutti i filtri della query originale
+      url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?limit=${Math.min(limit, 250)}&page_info=${pageInfo}`;
+      console.log(`📄 Using pageInfo for pagination`);
     } else {
-      // Costruisci URL da zero
+      // Prima richiesta: costruisci URL con tutti i parametri
       url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?limit=${Math.min(limit, 250)}`;
       
-      // Aggiungi parametri solo se non stiamo usando pageInfo
+      // Aggiungi status (Shopify usa 'any' per tutti gli ordini)
       if (status && status !== 'any') {
         url += `&status=${status}`;
+      } else {
+        // Per ottenere TUTTI gli ordini inclusi archiviati
+        url += `&status=any`;
       }
       
       if (since_id) {
@@ -81,16 +80,8 @@ exports.handler = async (event, context) => {
       }
     }
 
-    console.log(`🔄 Fetching Shopify orders from: ${url}`);
-    console.log(`📊 Parameters: limit=${limit}, status=${status}, pageInfo=${pageInfo ? 'provided' : 'none'}, since_id=${since_id || 'none'}`);
-    if (pageInfo) {
-      console.log(`🔍 pageInfo value: ${pageInfo}`);
-      console.log(`🔍 pageInfo type: ${typeof pageInfo}`);
-      console.log(`🔍 pageInfo starts with http: ${pageInfo.startsWith('http')}`);
-    }
-    if (since_id) {
-      console.log(`🔍 since_id value: ${since_id}`);
-    }
+    console.log(`🔄 Fetching Shopify orders from: ${url.replace(accessToken, '***')}`);
+    console.log(`📊 Parameters: limit=${limit}, status=${status}, pageInfo=${pageInfo ? 'YES' : 'NO'}, since_id=${since_id || 'none'}`);
 
     // Timeout di 30 secondi per chiamate lunghe
     const controller = new AbortController();
@@ -111,6 +102,19 @@ exports.handler = async (event, context) => {
       const errorText = await response.text();
       console.error(`❌ Shopify API Error: ${response.status} - ${errorText}`);
       
+      // Rate limiting - suggerisci retry
+      if (response.status === 429) {
+        return {
+          statusCode: 429,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Rate limit raggiunto. Riprova tra qualche secondo.',
+            retryAfter: response.headers.get('Retry-After') || 2
+          })
+        };
+      }
+      
       return {
         statusCode: response.status,
         headers,
@@ -125,47 +129,40 @@ exports.handler = async (event, context) => {
     const data = await response.json();
     const orders = data.orders || [];
     
-    // Estrai pageInfo per paginazione
+    // Estrai pageInfo per paginazione dal Link header
     const linkHeader = response.headers.get('link');
     let nextPageInfo = null;
     let prevPageInfo = null;
     
-    console.log(`🔍 Link Header: ${linkHeader}`);
-    
     if (linkHeader) {
-      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-      const prevMatch = linkHeader.match(/<([^>]+)>;\s*rel="previous"/);
+      // Parse Link header per estrarre page_info
+      // Formato: <URL>; rel="next", <URL>; rel="previous"
+      const links = linkHeader.split(',');
       
-      console.log(`🔍 Next Match: ${nextMatch ? nextMatch[1] : 'none'}`);
-      console.log(`🔍 Prev Match: ${prevMatch ? prevMatch[1] : 'none'}`);
-      
-      if (nextMatch) {
-        try {
-          const nextUrl = new URL(nextMatch[1]);
-          nextPageInfo = nextUrl.searchParams.get('page_info');
-          console.log(`🔍 Next PageInfo: ${nextPageInfo}`);
-        } catch (error) {
-          console.error(`❌ Errore parsing next URL: ${error.message}`);
+      for (const link of links) {
+        const match = link.match(/<([^>]+)>;\s*rel="([^"]+)"/);
+        if (match) {
+          const linkUrl = match[1];
+          const rel = match[2];
+          
+          try {
+            const parsedUrl = new URL(linkUrl);
+            const pageInfoParam = parsedUrl.searchParams.get('page_info');
+            
+            if (rel === 'next' && pageInfoParam) {
+              nextPageInfo = pageInfoParam;
+              console.log(`✅ Found next page_info: ${pageInfoParam.substring(0, 20)}...`);
+            } else if (rel === 'previous' && pageInfoParam) {
+              prevPageInfo = pageInfoParam;
+            }
+          } catch (error) {
+            console.error(`❌ Error parsing link URL: ${error.message}`);
+          }
         }
       }
-      
-      if (prevMatch) {
-        try {
-          const prevUrl = new URL(prevMatch[1]);
-          prevPageInfo = prevUrl.searchParams.get('page_info');
-          console.log(`🔍 Prev PageInfo: ${prevPageInfo}`);
-        } catch (error) {
-          console.error(`❌ Errore parsing prev URL: ${error.message}`);
-        }
-      }
-    } else {
-      console.log(`⚠️ Nessun Link Header trovato`);
     }
 
-    console.log(`✅ Successfully fetched ${orders.length} orders`);
-    console.log(`📄 Pagination info: hasNext=${!!nextPageInfo}, hasPrev=${!!prevPageInfo}`);
-    console.log(`📄 NextPageInfo value: ${nextPageInfo}`);
-    console.log(`📄 PrevPageInfo value: ${prevPageInfo}`);
+    console.log(`✅ Fetched ${orders.length} orders | hasNext: ${!!nextPageInfo} | hasPrev: ${!!prevPageInfo}`);
 
     return {
       statusCode: 200,
@@ -180,13 +177,29 @@ exports.handler = async (event, context) => {
           hasPrev: !!prevPageInfo
         },
         totalCount: orders.length,
-        method: 'shopify-api',
-        timestamp: new Date().toISOString()
+        metadata: {
+          apiVersion,
+          timestamp: new Date().toISOString(),
+          shopDomain
+        }
       })
     };
 
   } catch (error) {
     console.error('❌ Error in shopify-sync-orders:', error);
+    
+    // Gestisci errore di abort (timeout)
+    if (error.name === 'AbortError') {
+      return {
+        statusCode: 504,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Timeout: la richiesta ha impiegato troppo tempo',
+          type: 'timeout'
+        })
+      };
+    }
     
     return {
       statusCode: 500,
