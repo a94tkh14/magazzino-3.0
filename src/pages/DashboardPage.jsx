@@ -1099,42 +1099,64 @@ const DashboardPage = () => {
           <CardContent>
             <div className="space-y-3">
               {csvOrders.length > 0 ? (() => {
-                // Calcola prodotti più venduti dai dati CSV
+                // Calcola prodotti più venduti dagli ordini
                 const productSales = {};
                 csvOrders.forEach(order => {
-                  if (order.products && order.products.length > 0) {
-                    order.products.forEach(product => {
-                      if (product.name) {
-                        if (productSales[product.name]) {
-                          productSales[product.name] += product.quantity || 0;
-                        } else {
-                          productSales[product.name] = product.quantity || 0;
-                        }
+                  const items = order.line_items || order.products || order.items || [];
+                  items.forEach(item => {
+                    const name = item.name || item.title || '';
+                    const sku = item.sku || '';
+                    const quantity = item.quantity || 1;
+                    const price = parseFloat(item.price) || 0;
+                    const revenue = price * quantity;
+                    
+                    if (name) {
+                      const key = sku || name;
+                      if (productSales[key]) {
+                        productSales[key].quantity += quantity;
+                        productSales[key].revenue += revenue;
+                        productSales[key].orders += 1;
+                      } else {
+                        productSales[key] = { 
+                          name, 
+                          sku, 
+                          quantity, 
+                          revenue,
+                          orders: 1,
+                          price 
+                        };
                       }
-                    });
-                  }
+                    }
+                  });
                 });
                 
-                const topProductsArray = Object.entries(productSales)
-                  .map(([name, quantity]) => ({ name, quantity }))
+                const topProductsArray = Object.values(productSales)
                   .sort((a, b) => b.quantity - a.quantity)
                   .slice(0, 10);
                 
                 return topProductsArray.length > 0 ? topProductsArray.map((product, index) => (
-                  <div key={product.name} className="flex items-center justify-between p-3 border rounded">
+                  <div key={product.sku || product.name} className="flex items-center justify-between p-3 border rounded hover:bg-gray-50">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                        index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                        index === 1 ? 'bg-gray-200 text-gray-700' :
+                        index === 2 ? 'bg-orange-100 text-orange-700' :
+                        'bg-blue-100 text-blue-600'
+                      }`}>
                         {index + 1}
                       </div>
                       <div>
-                        <div className="font-medium">{product.name}</div>
-                        <div className="text-sm text-muted-foreground">SKU: {product.sku || 'N/A'}</div>
+                        <div className="font-medium text-sm">{product.name}</div>
+                        {product.sku && <div className="text-xs text-muted-foreground font-mono">{product.sku}</div>}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold">{product.quantity} pz</div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatPrice(product.revenue || 0)}
+                      <div className="font-bold text-[#c68776]">{product.quantity} pz</div>
+                      <div className="text-sm text-green-600 font-medium">
+                        {formatPrice(product.revenue)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {product.orders} ordini
                       </div>
                     </div>
                   </div>
@@ -1145,7 +1167,7 @@ const DashboardPage = () => {
                 );
               })() : (
                 <div className="text-center py-8 text-muted-foreground">
-                  Carica i dati CSV per vedere i prodotti più venduti
+                  Sincronizza gli ordini Shopify per vedere i prodotti più venduti
                 </div>
               )}
             </div>
