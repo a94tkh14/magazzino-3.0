@@ -208,6 +208,22 @@ export default function SettingsPage() {
     }
   };
 
+  // Funzione per verificare dati su Firebase
+  const handleCheckFirebaseData = async () => {
+    try {
+      const { loadMagazzinoItems, loadShopifyOrders, loadSupplierOrders } = await import('../lib/firebaseSync');
+      
+      const magazzino = await loadMagazzinoItems();
+      const shopify = await loadShopifyOrders();
+      const fornitori = await loadSupplierOrders();
+      
+      window.alert(`📊 Dati presenti su Firebase:\n\n📦 Magazzino: ${magazzino.length} prodotti\n🛒 Ordini Shopify: ${shopify.length}\n🚚 Ordini Fornitori: ${fornitori.length}`);
+    } catch (error) {
+      console.error('Errore verifica Firebase:', error);
+      window.alert('❌ Errore verifica: ' + error.message);
+    }
+  };
+
   // Funzione per sincronizzare TUTTI gli ordini Shopify
   const handleSyncAllShopifyOrders = async () => {
     if (!window.confirm('Vuoi sincronizzare TUTTI gli ordini da Shopify?\n\nQuesto scaricherà tutti gli ordini disponibili e potrebbe richiedere diversi minuti.')) {
@@ -607,6 +623,14 @@ export default function SettingsPage() {
                       Migra Dati Locali su Firebase
                     </>
                   )}
+                </Button>
+                <Button 
+                  onClick={handleCheckFirebaseData} 
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Database className="h-5 w-5 mr-2" />
+                  Verifica Dati su Firebase
                 </Button>
               </div>
 
