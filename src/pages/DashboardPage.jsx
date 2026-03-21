@@ -419,6 +419,10 @@ const DashboardPage = () => {
     movimentiBanca: []
   });
 
+  // Categorie per calcolo Conto Economico
+  const [categorieRicavi, setCategorieRicavi] = useState([]);
+  const [categorieCosti, setCategorieCosti] = useState([]);
+
   // Metriche Marketing
   const [marketingMetrics, setMarketingMetrics] = useState([]);
 
@@ -464,6 +468,34 @@ const DashboardPage = () => {
         const mktMetrics = JSON.parse(localStorage.getItem('marketing_metrics') || '[]');
         setMarketingMetrics(mktMetrics);
         console.log(`📢 Dashboard: Caricate ${mktMetrics.length} metriche marketing`);
+
+        // Carica categorie per calcolo Conto Economico
+        const savedRicavi = localStorage.getItem('categorie_ricavi');
+        const savedCosti = localStorage.getItem('categorie_costi');
+        
+        const defaultCategorieRicavi = [
+          { id: 'vendite_eur', nome: 'Eur', gruppo: 'Vendite Negozio' },
+          { id: 'vendite_libia', nome: 'Libia', gruppo: 'Vendite Negozio' },
+          { id: 'vendite_tuscolana', nome: 'Tuscolana', gruppo: 'Vendite Negozio' },
+          { id: 'ecommerce', nome: 'E-commerce', gruppo: 'E-commerce' },
+          { id: 'b2b', nome: 'B2B', gruppo: 'B2B' },
+          { id: 'incasso_pos', nome: 'Incasso Pos', gruppo: 'Incasso Pos' },
+          { id: 'altri_ricavi', nome: 'Altri Ricavi', gruppo: 'Altri Ricavi' },
+        ];
+        
+        const defaultCategorieCosti = [
+          { id: 'acquisto_merci', nome: 'Acquisto merci', gruppo: 'Acquisti' },
+          { id: 'acquisto_merci_commerce', nome: 'Acquisto merci e-commerce', gruppo: 'Acquisti' },
+          { id: 'affitto', nome: 'Affitto', gruppo: 'Costi Fissi' },
+          { id: 'utenze', nome: 'Utenze', gruppo: 'Costi Fissi' },
+          { id: 'personale', nome: 'Collaboratori esterni', gruppo: 'Personale' },
+          { id: 'oneri_bancari', nome: 'Oneri Bancari', gruppo: 'Finanza' },
+          { id: 'finanziamenti', nome: 'Finanziamenti', gruppo: 'Finanza' },
+          { id: 'altri_costi', nome: 'Altri Costi', gruppo: 'Altro' },
+        ];
+        
+        setCategorieRicavi(savedRicavi ? JSON.parse(savedRicavi) : defaultCategorieRicavi);
+        setCategorieCosti(savedCosti ? JSON.parse(savedCosti) : defaultCategorieCosti);
       } catch (error) {
         console.error('Errore caricamento Conto Economico:', error);
       }
@@ -473,15 +505,51 @@ const DashboardPage = () => {
   }, []);
 
   // Calcola statistiche Conto Economico per periodo
+  // IMPORTANTE: Usa la stessa logica di ContoEconomicoNuovoPage
+  // - Ricavi = movimenti riconciliati con categoria di tipo "ricavo"
+  // - Costi = movimenti riconciliati con categoria di tipo "costo"
   const contoEconomicoStats = useMemo(() => {
     const { movimenti, contiBancari, movimentiBanca } = contoEconomicoData;
     
     console.log('📊 Dashboard EBITDA - movimentiBanca totali:', movimentiBanca?.length || 0);
-    if (movimentiBanca?.length > 0) {
-      console.log('📊 Dashboard EBITDA - Esempio movimento:', JSON.stringify(movimentiBanca[0]));
-    }
     
-    // Calcola saldo banca totale
+    // Crea mappa categorie con tipo
+    const categorieRicaviIds = new Set(categorieRicavi.map(c => c.id));
+    const categorieCostiIds = new Set(categorieCosti.map(c => c.id));
+    
+    // Filtra solo movimenti RICONCILIATI (con categoria assegnata)
+    const movimentiRiconciliati = movimentiBanca.filter(m => m.riconciliato && m.categoria);
+    
+    console.log('📊 Dashboard EBITDA - movimenti riconciliati:', movimentiRiconciliati.length);
+    
+    // Calcola Ricavi e Costi basandosi sul tipo di categoria
+    let totalRicavi = 0;
+    let totalCosti = 0;
+    
+    movimentiRiconciliati.forEach(m => {
+      const importo = Math.abs(parseFloat(m.importo) || 0);
+      
+      if (categorieRicaviIds.has(m.categoria)) {
+        totalRicavi += importo;
+      } else if (categorieCostiIds.has(m.categoria)) {
+        totalCosti += importo;
+      } else {
+        // Fallback: se tipo movimento è entrata = ricavo, uscita = costo
+        if (m.tipo === 'entrata') {
+          totalRicavi += importo;
+        } else {
+          totalCosti += importo;
+        }
+      }
+    });
+    
+    // Risultato = Ricavi - Costi
+    const risultato = totalRicavi - totalCosti;
+    const margine = totalRicavi > 0 ? (risultato / totalRicavi * 100) : 0;
+    
+    console.log(`📊 Dashboard Risultato: Ricavi €${totalRicavi.toFixed(2)}, Costi €${totalCosti.toFixed(2)}, Risultato €${risultato.toFixed(2)}`);
+    
+    // Calcola anche saldo banca per riferimento
     let saldoBanca = 0;
     contiBancari.forEach(c => {
       saldoBanca += parseFloat(c.saldoIniziale || 0);
@@ -494,41 +562,18 @@ const DashboardPage = () => {
       }
     });
     
-    // Calcolo TOTALE (senza filtro periodo) per EBITDA globale
-    const totalEntrate = movimentiBanca
-      .filter(m => m.tipo === 'entrata')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
-    
-    const totalUscite = movimentiBanca
-      .filter(m => m.tipo === 'uscita')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
-    
-    const totalEbitda = totalEntrate - totalUscite;
-    const totalMargine = totalEntrate > 0 ? (totalEbitda / totalEntrate * 100) : 0;
-    
-    console.log(`📊 Dashboard EBITDA TOTALE: Entrate €${totalEntrate.toFixed(2)}, Uscite €${totalUscite.toFixed(2)}, EBITDA €${totalEbitda.toFixed(2)}`);
-    
-    // Movimenti banca nel periodo (per eventuale uso futuro)
-    const filteredMovBanca = movimentiBanca.filter(m => {
-      if (!m.data) return false;
-      const date = new Date(m.data);
-      return date >= mainDateRange.startDate && date <= mainDateRange.endDate;
-    });
-    
-    console.log('📊 Dashboard EBITDA - filteredMovBanca nel periodo:', filteredMovBanca.length);
-    
     return {
-      ricavi: totalEntrate,
-      costi: totalUscite,
-      ebitda: totalEbitda,
-      margine: totalMargine,
+      ricavi: totalRicavi,
+      costi: totalCosti,
+      ebitda: risultato,
+      margine: margine,
       saldoBanca,
-      entrateBanca: totalEntrate,
-      usciteBanca: totalUscite,
-      movimentiCount: movimentiBanca.length,
+      entrateBanca: totalRicavi,
+      usciteBanca: totalCosti,
+      movimentiCount: movimentiRiconciliati.length,
       contiBancariCount: contiBancari.length
     };
-  }, [contoEconomicoData, mainDateRange]);
+  }, [contoEconomicoData, categorieRicavi, categorieCosti]);
 
   // Calcola KPI Marketing per il periodo
   const marketingKpis = useMemo(() => {
