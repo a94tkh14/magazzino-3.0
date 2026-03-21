@@ -532,6 +532,23 @@ const ContoEconomicoPage = () => {
     return (value || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
   };
 
+  // Stile per celle sticky della prima colonna
+  const stickyCellStyle = {
+    position: 'sticky',
+    left: 0,
+    zIndex: 20,
+    backgroundColor: 'white',
+    boxShadow: '3px 0 6px -3px rgba(0,0,0,0.15)'
+  };
+
+  const stickyHeaderStyle = {
+    position: 'sticky',
+    left: 0,
+    zIndex: 30,
+    backgroundColor: '#f9fafb',
+    boxShadow: '3px 0 6px -3px rgba(0,0,0,0.15)'
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-16">
@@ -917,12 +934,12 @@ const ContoEconomicoPage = () => {
             Analisi dettagliata per periodo
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto max-w-full">
-            <table className="w-full text-sm border-collapse">
-              <thead>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto relative" style={{ maxWidth: '100%' }}>
+            <table className="w-full text-sm border-collapse" style={{ minWidth: '800px' }}>
+              <thead className="sticky top-0 z-20">
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left p-3 font-semibold sticky left-0 z-10 bg-gray-50 min-w-[180px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Indicatore</th>
+                  <th className="text-left p-3 font-semibold min-w-[180px]" style={stickyHeaderStyle}>Indicatore</th>
                   {periodsWithCumulative.map((period, index) => (
                     <th key={index} className="text-right p-3 font-semibold min-w-[100px]">
                       {period.period}
@@ -940,7 +957,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Ricavi Totali</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Ricavi Totali</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right font-bold text-green-600">{formatCurrency(p.totalRevenue)}</td>
                   ))}
@@ -948,7 +965,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Costi Totali</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Costi Totali</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right font-bold text-red-600">{formatCurrency(p.totalCosts)}</td>
                   ))}
@@ -956,7 +973,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">EBITDA (Profitto)</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>EBITDA (Profitto)</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className={`p-3 text-right font-bold ${p.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(p.grossProfit)}
@@ -968,7 +985,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Margine %</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Margine %</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className={`p-3 text-right ${p.grossMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {p.grossMargin.toFixed(1)}%
@@ -985,7 +1002,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Ordini</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Ordini</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right">{p.orderCount}</td>
                   ))}
@@ -993,7 +1010,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Pezzi Venduti</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Pezzi Venduti</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right">{p.quantitySold}</td>
                   ))}
@@ -1001,7 +1018,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Scontrino Medio (AOV)</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Scontrino Medio (AOV)</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right">{formatCurrency(p.avgOrderValue)}</td>
                   ))}
@@ -1014,7 +1031,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Ricavi Prodotti</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Ricavi Prodotti</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right text-green-600">{formatCurrency(p.productRevenue)}</td>
                   ))}
@@ -1022,7 +1039,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Costi Acquisto Prodotti</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Costi Acquisto Prodotti</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.purchaseCosts)}</td>
                   ))}
@@ -1030,7 +1047,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Margine Prodotti</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Margine Prodotti</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className={`p-3 text-right font-bold ${p.productProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(p.productProfit)}
@@ -1042,7 +1059,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Margine Prodotti %</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Margine Prodotti %</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className={`p-3 text-right ${p.productMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {p.productMargin.toFixed(1)}%
@@ -1059,7 +1076,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Google Ads</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Google Ads</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.googleCosts)}</td>
                   ))}
@@ -1067,7 +1084,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Meta (Facebook/Instagram)</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Meta (Facebook/Instagram)</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.metaCosts)}</td>
                   ))}
@@ -1075,7 +1092,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Totale Marketing</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Totale Marketing</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right font-bold text-red-600">{formatCurrency(p.marketingCosts)}</td>
                   ))}
@@ -1083,7 +1100,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">CPA (Costo per Ordine)</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>CPA (Costo per Ordine)</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right">{formatCurrency(p.cpaAdv)}</td>
                   ))}
@@ -1096,7 +1113,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Ricavi Spedizione</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Ricavi Spedizione</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right text-green-600">{formatCurrency(p.shippingRevenue)}</td>
                   ))}
@@ -1104,7 +1121,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Costi Spedizione</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Costi Spedizione</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className="p-3 text-right text-red-600">{formatCurrency(p.shippingCosts)}</td>
                   ))}
@@ -1112,7 +1129,7 @@ const ContoEconomicoPage = () => {
                 </tr>
                 
                 <tr className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium sticky left-0 z-10 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Margine Spedizioni</td>
+                  <td className="p-3 font-medium" style={stickyCellStyle}>Margine Spedizioni</td>
                   {periodsWithCumulative.map((p, i) => (
                     <td key={i} className={`p-3 text-right ${p.shippingProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(p.shippingProfit)}
