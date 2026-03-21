@@ -76,9 +76,48 @@ const ContoEconomicoPage = () => {
         console.log(`💰 Cruscotto: Caricati ${allCosts.length} costi`);
 
         // Carica metriche marketing (nuovo formato)
-        const marketingMetrics = JSON.parse(localStorage.getItem('marketing_metrics') || '[]');
+        let marketingMetrics = JSON.parse(localStorage.getItem('marketing_metrics') || '[]');
+        
+        // Se non ci sono metriche nel nuovo formato, prova il vecchio formato
+        if (marketingMetrics.length === 0) {
+          const oldMetrics = JSON.parse(localStorage.getItem('manualMetrics') || '[]');
+          if (oldMetrics.length > 0) {
+            console.log('📢 Convertendo vecchio formato metriche...');
+            // Converti vecchio formato in nuovo
+            marketingMetrics = [];
+            oldMetrics.forEach(week => {
+              const weekStart = week.weekStart;
+              ['googleAds', 'meta', 'tiktok'].forEach(platform => {
+                const platformKey = platform === 'googleAds' ? 'google_ads' : platform;
+                if (week[platform] && week[platform].spent > 0) {
+                  marketingMetrics.push({
+                    id: `converted_${weekStart}_${platformKey}`,
+                    date: weekStart,
+                    platform: platformKey,
+                    spent: week[platform].spent || 0,
+                    impressions: week[platform].impressions || 0,
+                    clicks: week[platform].clicks || 0,
+                    conversions: week[platform].conversions || 0,
+                    revenue: 0
+                  });
+                }
+              });
+            });
+            // Salva nel nuovo formato
+            if (marketingMetrics.length > 0) {
+              localStorage.setItem('marketing_metrics', JSON.stringify(marketingMetrics));
+              console.log(`📢 Convertite ${marketingMetrics.length} metriche dal vecchio formato`);
+            }
+          }
+        }
+        
         setManualMetrics(marketingMetrics);
         console.log(`📢 Cruscotto: Caricate ${marketingMetrics.length} metriche marketing`);
+        if (marketingMetrics.length > 0) {
+          console.log('📢 Esempio metrica:', marketingMetrics[0]);
+          const totalSpent = marketingMetrics.reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
+          console.log(`📢 Totale spesa marketing: €${totalSpent.toFixed(2)}`);
+        }
 
         // Carica dati magazzino da Firebase
         const magData = await loadMagazzinoData() || [];
@@ -286,9 +325,20 @@ const ContoEconomicoPage = () => {
 
     // Costi marketing (nuovo formato: metriche giornaliere per piattaforma)
     const periodMetrics = manualMetrics.filter(metric => {
+      if (!metric.date) return false;
       const metricDate = new Date(metric.date);
       return metricDate >= startDate && metricDate <= endDate;
     });
+    
+    // Debug: logga solo per il primo periodo
+    if (periodLabel && manualMetrics.length > 0 && periodMetrics.length === 0) {
+      console.log(`⚠️ Nessuna metrica marketing trovata per ${periodLabel}`);
+      console.log(`   Range: ${startDate.toISOString()} - ${endDate.toISOString()}`);
+      console.log(`   Metriche totali: ${manualMetrics.length}`);
+      if (manualMetrics[0]) {
+        console.log(`   Prima metrica date: ${manualMetrics[0].date}`);
+      }
+    }
     
     const googleCosts = periodMetrics
       .filter(m => m.platform === 'google_ads')
