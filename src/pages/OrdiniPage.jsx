@@ -55,6 +55,10 @@ const OrdiniPage = () => {
   // Stati stampa
   const [printingOrder, setPrintingOrder] = useState(null);
   
+  // Stati paginazione
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50);
+  
   // Stati modal evasione ordine
   const [showEvasioneModal, setShowEvasioneModal] = useState(false);
   const [evasioneOrder, setEvasioneOrder] = useState(null);
@@ -380,7 +384,7 @@ const OrdiniPage = () => {
     return result;
   }, [ordini, searchTerm, statusFilter, fulfillmentFilter, dateFrom, dateTo, minAmount, maxAmount, sortField, sortDirection]);
 
-  // Statistiche
+  // Statistiche (calcolate su tutti gli ordini filtrati)
   const stats = useMemo(() => {
     const totalValue = filteredAndSortedOrders.reduce((sum, o) => sum + parseFloat(o.total_price || o.totalPrice || 0), 0);
     const paid = filteredAndSortedOrders.filter(o => (o.financial_status || o.financialStatus) === 'paid').length;
@@ -390,6 +394,18 @@ const OrdiniPage = () => {
     
     return { total: filteredAndSortedOrders.length, totalValue, paid, pending, fulfilled, avgOrder };
   }, [filteredAndSortedOrders]);
+
+  // Paginazione
+  const totalPages = Math.ceil(filteredAndSortedOrders.length / itemsPerPage);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredAndSortedOrders.slice(start, start + itemsPerPage);
+  }, [filteredAndSortedOrders, currentPage, itemsPerPage]);
+
+  // Reset pagina quando cambiano i filtri
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, fulfillmentFilter, dateFrom, dateTo, minAmount, maxAmount]);
 
   // Funzione ordinamento
   const handleSort = (field) => {
@@ -1649,7 +1665,7 @@ const OrdiniPage = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {filteredAndSortedOrders.map((order) => {
+                    {paginatedOrders.map((order) => {
                       const orderNumber = order.order_number || order.orderNumber || order.name;
                       const customerName = order.customerName || `${order.customer?.first_name || ''} ${order.customer?.last_name || ''}`.trim() || 'N/A';
                       const email = order.email || order.customerEmail || '';
@@ -1723,6 +1739,48 @@ const OrdiniPage = () => {
                     })}
                   </tbody>
                 </table>
+                
+                {/* Paginazione */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+                    <div className="text-sm text-gray-600">
+                      Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredAndSortedOrders.length)} di {filteredAndSortedOrders.length} ordini
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        «
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        ‹
+                      </button>
+                      <span className="px-4 py-1 bg-blue-600 text-white rounded text-sm font-medium">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        ›
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                      >
+                        »
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

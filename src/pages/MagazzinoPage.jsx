@@ -23,6 +23,7 @@ const MagazzinoPage = () => {
     nome: '',
     quantita: '',
     prezzo: '',
+    costo: '',
     anagrafica: '',
     tipologia: '',
     marca: ''
@@ -136,12 +137,22 @@ const MagazzinoPage = () => {
         return item;
       });
     } else if (field === 'prezzo') {
-      let newPrezzo = value.replace(',', '.');
+      let newPrezzo = value.toString().replace(',', '.');
       const parsed = parseFloat(newPrezzo);
       if (isNaN(parsed) || parsed < 0) return;
       updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
         if (item.sku === sku) {
           return { ...item, prezzo: parsed };
+        }
+        return item;
+      });
+    } else if (field === 'costo') {
+      let newCosto = value.toString().replace(',', '.');
+      const parsed = parseFloat(newCosto);
+      if (isNaN(parsed) || parsed < 0) return;
+      updated = (Array.isArray(magazzinoData) ? magazzinoData : []).map(item => {
+        if (item.sku === sku) {
+          return { ...item, costo: parsed };
         }
         return item;
       });
@@ -301,11 +312,14 @@ const MagazzinoPage = () => {
       return;
     }
 
+    const costo = newProduct.costo ? parseFloat(newProduct.costo.replace(',', '.')) : 0;
+    
     const newItem = {
       sku: newProduct.sku,
       nome: newProduct.nome,
       quantita: quantita,
       prezzo: prezzo,
+      costo: costo,
       anagrafica: newProduct.anagrafica,
       tipologia: newProduct.tipologia,
       marca: newProduct.marca
@@ -330,6 +344,7 @@ const MagazzinoPage = () => {
           nome: '',
           quantita: '',
           prezzo: '',
+          costo: '',
           anagrafica: '',
           tipologia: '',
           marca: ''
@@ -916,7 +931,8 @@ const MagazzinoPage = () => {
               </div>
               <div className="flex gap-2">
                 <input className="border rounded px-2 py-1 w-24" placeholder="Quantità*" type="number" min="0" value={newProduct.quantita} onChange={e => setNewProduct(p => ({ ...p, quantita: e.target.value }))} />
-                <input className="border rounded px-2 py-1 w-24" placeholder="Prezzo*" type="text" value={newProduct.prezzo} onChange={e => setNewProduct(p => ({ ...p, prezzo: e.target.value }))} />
+                <input className="border rounded px-2 py-1 w-28" placeholder="Prezzo Vend.*" type="text" value={newProduct.prezzo} onChange={e => setNewProduct(p => ({ ...p, prezzo: e.target.value }))} />
+                <input className="border rounded px-2 py-1 w-28" placeholder="Costo Acq." type="text" value={newProduct.costo} onChange={e => setNewProduct(p => ({ ...p, costo: e.target.value }))} />
               </div>
               <div className="flex flex-wrap gap-2">
                 <input className="border rounded px-2 py-1 flex-1 min-w-0 max-w-[150px]" placeholder="Anagrafica" value={newProduct.anagrafica} onChange={e => setNewProduct(p => ({ ...p, anagrafica: e.target.value }))} />
@@ -1242,9 +1258,10 @@ const MagazzinoPage = () => {
                     <th className="text-left p-3 font-medium w-16">Foto</th>
                     <th className="text-left p-3 font-medium">Nome</th>
                     <th className="text-left p-3 font-medium">SKU</th>
-                    <th className="text-left p-3 font-medium">Quantità</th>
+                    <th className="text-left p-3 font-medium">Qtà</th>
                     <th className="text-left p-3 font-medium">Prezzo</th>
-                    <th className="text-left p-3 font-medium">Marca</th>
+                    <th className="text-left p-3 font-medium">Costo</th>
+                    <th className="text-left p-3 font-medium">Margine</th>
                     <th className="text-left p-3 font-medium">Azioni</th>
                   </tr>
                 </thead>
@@ -1307,14 +1324,39 @@ const MagazzinoPage = () => {
                             min="0"
                             value={item.prezzo || 0}
                             onChange={(e) => handleInlineEdit(item.sku, 'prezzo', parseFloat(e.target.value) || 0)}
-                            className="w-24 px-2 py-1 text-right rounded border border-gray-300 font-medium"
+                            className="w-20 px-2 py-1 text-right rounded border border-gray-300 font-medium"
                           />
-                          <span className="text-gray-500">€</span>
+                          <span className="text-gray-500 text-xs">€</span>
                         </div>
                       </td>
-                      {/* Marca */}
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {item.marca || '-'}
+                      {/* Costo - Editabile */}
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.costo || 0}
+                            onChange={(e) => handleInlineEdit(item.sku, 'costo', parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 text-right rounded border border-blue-200 bg-blue-50 font-medium text-blue-800"
+                          />
+                          <span className="text-gray-500 text-xs">€</span>
+                        </div>
+                      </td>
+                      {/* Margine */}
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const prezzo = parseFloat(item.prezzo || 0);
+                          const costo = parseFloat(item.costo || 0);
+                          const margine = prezzo - costo;
+                          const marginePerc = prezzo > 0 ? ((margine / prezzo) * 100).toFixed(0) : 0;
+                          return (
+                            <div className={`text-sm font-medium ${margine > 0 ? 'text-green-600' : margine < 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                              €{margine.toFixed(2)}
+                              <span className="text-xs ml-1">({marginePerc}%)</span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       {/* Azioni */}
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
