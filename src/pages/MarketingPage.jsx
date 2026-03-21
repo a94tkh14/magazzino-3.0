@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/button';
 import DateRangePicker from '../components/DateRangePicker';
-import { saveMetricheMarketingData, loadMetricheMarketingData } from '../lib/magazzinoStorage';
+import { saveMetricheMarketingData, loadMetricheMarketingData, loadShopifyOrdersData } from '../lib/magazzinoStorage';
 
 const PIATTAFORME = {
   google_ads: { 
@@ -91,10 +91,11 @@ const MarketingPage = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Carica ordini
-      const savedOrders = localStorage.getItem('shopify_orders');
-      if (savedOrders) {
-        setOrders(JSON.parse(savedOrders));
+      // Carica ordini Shopify da Firebase
+      const shopifyOrders = await loadShopifyOrdersData();
+      if (shopifyOrders && shopifyOrders.length > 0) {
+        setOrders(shopifyOrders);
+        console.log(`📦 Marketing: caricati ${shopifyOrders.length} ordini Shopify`);
       }
       
       // Carica metriche marketing
@@ -191,6 +192,62 @@ const MarketingPage = () => {
     });
   }, [manualMetrics, getDateRange, selectedPlatform]);
 
+  // === ORDINI SHOPIFY FILTRATI PER PERIODO ===
+  const ordersData = useMemo(() => {
+    const { startDate, endDate } = getDateRange;
+    
+    const filteredOrders = orders.filter(order => {
+      const orderDate = new Date(order.created_at || order.createdAt);
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+    
+    // Calcola totali
+    const totalOrders = filteredOrders.length;
+    const totalRevenue = filteredOrders.reduce((sum, order) => {
+      const amount = parseFloat(order.total_price || order.totalPrice || 0);
+      return sum + amount;
+    }, 0);
+    
+    // Raggruppa per data (per grafici)
+    const byDate = {};
+    filteredOrders.forEach(order => {
+      const dateKey = new Date(order.created_at || order.createdAt).toISOString().slice(0, 10);
+      if (!byDate[dateKey]) {
+        byDate[dateKey] = { orders: 0, revenue: 0 };
+      }
+      byDate[dateKey].orders += 1;
+      byDate[dateKey].revenue += parseFloat(order.total_price || order.totalPrice || 0);
+    });
+    
+    // Periodo precedente
+    const duration = endDate.getTime() - startDate.getTime();
+    const prevStart = new Date(startDate.getTime() - duration);
+    const prevEnd = new Date(startDate.getTime());
+    
+    const prevOrders = orders.filter(order => {
+      const orderDate = new Date(order.created_at || order.createdAt);
+      return orderDate >= prevStart && orderDate < prevEnd;
+    });
+    
+    const prevTotalOrders = prevOrders.length;
+    const prevTotalRevenue = prevOrders.reduce((sum, order) => {
+      return sum + parseFloat(order.total_price || order.totalPrice || 0);
+    }, 0);
+    
+    const calcChange = (curr, prev) => prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+    
+    return {
+      totalOrders,
+      totalRevenue,
+      avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      byDate,
+      prevTotalOrders,
+      prevTotalRevenue,
+      ordersChange: calcChange(totalOrders, prevTotalOrders),
+      revenueChange: calcChange(totalRevenue, prevTotalRevenue)
+    };
+  }, [orders, getDateRange]);
+
   // === METRICHE PERIODO PRECEDENTE ===
   const previousPeriodMetrics = useMemo(() => {
     if (!comparisonEnabled) return [];
@@ -210,12 +267,14 @@ const MarketingPage = () => {
 
   // === CALCOLO KPI ===
   const kpiData = useMemo(() => {
+    // Dati da metriche marketing (spesa, impressioni, click)
     const current = {
       spent: filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0),
       impressions: filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.impressions) || 0), 0),
       clicks: filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.clicks) || 0), 0),
-      conversions: filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.conversions) || 0), 0),
-      revenue: filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.revenue) || 0), 0)
+      // Conversioni e ricavi DA ORDINI SHOPIFY REALI
+      conversions: ordersData.totalOrders,
+      revenue: ordersData.totalRevenue
     };
     
     current.ctr = current.impressions > 0 ? (current.clicks / current.impressions) * 100 : 0;
@@ -228,8 +287,9 @@ const MarketingPage = () => {
       spent: previousPeriodMetrics.reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0),
       impressions: previousPeriodMetrics.reduce((sum, m) => sum + (parseFloat(m.impressions) || 0), 0),
       clicks: previousPeriodMetrics.reduce((sum, m) => sum + (parseFloat(m.clicks) || 0), 0),
-      conversions: previousPeriodMetrics.reduce((sum, m) => sum + (parseFloat(m.conversions) || 0), 0),
-      revenue: previousPeriodMetrics.reduce((sum, m) => sum + (parseFloat(m.revenue) || 0), 0)
+      // Periodo precedente da ordini
+      conversions: ordersData.prevTotalOrders,
+      revenue: ordersData.prevTotalRevenue
     };
     
     previous.ctr = previous.impressions > 0 ? (previous.clicks / previous.impressions) * 100 : 0;
@@ -254,19 +314,23 @@ const MarketingPage = () => {
         roas: calcChange(current.roas, previous.roas)
       }
     };
-  }, [filteredMetrics, previousPeriodMetrics]);
+  }, [filteredMetrics, previousPeriodMetrics, ordersData]);
 
   // === KPI PER PIATTAFORMA ===
   const platformKpis = useMemo(() => {
     const platforms = {};
+    const totalSpent = filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
     
     Object.keys(PIATTAFORME).forEach(platform => {
       const metrics = filteredMetrics.filter(m => m.platform === platform);
       const spent = metrics.reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
       const impressions = metrics.reduce((sum, m) => sum + (parseFloat(m.impressions) || 0), 0);
       const clicks = metrics.reduce((sum, m) => sum + (parseFloat(m.clicks) || 0), 0);
-      const conversions = metrics.reduce((sum, m) => sum + (parseFloat(m.conversions) || 0), 0);
-      const revenue = metrics.reduce((sum, m) => sum + (parseFloat(m.revenue) || 0), 0);
+      
+      // Conversioni e ricavi proporzionali alla spesa della piattaforma
+      const spentRatio = totalSpent > 0 ? spent / totalSpent : 0;
+      const conversions = Math.round(ordersData.totalOrders * spentRatio);
+      const revenue = ordersData.totalRevenue * spentRatio;
       
       platforms[platform] = {
         spent,
@@ -283,13 +347,14 @@ const MarketingPage = () => {
     });
     
     return platforms;
-  }, [filteredMetrics]);
+  }, [filteredMetrics, ordersData]);
 
   // === DATI GRAFICI ===
   const chartData = useMemo(() => {
-    // Raggruppa per data
+    // Raggruppa per data - combina metriche marketing con ordini Shopify
     const byDate = {};
     
+    // Prima aggiungi i dati delle metriche marketing (spesa, click, impressioni)
     filteredMetrics.forEach(m => {
       const dateKey = m.date;
       if (!byDate[dateKey]) {
@@ -309,9 +374,27 @@ const MarketingPage = () => {
       byDate[dateKey].spent += parseFloat(m.spent) || 0;
       byDate[dateKey].impressions += parseFloat(m.impressions) || 0;
       byDate[dateKey].clicks += parseFloat(m.clicks) || 0;
-      byDate[dateKey].conversions += parseFloat(m.conversions) || 0;
-      byDate[dateKey].revenue += parseFloat(m.revenue) || 0;
       byDate[dateKey][m.platform] += parseFloat(m.spent) || 0;
+    });
+    
+    // Poi aggiungi conversioni e ricavi REALI dagli ordini Shopify
+    Object.entries(ordersData.byDate).forEach(([dateKey, data]) => {
+      if (!byDate[dateKey]) {
+        byDate[dateKey] = {
+          date: dateKey,
+          dateLabel: new Date(dateKey).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }),
+          spent: 0,
+          impressions: 0,
+          clicks: 0,
+          conversions: 0,
+          revenue: 0,
+          google_ads: 0,
+          meta: 0,
+          tiktok: 0
+        };
+      }
+      byDate[dateKey].conversions = data.orders;
+      byDate[dateKey].revenue = data.revenue;
     });
     
     return Object.values(byDate)
@@ -322,7 +405,7 @@ const MarketingPage = () => {
         roas: d.spent > 0 ? d.revenue / d.spent : 0,
         ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0
       }));
-  }, [filteredMetrics]);
+  }, [filteredMetrics, ordersData]);
 
   // === DATI PIE CHART ===
   const pieData = useMemo(() => {
@@ -916,12 +999,15 @@ const MarketingPage = () => {
                 </CardContent>
               </Card>
               
-              {/* Conversioni */}
-              <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+              {/* Conversioni (Ordini Shopify) */}
+              <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white relative overflow-hidden">
+                <div className="absolute top-1 right-1 bg-white/20 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                  SHOPIFY
+                </div>
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-green-100 text-xs font-medium">Conversioni</p>
+                      <p className="text-green-100 text-xs font-medium">Ordini Reali</p>
                       <p className="text-2xl font-bold mt-1">
                         {kpiData.current.conversions.toLocaleString('it-IT')}
                       </p>
@@ -963,11 +1049,14 @@ const MarketingPage = () => {
               </Card>
               
               {/* ROAS */}
-              <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white">
+              <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white relative overflow-hidden">
+                <div className="absolute top-1 right-1 bg-white/20 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                  SHOPIFY
+                </div>
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-emerald-100 text-xs font-medium">ROAS</p>
+                      <p className="text-emerald-100 text-xs font-medium">ROAS Reale</p>
                       <p className="text-2xl font-bold mt-1">
                         {kpiData.current.roas.toFixed(2)}x
                       </p>
@@ -984,6 +1073,19 @@ const MarketingPage = () => {
                   )}
                 </CardContent>
               </Card>
+            </div>
+            
+            {/* Info dati Shopify */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+              <ShoppingCart className="w-6 h-6 text-green-600" />
+              <div>
+                <p className="font-medium text-green-800">
+                  Dati Shopify: {ordersData.totalOrders} ordini • €{ordersData.totalRevenue.toLocaleString('it-IT', { maximumFractionDigits: 2 })} fatturato
+                </p>
+                <p className="text-sm text-green-600">
+                  Conversioni, ricavi, CPA e ROAS sono calcolati sugli ordini Shopify reali nel periodo selezionato
+                </p>
+              </div>
             </div>
 
             {/* GRAFICI PRINCIPALI */}
