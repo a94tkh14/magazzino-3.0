@@ -5,6 +5,10 @@ import DateRangePicker from '../components/DateRangePicker';
 import { safeToLowerCase } from '../lib/utils';
 import { loadShopifyOrdersData, loadMagazzinoData, loadCostiData } from '../lib/magazzinoStorage';
 
+// Store ID per Maison Victorio nella logistica
+const MV_STORE_IDS = ['store_mv', 'mv', 'maison_victorio', 'maisonvictorio', 'shopify'];
+
+// Fallback se non ci sono dati logistica
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
 
@@ -56,6 +60,8 @@ const ContoEconomicoPage = () => {
   const [orders, setOrders] = useState([]);
   const [manualMetrics, setManualMetrics] = useState([]);
   const [magazzinoData, setMagazzinoData] = useState([]);
+  const [movimentiLogistica, setMovimentiLogistica] = useState([]);
+  const [storesLogistica, setStoresLogistica] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Helper per ottenere valore con fallback
@@ -131,6 +137,32 @@ const ContoEconomicoPage = () => {
         setMagazzinoData(magData);
         console.log(`📊 Cruscotto: Caricati ${magData.length} prodotti magazzino`);
 
+        // Carica movimenti logistica (per costi spedizione reali)
+        const movLogistica = JSON.parse(localStorage.getItem('movimenti_logistica') || '[]');
+        const storesLog = JSON.parse(localStorage.getItem('stores_logistica') || '[]');
+        setMovimentiLogistica(movLogistica);
+        setStoresLogistica(storesLog);
+        
+        // Trova lo store MV
+        const mvStore = storesLog.find(s => 
+          MV_STORE_IDS.some(id => 
+            s.id?.toLowerCase().includes(id) || 
+            s.nome?.toLowerCase().includes(id) ||
+            s.nome?.toLowerCase().includes('maison') ||
+            s.nome?.toLowerCase().includes('victorio')
+          )
+        );
+        
+        // Filtra solo spedizioni assegnate a MV
+        const spedizioniMV = movLogistica.filter(m => 
+          m.categoria?.includes('spedizione') && 
+          m.store && 
+          (mvStore ? m.store === mvStore.id : MV_STORE_IDS.some(id => m.store?.toLowerCase().includes(id)))
+        );
+        
+        console.log(`🚚 Cruscotto: Caricati ${movLogistica.length} movimenti logistica, ${spedizioniMV.length} spedizioni MV`);
+        if (mvStore) console.log(`🏪 Store MV trovato: ${mvStore.nome} (${mvStore.id})`);
+
       } catch (error) {
         console.error('Errore caricamento dati:', error);
       } finally {
@@ -162,8 +194,68 @@ const ContoEconomicoPage = () => {
     return getVal(order, 'products', 'line_items', 'items') || [];
   };
 
-  // Calcola costo spedizione effettivo
+  // Trova lo store MV nella logistica
+  const mvStoreId = useMemo(() => {
+    const mvStore = storesLogistica.find(s => 
+      MV_STORE_IDS.some(id => 
+        s.id?.toLowerCase().includes(id) || 
+        s.nome?.toLowerCase().includes(id) ||
+        s.nome?.toLowerCase().includes('maison') ||
+        s.nome?.toLowerCase().includes('victorio')
+      )
+    );
+    return mvStore?.id || null;
+  }, [storesLogistica]);
+
+  // Spedizioni MV dalla logistica (con numero ordine)
+  const spedizioniMV = useMemo(() => {
+    if (!mvStoreId) return [];
+    return movimentiLogistica.filter(m => 
+      m.categoria?.includes('spedizione') && 
+      m.store === mvStoreId &&
+      m.ordineId // Solo quelle con numero ordine
+    );
+  }, [movimentiLogistica, mvStoreId]);
+
+  // Mappa numero ordine -> costo spedizione reale dalla logistica
+  const costiSpedizioneReali = useMemo(() => {
+    const map = new Map();
+    spedizioniMV.forEach(m => {
+      const ordineId = (m.ordineId || '').trim();
+      if (ordineId) {
+        // Pulisci il numero ordine (rimuovi prefissi, spazi, ecc.)
+        const cleanOrderId = ordineId.replace(/^#/, '').trim();
+        const costo = parseFloat(m.costo || m.importo || 0);
+        map.set(cleanOrderId, costo);
+        // Aggiungi anche versioni alternative del numero ordine
+        map.set(ordineId, costo);
+      }
+    });
+    console.log(`🚚 Mappa costi spedizione reali: ${map.size} ordini`);
+    return map;
+  }, [spedizioniMV]);
+
+  // Calcola costo spedizione effettivo (usa logistica se disponibile, altrimenti stima)
   const getShippingCost = (order) => {
+    // Prova a trovare il costo reale dalla logistica
+    const orderNumber = getVal(order, 'order_number', 'orderNumber', 'name', 'id');
+    if (orderNumber) {
+      const cleanNumber = String(orderNumber).replace(/^#/, '').trim();
+      
+      // Cerca nella mappa dei costi reali
+      if (costiSpedizioneReali.has(cleanNumber)) {
+        return costiSpedizioneReali.get(cleanNumber);
+      }
+      if (costiSpedizioneReali.has(orderNumber)) {
+        return costiSpedizioneReali.get(orderNumber);
+      }
+      // Prova anche con il numero intero
+      if (costiSpedizioneReali.has(String(orderNumber))) {
+        return costiSpedizioneReali.get(String(orderNumber));
+      }
+    }
+    
+    // Fallback: stima basata sul tipo di spedizione
     const shippingType = safeToLowerCase(getVal(order, 'shippingType', 'shipping_method') || '', '');
     if (shippingType.includes('express') || shippingType.includes('domicilio')) {
       return COSTO_EXPRESS;
@@ -324,8 +416,35 @@ const ContoEconomicoPage = () => {
     const shippingRevenue = periodOrders.reduce((sum, order) => sum + getShippingRevenue(order), 0);
     const productRevenue = totalRevenue - shippingRevenue;
 
-    // Costi spedizione
-    const shippingCosts = periodOrders.reduce((sum, order) => sum + getShippingCost(order), 0);
+    // Costi spedizione (da logistica MV se disponibili, altrimenti stimati)
+    let shippingCostsReali = 0;
+    let shippingCostsStimati = 0;
+    let ordiniConCostoReale = 0;
+    let ordiniConCostoStimato = 0;
+    
+    periodOrders.forEach(order => {
+      const orderNumber = getVal(order, 'order_number', 'orderNumber', 'name', 'id');
+      const cleanNumber = orderNumber ? String(orderNumber).replace(/^#/, '').trim() : '';
+      
+      // Controlla se abbiamo il costo reale dalla logistica
+      const hasCostoReale = cleanNumber && (
+        costiSpedizioneReali.has(cleanNumber) || 
+        costiSpedizioneReali.has(orderNumber) ||
+        costiSpedizioneReali.has(String(orderNumber))
+      );
+      
+      const costo = getShippingCost(order);
+      
+      if (hasCostoReale) {
+        shippingCostsReali += costo;
+        ordiniConCostoReale++;
+      } else {
+        shippingCostsStimati += costo;
+        ordiniConCostoStimato++;
+      }
+    });
+    
+    const shippingCosts = shippingCostsReali + shippingCostsStimati;
 
     // Metriche prodotti (costi acquisto e quantità)
     const productMetrics = calculateProductMetrics(periodOrders);
@@ -392,6 +511,10 @@ const ContoEconomicoPage = () => {
       metaCosts,
       tiktokCosts,
       shippingCosts,
+      shippingCostsReali,
+      shippingCostsStimati,
+      ordiniConCostoReale,
+      ordiniConCostoStimato,
       otherCosts,
       totalCosts,
       // Profitti
@@ -442,7 +565,7 @@ const ContoEconomicoPage = () => {
     if (isLoading || orders.length === 0) return [];
     const periods = calculateEconomicDataByPeriod();
     return calculateCumulativeData(periods);
-  }, [orders, costs, manualMetrics, magazzinoData, selectedDateRange, customStartDate, customEndDate, viewMode, selectedYear, isLoading]);
+  }, [orders, costs, manualMetrics, magazzinoData, costiSpedizioneReali, selectedDateRange, customStartDate, customEndDate, viewMode, selectedYear, isLoading]);
   
   // Calcola totali (memoizzato)
   const totals = useMemo(() => {
@@ -461,7 +584,12 @@ const ContoEconomicoPage = () => {
       metaCosts: periodsWithCumulative.reduce((sum, p) => sum + p.metaCosts, 0),
       tiktokCosts: periodsWithCumulative.reduce((sum, p) => sum + p.tiktokCosts, 0),
       shippingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.shippingCosts, 0),
+      shippingCostsReali: periodsWithCumulative.reduce((sum, p) => sum + (p.shippingCostsReali || 0), 0),
+      shippingCostsStimati: periodsWithCumulative.reduce((sum, p) => sum + (p.shippingCostsStimati || 0), 0),
+      ordiniConCostoReale: periodsWithCumulative.reduce((sum, p) => sum + (p.ordiniConCostoReale || 0), 0),
+      ordiniConCostoStimato: periodsWithCumulative.reduce((sum, p) => sum + (p.ordiniConCostoStimato || 0), 0),
       shippingRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.shippingRevenue, 0),
+      shippingProfit: periodsWithCumulative.reduce((sum, p) => sum + (p.shippingProfit || 0), 0),
       productRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.productRevenue, 0),
       productProfit: periodsWithCumulative.reduce((sum, p) => sum + p.productProfit, 0)
     };
@@ -923,6 +1051,62 @@ const ContoEconomicoPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Margine Spedizioni (da Logistica MV) */}
+      <Card className={`border-2 ${(totals.shippingProfit || 0) >= 0 ? 'border-green-300 bg-gradient-to-r from-green-50 to-emerald-50' : 'border-red-300 bg-gradient-to-r from-red-50 to-orange-50'}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            🚚 Margine Spedizioni
+            {totals.ordiniConCostoReale > 0 && (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                {totals.ordiniConCostoReale} ordini da Logistica MV
+              </span>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Spedizione pagata dal cliente - Costo reale logistica = Margine
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {/* Ricavi Spedizione */}
+            <div className="bg-white rounded-lg p-4 border border-green-200">
+              <p className="text-xs text-green-700 mb-1">💵 Pagato dal Cliente</p>
+              <p className="text-xl font-bold text-green-800">{formatCurrency(totals.shippingRevenue || 0)}</p>
+            </div>
+
+            {/* Costi Reali */}
+            <div className="bg-white rounded-lg p-4 border border-blue-200">
+              <p className="text-xs text-blue-700 mb-1">📦 Costi Reali (MV)</p>
+              <p className="text-xl font-bold text-blue-800">{formatCurrency(totals.shippingCostsReali || 0)}</p>
+              <p className="text-xs text-blue-600 mt-1">{totals.ordiniConCostoReale || 0} ordini</p>
+            </div>
+
+            {/* Costi Stimati */}
+            <div className="bg-white rounded-lg p-4 border border-yellow-200">
+              <p className="text-xs text-yellow-700 mb-1">📋 Costi Stimati</p>
+              <p className="text-xl font-bold text-yellow-800">{formatCurrency(totals.shippingCostsStimati || 0)}</p>
+              <p className="text-xs text-yellow-600 mt-1">{totals.ordiniConCostoStimato || 0} ordini</p>
+            </div>
+
+            {/* Totale Costi */}
+            <div className="bg-white rounded-lg p-4 border border-red-200">
+              <p className="text-xs text-red-700 mb-1">💸 Costo Totale</p>
+              <p className="text-xl font-bold text-red-800">{formatCurrency(totals.shippingCosts || 0)}</p>
+            </div>
+
+            {/* Margine */}
+            <div className={`rounded-lg p-4 border ${(totals.shippingProfit || 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
+              <p className={`text-xs mb-1 ${(totals.shippingProfit || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {(totals.shippingProfit || 0) >= 0 ? '✅ Guadagno' : '❌ Perdita'}
+              </p>
+              <p className={`text-xl font-bold ${(totals.shippingProfit || 0) >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                {(totals.shippingProfit || 0) >= 0 ? '+' : ''}{formatCurrency(totals.shippingProfit || 0)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabella Dettagliata */}
       <Card>
