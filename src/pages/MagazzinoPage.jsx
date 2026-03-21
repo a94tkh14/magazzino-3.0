@@ -58,9 +58,28 @@ const MagazzinoPage = () => {
         // Carica da Firebase tramite il nuovo sistema unificato
         const data = await loadMagazzinoData();
         const dataArray = Array.isArray(data) ? data : [];
-        console.log('📦 Magazzino caricato, prodotti:', dataArray.length);
-        setMagazzinoData(dataArray);
-        setFilteredData(dataArray);
+        
+        // Rimuovi duplicati per SKU (mantieni il più recente/con più dati)
+        const uniqueMap = new Map();
+        dataArray.forEach(item => {
+          if (!item.sku) return;
+          const existing = uniqueMap.get(item.sku);
+          if (!existing) {
+            uniqueMap.set(item.sku, item);
+          } else {
+            // Mantieni quello con più dati (quantità > 0, nome più lungo, ecc)
+            const existingScore = (existing.quantita || 0) + (existing.nome?.length || 0) + (existing.costo ? 10 : 0);
+            const newScore = (item.quantita || 0) + (item.nome?.length || 0) + (item.costo ? 10 : 0);
+            if (newScore > existingScore) {
+              uniqueMap.set(item.sku, item);
+            }
+          }
+        });
+        const uniqueData = Array.from(uniqueMap.values());
+        
+        console.log(`📦 Magazzino caricato: ${dataArray.length} → ${uniqueData.length} prodotti (rimossi ${dataArray.length - uniqueData.length} duplicati)`);
+        setMagazzinoData(uniqueData);
+        setFilteredData(uniqueData);
         
         // Precarica foto da Firebase
         const allFoto = await preloadAllFoto();
@@ -656,6 +675,55 @@ const MagazzinoPage = () => {
     }
   };
 
+  // Rimuove duplicati e salva su Firebase
+  const handleRemoveDuplicates = async () => {
+    const originalCount = magazzinoData.length;
+    
+    // Crea mappa unica per SKU
+    const uniqueMap = new Map();
+    magazzinoData.forEach(item => {
+      if (!item.sku) return;
+      const existing = uniqueMap.get(item.sku);
+      if (!existing) {
+        uniqueMap.set(item.sku, item);
+      } else {
+        // Unisci i dati: mantieni i valori non nulli/zero del più completo
+        const merged = {
+          ...existing,
+          ...item,
+          quantita: Math.max(existing.quantita || 0, item.quantita || 0),
+          prezzo: existing.prezzo || item.prezzo || 0,
+          costo: existing.costo || item.costo || 0,
+          nome: (item.nome?.length || 0) > (existing.nome?.length || 0) ? item.nome : existing.nome,
+          marca: existing.marca || item.marca
+        };
+        uniqueMap.set(item.sku, merged);
+      }
+    });
+    
+    const uniqueData = Array.from(uniqueMap.values());
+    const removedCount = originalCount - uniqueData.length;
+    
+    if (removedCount === 0) {
+      alert('Nessun duplicato trovato!');
+      return;
+    }
+    
+    if (!window.confirm(`Trovati ${removedCount} duplicati.\n\nVuoi unirli e salvare ${uniqueData.length} prodotti unici su Firebase?`)) {
+      return;
+    }
+    
+    try {
+      await saveMagazzinoData(uniqueData);
+      setMagazzinoData(uniqueData);
+      setFilteredData(uniqueData);
+      alert(`✅ Rimossi ${removedCount} duplicati!\nOra hai ${uniqueData.length} prodotti unici.`);
+    } catch (error) {
+      console.error('Errore rimozione duplicati:', error);
+      alert('Errore: ' + error.message);
+    }
+  };
+
   // Matching SKU: associa dati ordini Shopify ai prodotti del magazzino
   const handleMatchSkuWithOrders = async () => {
     if (!window.confirm('Vuoi associare i dati degli ordini Shopify ai prodotti del magazzino?\n\nQuesto aggiornerà:\n- Prezzo di vendita\n- Quantità vendute\n- Ultimo ordine')) {
@@ -825,6 +893,9 @@ const MagazzinoPage = () => {
           </Button>
           <Button variant="outline" onClick={handleCleanAllNames}>
             Pulisci Nomi
+          </Button>
+          <Button variant="outline" className="border-purple-300 text-purple-600 hover:bg-purple-50" onClick={handleRemoveDuplicates}>
+            Rimuovi Duplicati
           </Button>
           <Button onClick={() => setShowAddModal(true)}>
             + Aggiungi prodotto
