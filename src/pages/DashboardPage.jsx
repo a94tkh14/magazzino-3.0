@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { loadMagazzinoData, loadShopifyOrdersData, loadPrimaNotaData, loadContiBancariData } from '../lib/magazzinoStorage';
+import { loadMagazzinoData, loadShopifyOrdersData, loadPrimaNotaData, loadContiBancariData, loadMovimentiBancaData } from '../lib/magazzinoStorage';
 import { TrendingUp, TrendingDown, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw, Wallet, Target, Landmark, DollarSign } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPrice } from '../lib/utils';
@@ -447,9 +447,9 @@ const DashboardPage = () => {
         console.log('🔄 Dashboard: Caricando dati finanziari da Firebase...');
         const movimenti = await loadPrimaNotaData() || [];
         const contiBancari = await loadContiBancariData() || [];
-        const movimentiBanca = JSON.parse(localStorage.getItem('movimenti_banca') || '[]');
+        const movimentiBanca = await loadMovimentiBancaData() || [];
         
-        console.log(`✅ Dashboard: Prima Nota: ${movimenti.length}, Conti: ${contiBancari.length}`);
+        console.log(`✅ Dashboard: Prima Nota: ${movimenti.length}, Conti: ${contiBancari.length}, Movimenti Banca: ${movimentiBanca.length}`);
         
         setContoEconomicoData({
           movimenti,

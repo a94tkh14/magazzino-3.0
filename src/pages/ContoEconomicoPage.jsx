@@ -3,7 +3,7 @@ import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calc
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
 import { safeToLowerCase } from '../lib/utils';
-import { loadShopifyOrdersData, loadMagazzinoData, loadCostiData, loadMovimentiBancaData } from '../lib/magazzinoStorage';
+import { loadShopifyOrdersData, loadMagazzinoData, loadCostiData } from '../lib/magazzinoStorage';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -56,7 +56,6 @@ const ContoEconomicoPage = () => {
   const [orders, setOrders] = useState([]);
   const [manualMetrics, setManualMetrics] = useState([]);
   const [magazzinoData, setMagazzinoData] = useState([]);
-  const [movimentiBanca, setMovimentiBanca] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Helper per ottenere valore con fallback
@@ -131,11 +130,6 @@ const ContoEconomicoPage = () => {
         const magData = await loadMagazzinoData() || [];
         setMagazzinoData(magData);
         console.log(`📊 Cruscotto: Caricati ${magData.length} prodotti magazzino`);
-
-        // Carica movimenti Prima Nota (Conto Economico)
-        const movBanca = await loadMovimentiBancaData() || [];
-        setMovimentiBanca(movBanca);
-        console.log(`🏦 Cruscotto: Caricati ${movBanca.length} movimenti Prima Nota`);
 
       } catch (error) {
         console.error('Errore caricamento dati:', error);
@@ -473,65 +467,6 @@ const ContoEconomicoPage = () => {
     };
   }, [periodsWithCumulative]);
 
-  // Calcola totali Prima Nota (Conto Economico Amministrazione)
-  const primaNota = useMemo(() => {
-    const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
-    
-    const movimentiFiltrati = movimentiBanca.filter(m => {
-      if (!m.data) return false;
-      const movDate = new Date(m.data);
-      return movDate >= startDate && movDate <= endDate;
-    });
-    
-    const ricavi = movimentiFiltrati
-      .filter(m => m.tipo === 'entrata')
-      .reduce((sum, m) => sum + (parseFloat(m.importo) || 0), 0);
-    
-    const costi = movimentiFiltrati
-      .filter(m => m.tipo === 'uscita')
-      .reduce((sum, m) => sum + (parseFloat(m.importo) || 0), 0);
-    
-    const ebitda = ricavi - costi;
-    const margine = ricavi > 0 ? (ebitda / ricavi) * 100 : 0;
-    
-    // Calcola periodo precedente
-    const periodLength = endDate.getTime() - startDate.getTime();
-    const prevEndDate = new Date(startDate.getTime() - 1);
-    const prevStartDate = new Date(prevEndDate.getTime() - periodLength);
-    
-    const movimentiPrecedenti = movimentiBanca.filter(m => {
-      if (!m.data) return false;
-      const movDate = new Date(m.data);
-      return movDate >= prevStartDate && movDate < prevEndDate;
-    });
-    
-    const ricaviPrec = movimentiPrecedenti
-      .filter(m => m.tipo === 'entrata')
-      .reduce((sum, m) => sum + (parseFloat(m.importo) || 0), 0);
-    
-    const costiPrec = movimentiPrecedenti
-      .filter(m => m.tipo === 'uscita')
-      .reduce((sum, m) => sum + (parseFloat(m.importo) || 0), 0);
-    
-    const ebitdaPrec = ricaviPrec - costiPrec;
-    
-    const calcVariazione = (curr, prev) => prev !== 0 ? ((curr - prev) / Math.abs(prev)) * 100 : (curr > 0 ? 100 : 0);
-    
-    return {
-      ricavi,
-      costi,
-      ebitda,
-      margine,
-      movimenti: movimentiFiltrati.length,
-      ricaviPrec,
-      costiPrec,
-      ebitdaPrec,
-      variazioneRicavi: calcVariazione(ricavi, ricaviPrec),
-      variazioneCosti: calcVariazione(costi, costiPrec),
-      variazioneEbitda: calcVariazione(ebitda, ebitdaPrec)
-    };
-  }, [movimentiBanca, selectedDateRange, customStartDate, customEndDate]);
-
   // Calcola periodo precedente per confronto
   const getPreviousPeriodData = useMemo(() => {
     const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
@@ -861,81 +796,6 @@ const ContoEconomicoPage = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* EBITDA - Dati Prima Nota (Conto Economico) */}
-      <Card className="border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-amber-800">
-            <DollarSign className="w-5 h-5" />
-            EBITDA - Risultato Operativo (Prima Nota)
-          </CardTitle>
-          <CardDescription className="text-amber-600">
-            Dati dal Conto Economico Amministrazione • {primaNota.movimenti} movimenti nel periodo
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Ricavi Prima Nota */}
-            <div className="bg-white rounded-lg p-4 border border-green-200">
-              <p className="text-xs text-green-700 mb-1">Ricavi (Entrate)</p>
-              <p className="text-xl font-bold text-green-800">{formatCurrency(primaNota.ricavi)}</p>
-              <div className="flex items-center gap-1 mt-1">
-                {primaNota.variazioneRicavi >= 0 ? (
-                  <ArrowUpRight className="w-3 h-3 text-green-600" />
-                ) : (
-                  <ArrowDownRight className="w-3 h-3 text-red-600" />
-                )}
-                <span className={`text-xs font-semibold ${primaNota.variazioneRicavi >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {primaNota.variazioneRicavi >= 0 ? '+' : ''}{primaNota.variazioneRicavi.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Costi Prima Nota */}
-            <div className="bg-white rounded-lg p-4 border border-red-200">
-              <p className="text-xs text-red-700 mb-1">Costi (Uscite)</p>
-              <p className="text-xl font-bold text-red-800">{formatCurrency(primaNota.costi)}</p>
-              <div className="flex items-center gap-1 mt-1">
-                {primaNota.variazioneCosti <= 0 ? (
-                  <ArrowDownRight className="w-3 h-3 text-green-600" />
-                ) : (
-                  <ArrowUpRight className="w-3 h-3 text-red-600" />
-                )}
-                <span className={`text-xs font-semibold ${primaNota.variazioneCosti <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {primaNota.variazioneCosti >= 0 ? '+' : ''}{primaNota.variazioneCosti.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-
-            {/* EBITDA */}
-            <div className={`bg-white rounded-lg p-4 border ${primaNota.ebitda >= 0 ? 'border-blue-200' : 'border-orange-200'}`}>
-              <p className={`text-xs mb-1 ${primaNota.ebitda >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>EBITDA</p>
-              <p className={`text-xl font-bold ${primaNota.ebitda >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
-                {formatCurrency(primaNota.ebitda)}
-              </p>
-              <div className="flex items-center gap-1 mt-1">
-                {primaNota.variazioneEbitda >= 0 ? (
-                  <ArrowUpRight className="w-3 h-3 text-green-600" />
-                ) : (
-                  <ArrowDownRight className="w-3 h-3 text-red-600" />
-                )}
-                <span className={`text-xs font-semibold ${primaNota.variazioneEbitda >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {primaNota.variazioneEbitda >= 0 ? '+' : ''}{primaNota.variazioneEbitda.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Margine */}
-            <div className="bg-white rounded-lg p-4 border border-purple-200">
-              <p className="text-xs text-purple-700 mb-1">Margine %</p>
-              <p className="text-xl font-bold text-purple-800">{primaNota.margine.toFixed(1)}%</p>
-              <p className="text-xs text-purple-600 mt-1">
-                Ricavi: {formatCurrency(primaNota.ricavi)} - Costi: {formatCurrency(primaNota.costi)}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Metriche Vendite */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
