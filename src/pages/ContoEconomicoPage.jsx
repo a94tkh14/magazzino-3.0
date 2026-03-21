@@ -75,9 +75,10 @@ const ContoEconomicoPage = () => {
         setCosts(allCosts);
         console.log(`💰 Cruscotto: Caricati ${allCosts.length} costi`);
 
-        // Carica metriche marketing
-        const allMetrics = JSON.parse(localStorage.getItem('manualMetrics') || '[]');
-        setManualMetrics(allMetrics);
+        // Carica metriche marketing (nuovo formato)
+        const marketingMetrics = JSON.parse(localStorage.getItem('marketing_metrics') || '[]');
+        setManualMetrics(marketingMetrics);
+        console.log(`📢 Cruscotto: Caricate ${marketingMetrics.length} metriche marketing`);
 
         // Carica dati magazzino da Firebase
         const magData = await loadMagazzinoData() || [];
@@ -283,17 +284,21 @@ const ContoEconomicoPage = () => {
     // Metriche prodotti (costi acquisto e quantità)
     const productMetrics = calculateProductMetrics(periodOrders);
 
-    // Costi marketing
+    // Costi marketing (nuovo formato: metriche giornaliere per piattaforma)
     const periodMetrics = manualMetrics.filter(metric => {
-      const metricStartDate = new Date(metric.weekStart);
-      const metricEndDate = new Date(metric.weekStart);
-      metricEndDate.setDate(metricEndDate.getDate() + 6);
-      return metricStartDate <= endDate && metricEndDate >= startDate;
+      const metricDate = new Date(metric.date);
+      return metricDate >= startDate && metricDate <= endDate;
     });
     
-    const googleCosts = periodMetrics.reduce((sum, metric) => sum + (metric.googleAds?.spent || 0), 0);
-    const metaCosts = periodMetrics.reduce((sum, metric) => sum + (metric.meta?.spent || 0), 0);
-    const tiktokCosts = periodMetrics.reduce((sum, metric) => sum + (metric.tiktok?.spent || 0), 0);
+    const googleCosts = periodMetrics
+      .filter(m => m.platform === 'google_ads')
+      .reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
+    const metaCosts = periodMetrics
+      .filter(m => m.platform === 'meta')
+      .reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
+    const tiktokCosts = periodMetrics
+      .filter(m => m.platform === 'tiktok')
+      .reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
     const marketingCosts = googleCosts + metaCosts + tiktokCosts;
 
     // Altri costi
@@ -397,6 +402,7 @@ const ContoEconomicoPage = () => {
       marketingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.marketingCosts, 0),
       googleCosts: periodsWithCumulative.reduce((sum, p) => sum + p.googleCosts, 0),
       metaCosts: periodsWithCumulative.reduce((sum, p) => sum + p.metaCosts, 0),
+      tiktokCosts: periodsWithCumulative.reduce((sum, p) => sum + p.tiktokCosts, 0),
       shippingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.shippingCosts, 0),
       shippingRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.shippingRevenue, 0),
       productRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.productRevenue, 0),
@@ -428,13 +434,13 @@ const ContoEconomicoPage = () => {
       });
     });
 
-    // Aggiungi costi marketing del periodo precedente
+    // Aggiungi costi marketing del periodo precedente (nuovo formato)
     const prevMarketing = manualMetrics
       .filter(m => {
         const d = new Date(m.date);
         return d >= prevStartDate && d <= prevEndDate;
       })
-      .reduce((sum, m) => sum + (parseFloat(m.googleCost || 0) + parseFloat(m.metaCost || 0)), 0);
+      .reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
 
     prevCosts += prevMarketing;
     const prevProfit = prevRevenue - prevCosts;
@@ -769,6 +775,65 @@ const ContoEconomicoPage = () => {
               <div>
                 <p className="text-sm text-gray-600">CPA Marketing</p>
                 <p className="text-xl font-bold">{formatCurrency(totals.orders > 0 ? totals.marketingCosts / totals.orders : 0)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Dettaglio Costi Marketing */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-orange-700 font-medium">💰 Costi Marketing</p>
+                <p className="text-2xl font-bold text-orange-800">{formatCurrency(totals.marketingCosts || 0)}</p>
+                <p className="text-xs text-orange-600 mt-1">
+                  ROAS: {totals.marketingCosts > 0 ? ((totals.revenue || 0) / totals.marketingCosts).toFixed(2) : '0.00'}x
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-blue-700 font-medium">🔵 Google Ads</p>
+                <p className="text-2xl font-bold text-blue-800">{formatCurrency(totals.googleCosts || 0)}</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  {totals.marketingCosts > 0 ? ((totals.googleCosts / totals.marketingCosts) * 100).toFixed(0) : 0}% del budget
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-indigo-50 to-purple-100 border-indigo-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-indigo-700 font-medium">🟣 Meta Ads</p>
+                <p className="text-2xl font-bold text-indigo-800">{formatCurrency(totals.metaCosts || 0)}</p>
+                <p className="text-xs text-indigo-600 mt-1">
+                  {totals.marketingCosts > 0 ? ((totals.metaCosts / totals.marketingCosts) * 100).toFixed(0) : 0}% del budget
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-700 font-medium">⚫ TikTok Ads</p>
+                <p className="text-2xl font-bold text-gray-800">{formatCurrency(totals.tiktokCosts || 0)}</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {totals.marketingCosts > 0 ? ((totals.tiktokCosts / totals.marketingCosts) * 100).toFixed(0) : 0}% del budget
+                </p>
               </div>
             </div>
           </CardContent>
