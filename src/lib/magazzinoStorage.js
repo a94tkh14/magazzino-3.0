@@ -52,8 +52,12 @@ let supplierOrdersCache = null;
 let primaNotaCache = null;
 let contiBancariCache = null;
 let settingsCache = null;
+let costiCache = null;
 let lastCacheUpdate = 0;
-const CACHE_TTL = 30000; // 30 secondi
+let lastShopifyCacheUpdate = 0;
+let lastCostiCacheUpdate = 0;
+const CACHE_TTL = 60000; // 60 secondi (aumentato per performance)
+const ORDERS_CACHE_TTL = 120000; // 2 minuti per ordini (dato grande)
 
 // ============ MAGAZZINO ============
 
@@ -208,23 +212,28 @@ export const invalidateCache = () => {
 
 export const loadShopifyOrdersData = async (forceReload = false) => {
   try {
-    if (!forceReload && shopifyOrdersCache && shopifyOrdersCache.length > 0 && (Date.now() - lastCacheUpdate) < CACHE_TTL) {
-      console.log(`📦 Usando cache ordini Shopify (${shopifyOrdersCache.length} ordini)`);
+    // Cache più lunga per ordini (2 minuti) perché sono tanti
+    if (!forceReload && shopifyOrdersCache && shopifyOrdersCache.length > 0 && (Date.now() - lastShopifyCacheUpdate) < ORDERS_CACHE_TTL) {
       return shopifyOrdersCache;
     }
     
     console.log('🔄 Caricando ordini Shopify da Firebase...');
     const data = await loadShopifyOrdersFromFirebase();
     shopifyOrdersCache = data;
-    lastCacheUpdate = Date.now();
-    console.log(`✅ Ordini Shopify caricati da Firebase: ${data.length}`);
+    lastShopifyCacheUpdate = Date.now();
+    console.log(`✅ Ordini Shopify caricati: ${data.length}`);
     return data;
   } catch (error) {
     console.error('❌ Errore caricamento ordini Shopify:', error);
+    // Fallback a cache se disponibile
+    if (shopifyOrdersCache && shopifyOrdersCache.length > 0) {
+      console.log(`⚠️ Usando cache esistente: ${shopifyOrdersCache.length} ordini`);
+      return shopifyOrdersCache;
+    }
     const localData = localStorage.getItem('shopify_orders');
     if (localData) {
       const parsed = JSON.parse(localData);
-      console.log(`⚠️ Fallback a localStorage: ${parsed.length} ordini`);
+      shopifyOrdersCache = parsed;
       return parsed;
     }
     return [];
@@ -651,18 +660,21 @@ export const saveMovimentoBancaData = async (movimento) => {
 
 // ============ COSTI ============
 
-let costiCache = null;
-
-export const loadCostiData = async () => {
+export const loadCostiData = async (forceReload = false) => {
   try {
-    if (costiCache) return costiCache;
+    // Usa cache se recente
+    if (!forceReload && costiCache && (Date.now() - lastCostiCacheUpdate) < CACHE_TTL) {
+      return costiCache;
+    }
     console.log('🔄 Caricando costi da Firebase...');
     const data = await loadCostiFromFirebase();
     costiCache = data;
+    lastCostiCacheUpdate = Date.now();
     console.log(`✅ Costi caricati: ${data.length}`);
     return data;
   } catch (error) {
     console.error('❌ Errore caricamento costi:', error);
+    if (costiCache) return costiCache;
     const local = localStorage.getItem('costs');
     return local ? JSON.parse(local) : [];
   }

@@ -3,7 +3,7 @@ import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calc
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
 import { safeToLowerCase } from '../lib/utils';
-import { loadLargeData } from '../lib/dataManager';
+import { loadShopifyOrdersData, loadMagazzinoData, loadCostiData } from '../lib/magazzinoStorage';
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -65,23 +65,24 @@ const ContoEconomicoPage = () => {
     const loadAllData = async () => {
       setIsLoading(true);
       try {
-        // Carica ordini da dataManager (supporta dati grandi)
-        const loadedOrders = await loadLargeData('shopify_orders') || [];
+        // Carica ordini da Firebase (fonte principale)
+        const loadedOrders = await loadShopifyOrdersData() || [];
         setOrders(loadedOrders);
-        console.log(`📦 Caricati ${loadedOrders.length} ordini`);
+        console.log(`📦 Cruscotto: Caricati ${loadedOrders.length} ordini da Firebase`);
 
-        // Carica costi
-        const allCosts = JSON.parse(localStorage.getItem('costs') || '[]');
+        // Carica costi da Firebase
+        const allCosts = await loadCostiData() || [];
         setCosts(allCosts);
+        console.log(`💰 Cruscotto: Caricati ${allCosts.length} costi`);
 
         // Carica metriche marketing
         const allMetrics = JSON.parse(localStorage.getItem('manualMetrics') || '[]');
         setManualMetrics(allMetrics);
 
-        // Carica dati magazzino
-        const magData = JSON.parse(localStorage.getItem('magazzino_data') || '[]');
+        // Carica dati magazzino da Firebase
+        const magData = await loadMagazzinoData() || [];
         setMagazzinoData(magData);
-        console.log(`📊 Caricati ${magData.length} prodotti magazzino`);
+        console.log(`📊 Cruscotto: Caricati ${magData.length} prodotti magazzino`);
 
       } catch (error) {
         console.error('Errore caricamento dati:', error);
@@ -356,26 +357,34 @@ const ContoEconomicoPage = () => {
     });
   };
 
-  const periods = calculateEconomicDataByPeriod();
-  const periodsWithCumulative = calculateCumulativeData(periods);
+  // Memoizza calcoli pesanti
+  const periodsWithCumulative = useMemo(() => {
+    if (isLoading || orders.length === 0) return [];
+    const periods = calculateEconomicDataByPeriod();
+    return calculateCumulativeData(periods);
+  }, [orders, costs, manualMetrics, magazzinoData, selectedDateRange, customStartDate, customEndDate, viewMode, selectedYear, isLoading]);
   
-  // Calcola totali
-  const totals = periodsWithCumulative.length > 0 ? {
-    revenue: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeRevenue || 0,
-    costs: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeCosts || 0,
-    profit: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeProfit || 0,
-    orders: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeOrders || 0,
-    quantity: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeQuantity || 0,
-    margin: periodsWithCumulative[periodsWithCumulative.length - 1]?.cumulativeMargin || 0,
-    purchaseCosts: periodsWithCumulative.reduce((sum, p) => sum + p.purchaseCosts, 0),
-    marketingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.marketingCosts, 0),
-    googleCosts: periodsWithCumulative.reduce((sum, p) => sum + p.googleCosts, 0),
-    metaCosts: periodsWithCumulative.reduce((sum, p) => sum + p.metaCosts, 0),
-    shippingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.shippingCosts, 0),
-    shippingRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.shippingRevenue, 0),
-    productRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.productRevenue, 0),
-    productProfit: periodsWithCumulative.reduce((sum, p) => sum + p.productProfit, 0)
-  } : {};
+  // Calcola totali (memoizzato)
+  const totals = useMemo(() => {
+    if (periodsWithCumulative.length === 0) return {};
+    const lastPeriod = periodsWithCumulative[periodsWithCumulative.length - 1];
+    return {
+      revenue: lastPeriod?.cumulativeRevenue || 0,
+      costs: lastPeriod?.cumulativeCosts || 0,
+      profit: lastPeriod?.cumulativeProfit || 0,
+      orders: lastPeriod?.cumulativeOrders || 0,
+      quantity: lastPeriod?.cumulativeQuantity || 0,
+      margin: lastPeriod?.cumulativeMargin || 0,
+      purchaseCosts: periodsWithCumulative.reduce((sum, p) => sum + p.purchaseCosts, 0),
+      marketingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.marketingCosts, 0),
+      googleCosts: periodsWithCumulative.reduce((sum, p) => sum + p.googleCosts, 0),
+      metaCosts: periodsWithCumulative.reduce((sum, p) => sum + p.metaCosts, 0),
+      shippingCosts: periodsWithCumulative.reduce((sum, p) => sum + p.shippingCosts, 0),
+      shippingRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.shippingRevenue, 0),
+      productRevenue: periodsWithCumulative.reduce((sum, p) => sum + p.productRevenue, 0),
+      productProfit: periodsWithCumulative.reduce((sum, p) => sum + p.productProfit, 0)
+    };
+  }, [periodsWithCumulative]);
 
   // Calcola periodo precedente per confronto
   const getPreviousPeriodData = useMemo(() => {
