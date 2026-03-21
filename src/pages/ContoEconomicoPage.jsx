@@ -1052,62 +1052,6 @@ const ContoEconomicoPage = () => {
         </Card>
       </div>
 
-      {/* Margine Spedizioni (da Logistica MV) */}
-      <Card className={`border-2 ${(totals.shippingProfit || 0) >= 0 ? 'border-green-300 bg-gradient-to-r from-green-50 to-emerald-50' : 'border-red-300 bg-gradient-to-r from-red-50 to-orange-50'}`}>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            🚚 Margine Spedizioni
-            {totals.ordiniConCostoReale > 0 && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                {totals.ordiniConCostoReale} ordini da Logistica MV
-              </span>
-            )}
-          </CardTitle>
-          <CardDescription>
-            Spedizione pagata dal cliente - Costo reale logistica = Margine
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {/* Ricavi Spedizione */}
-            <div className="bg-white rounded-lg p-4 border border-green-200">
-              <p className="text-xs text-green-700 mb-1">💵 Pagato dal Cliente</p>
-              <p className="text-xl font-bold text-green-800">{formatCurrency(totals.shippingRevenue || 0)}</p>
-            </div>
-
-            {/* Costi Reali */}
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <p className="text-xs text-blue-700 mb-1">📦 Costi Reali (MV)</p>
-              <p className="text-xl font-bold text-blue-800">{formatCurrency(totals.shippingCostsReali || 0)}</p>
-              <p className="text-xs text-blue-600 mt-1">{totals.ordiniConCostoReale || 0} ordini</p>
-            </div>
-
-            {/* Costi Stimati */}
-            <div className="bg-white rounded-lg p-4 border border-yellow-200">
-              <p className="text-xs text-yellow-700 mb-1">📋 Costi Stimati</p>
-              <p className="text-xl font-bold text-yellow-800">{formatCurrency(totals.shippingCostsStimati || 0)}</p>
-              <p className="text-xs text-yellow-600 mt-1">{totals.ordiniConCostoStimato || 0} ordini</p>
-            </div>
-
-            {/* Totale Costi */}
-            <div className="bg-white rounded-lg p-4 border border-red-200">
-              <p className="text-xs text-red-700 mb-1">💸 Costo Totale</p>
-              <p className="text-xl font-bold text-red-800">{formatCurrency(totals.shippingCosts || 0)}</p>
-            </div>
-
-            {/* Margine */}
-            <div className={`rounded-lg p-4 border ${(totals.shippingProfit || 0) >= 0 ? 'bg-green-100 border-green-300' : 'bg-red-100 border-red-300'}`}>
-              <p className={`text-xs mb-1 ${(totals.shippingProfit || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                {(totals.shippingProfit || 0) >= 0 ? '✅ Guadagno' : '❌ Perdita'}
-              </p>
-              <p className={`text-xl font-bold ${(totals.shippingProfit || 0) >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                {(totals.shippingProfit || 0) >= 0 ? '+' : ''}{formatCurrency(totals.shippingProfit || 0)}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Tabella Dettagliata */}
       <Card>
         <CardHeader>
