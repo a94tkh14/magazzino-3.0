@@ -476,7 +476,10 @@ const DashboardPage = () => {
   const contoEconomicoStats = useMemo(() => {
     const { movimenti, contiBancari, movimentiBanca } = contoEconomicoData;
     
-    console.log('📊 Dashboard EBITDA - movimentiBanca:', movimentiBanca?.length || 0);
+    console.log('📊 Dashboard EBITDA - movimentiBanca totali:', movimentiBanca?.length || 0);
+    if (movimentiBanca?.length > 0) {
+      console.log('📊 Dashboard EBITDA - Esempio movimento:', JSON.stringify(movimentiBanca[0]));
+    }
     
     // Calcola saldo banca totale
     let saldoBanca = 0;
@@ -491,7 +494,21 @@ const DashboardPage = () => {
       }
     });
     
-    // Movimenti banca nel periodo - QUESTI SONO I DATI REALI
+    // Calcolo TOTALE (senza filtro periodo) per EBITDA globale
+    const totalEntrate = movimentiBanca
+      .filter(m => m.tipo === 'entrata')
+      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    
+    const totalUscite = movimentiBanca
+      .filter(m => m.tipo === 'uscita')
+      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
+    
+    const totalEbitda = totalEntrate - totalUscite;
+    const totalMargine = totalEntrate > 0 ? (totalEbitda / totalEntrate * 100) : 0;
+    
+    console.log(`📊 Dashboard EBITDA TOTALE: Entrate €${totalEntrate.toFixed(2)}, Uscite €${totalUscite.toFixed(2)}, EBITDA €${totalEbitda.toFixed(2)}`);
+    
+    // Movimenti banca nel periodo (per eventuale uso futuro)
     const filteredMovBanca = movimentiBanca.filter(m => {
       if (!m.data) return false;
       const date = new Date(m.data);
@@ -500,31 +517,15 @@ const DashboardPage = () => {
     
     console.log('📊 Dashboard EBITDA - filteredMovBanca nel periodo:', filteredMovBanca.length);
     
-    // Entrate (Ricavi)
-    const entrateBanca = filteredMovBanca
-      .filter(m => m.tipo === 'entrata')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
-    
-    // Uscite (Costi)
-    const usciteBanca = filteredMovBanca
-      .filter(m => m.tipo === 'uscita')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
-    
-    // EBITDA = Entrate - Uscite
-    const ebitda = entrateBanca - usciteBanca;
-    const margine = entrateBanca > 0 ? (ebitda / entrateBanca * 100) : 0;
-    
-    console.log(`📊 Dashboard EBITDA: Entrate €${entrateBanca.toFixed(2)}, Uscite €${usciteBanca.toFixed(2)}, EBITDA €${ebitda.toFixed(2)}`);
-    
     return {
-      ricavi: entrateBanca,
-      costi: usciteBanca,
-      ebitda: ebitda,
-      margine: margine,
+      ricavi: totalEntrate,
+      costi: totalUscite,
+      ebitda: totalEbitda,
+      margine: totalMargine,
       saldoBanca,
-      entrateBanca,
-      usciteBanca,
-      movimentiCount: filteredMovBanca.length,
+      entrateBanca: totalEntrate,
+      usciteBanca: totalUscite,
+      movimentiCount: movimentiBanca.length,
       contiBancariCount: contiBancari.length
     };
   }, [contoEconomicoData, mainDateRange]);
