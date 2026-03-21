@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { loadMagazzinoData, loadShopifyOrdersData, loadPrimaNotaData, loadContiBancariData, loadMovimentiBancaData } from '../lib/magazzinoStorage';
-import { TrendingUp, TrendingDown, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw, Wallet, Target, Landmark, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, Package, ShoppingCart, AlertTriangle, Calendar, BarChart3, TruckIcon, RefreshCw, Wallet, Target, Landmark, DollarSign, Percent, Users, Zap } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPrice } from '../lib/utils';
 import { addDays, startOfDay, endOfDay, subDays, subMonths, subYears, format } from 'date-fns';
@@ -419,6 +419,9 @@ const DashboardPage = () => {
     movimentiBanca: []
   });
 
+  // Metriche Marketing
+  const [marketingMetrics, setMarketingMetrics] = useState([]);
+
   useEffect(() => {
     const loadSupplierStats = async () => {
       try {
@@ -456,6 +459,11 @@ const DashboardPage = () => {
           contiBancari,
           movimentiBanca
         });
+
+        // Carica metriche marketing
+        const mktMetrics = JSON.parse(localStorage.getItem('marketing_metrics') || '[]');
+        setMarketingMetrics(mktMetrics);
+        console.log(`📢 Dashboard: Caricate ${mktMetrics.length} metriche marketing`);
       } catch (error) {
         console.error('Errore caricamento Conto Economico:', error);
       }
@@ -520,6 +528,51 @@ const DashboardPage = () => {
       contiBancariCount: contiBancari.length
     };
   }, [contoEconomicoData, mainDateRange]);
+
+  // Calcola KPI Marketing per il periodo
+  const marketingKpis = useMemo(() => {
+    // Filtra metriche per periodo
+    const filteredMetrics = marketingMetrics.filter(m => {
+      if (!m.date) return false;
+      const metricDate = new Date(m.date);
+      return metricDate >= mainDateRange.startDate && metricDate <= mainDateRange.endDate;
+    });
+
+    const totalSpent = filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.spent) || 0), 0);
+    const totalImpressions = filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.impressions) || 0), 0);
+    const totalClicks = filteredMetrics.reduce((sum, m) => sum + (parseFloat(m.clicks) || 0), 0);
+
+    // ROAS = Fatturato / Spesa Marketing
+    const roas = totalSpent > 0 ? csvStats.totalValue / totalSpent : 0;
+    
+    // CPA = Spesa Marketing / Ordini
+    const cpa = csvStats.totalOrders > 0 ? totalSpent / csvStats.totalOrders : 0;
+    
+    // AOV = Fatturato / Ordini
+    const aov = csvStats.totalOrders > 0 ? csvStats.totalValue / csvStats.totalOrders : 0;
+    
+    // CTR = Click / Impressions * 100
+    const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+    
+    // CPC = Spesa / Click
+    const cpc = totalClicks > 0 ? totalSpent / totalClicks : 0;
+
+    // Conversion Rate = Ordini / Click * 100
+    const conversionRate = totalClicks > 0 ? (csvStats.totalOrders / totalClicks) * 100 : 0;
+
+    return {
+      totalSpent,
+      totalImpressions,
+      totalClicks,
+      roas,
+      cpa,
+      aov,
+      ctr,
+      cpc,
+      conversionRate,
+      metricsCount: filteredMetrics.length
+    };
+  }, [marketingMetrics, mainDateRange, csvStats]);
 
   // Configurazione soglia scorte basse
   const [lowStockThreshold, setLowStockThreshold] = useState(() => {
@@ -690,19 +743,79 @@ const DashboardPage = () => {
         </Card>
       )}
 
-      {/* Grafico Vendite */}
+      {/* Grafico Vendite con KPI */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Grafico Vendite
+            Grafico Vendite & Performance
           </CardTitle>
           <CardDescription>
-            Andamento vendite per periodo selezionato
+            Andamento vendite e KPI per il periodo selezionato
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-80">
+          {/* KPI Cards sopra il grafico */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+            {/* Ordini */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200">
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingCart className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-medium text-blue-700">Ordini</span>
+              </div>
+              <p className="text-xl font-bold text-blue-800">{csvStats.totalOrders}</p>
+            </div>
+
+            {/* Fatturato */}
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-green-600" />
+                <span className="text-xs font-medium text-green-700">Fatturato</span>
+              </div>
+              <p className="text-xl font-bold text-green-800">{formatPrice(csvStats.totalValue)}</p>
+            </div>
+
+            {/* AOV */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 border border-purple-200">
+              <div className="flex items-center gap-2 mb-1">
+                <Target className="w-4 h-4 text-purple-600" />
+                <span className="text-xs font-medium text-purple-700">AOV</span>
+              </div>
+              <p className="text-xl font-bold text-purple-800">{formatPrice(marketingKpis.aov)}</p>
+            </div>
+
+            {/* ROAS */}
+            <div className={`bg-gradient-to-br rounded-lg p-3 border ${marketingKpis.roas >= 2 ? 'from-emerald-50 to-emerald-100 border-emerald-200' : marketingKpis.roas >= 1 ? 'from-yellow-50 to-yellow-100 border-yellow-200' : 'from-red-50 to-red-100 border-red-200'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className={`w-4 h-4 ${marketingKpis.roas >= 2 ? 'text-emerald-600' : marketingKpis.roas >= 1 ? 'text-yellow-600' : 'text-red-600'}`} />
+                <span className={`text-xs font-medium ${marketingKpis.roas >= 2 ? 'text-emerald-700' : marketingKpis.roas >= 1 ? 'text-yellow-700' : 'text-red-700'}`}>ROAS</span>
+              </div>
+              <p className={`text-xl font-bold ${marketingKpis.roas >= 2 ? 'text-emerald-800' : marketingKpis.roas >= 1 ? 'text-yellow-800' : 'text-red-800'}`}>
+                {marketingKpis.roas.toFixed(2)}x
+              </p>
+            </div>
+
+            {/* CPA */}
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3 border border-orange-200">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-orange-600" />
+                <span className="text-xs font-medium text-orange-700">CPA</span>
+              </div>
+              <p className="text-xl font-bold text-orange-800">{formatPrice(marketingKpis.cpa)}</p>
+            </div>
+
+            {/* Spesa Marketing */}
+            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 border border-red-200">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingDown className="w-4 h-4 text-red-600" />
+                <span className="text-xs font-medium text-red-700">Spesa Ads</span>
+              </div>
+              <p className="text-xl font-bold text-red-800">{formatPrice(marketingKpis.totalSpent)}</p>
+            </div>
+          </div>
+
+          {/* Grafico */}
+          <div className="h-72">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
@@ -764,13 +877,13 @@ const DashboardPage = () => {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-600 mb-2">
+                  <div className="text-3xl font-bold text-gray-600 mb-2">
                     {csvStats.totalOrders} Ordini
                   </div>
                   <div className="text-sm text-gray-500 mb-4">
                     Nel periodo selezionato
                   </div>
-                  <div className="text-lg font-semibold text-green-600">
+                  <div className="text-2xl font-semibold text-green-600">
                     {formatPrice(csvStats.totalValue)}
                   </div>
                   <div className="text-sm text-gray-500">
@@ -780,6 +893,19 @@ const DashboardPage = () => {
               </div>
             )}
           </div>
+
+          {/* Dettagli Marketing aggiuntivi */}
+          {marketingKpis.metricsCount > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                <span>📊 <strong>{marketingKpis.totalImpressions.toLocaleString()}</strong> impressioni</span>
+                <span>🖱️ <strong>{marketingKpis.totalClicks.toLocaleString()}</strong> click</span>
+                <span>📈 CTR: <strong>{marketingKpis.ctr.toFixed(2)}%</strong></span>
+                <span>💰 CPC: <strong>{formatPrice(marketingKpis.cpc)}</strong></span>
+                <span>🎯 Conv. Rate: <strong>{marketingKpis.conversionRate.toFixed(2)}%</strong></span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
