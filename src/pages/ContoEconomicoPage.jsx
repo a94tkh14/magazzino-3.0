@@ -13,6 +13,10 @@ function getDateRangeFromState(selectedDateRange, customStartDate, customEndDate
   let endDate = new Date(now);
   let startDate;
   switch (selectedDateRange) {
+    case 'all':
+      // Tutti i dati - da 5 anni fa ad oggi
+      startDate = new Date(now.getFullYear() - 5, 0, 1);
+      break;
     case 'last_7_days':
       startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       break;
@@ -21,6 +25,9 @@ function getDateRangeFromState(selectedDateRange, customStartDate, customEndDate
       break;
     case 'last_90_days':
       startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case 'this_month':
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       break;
     case 'this_year':
       startDate = new Date(now.getFullYear(), 0, 1);
@@ -549,19 +556,27 @@ const ContoEconomicoPage = () => {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4 items-center">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium">Periodo:</label>
-              <select
-                value={selectedDateRange}
-                onChange={e => setSelectedDateRange(e.target.value)}
-                className="px-3 py-2 border rounded-md"
-              >
-                <option value="last_7_days">Ultimi 7 giorni</option>
-                <option value="last_30_days">Ultimi 30 giorni</option>
-                <option value="last_90_days">Ultimi 90 giorni</option>
-                <option value="this_year">Anno corrente</option>
-                <option value="custom">Personalizzato</option>
-              </select>
+            {/* Filtri rapidi */}
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              {[
+                { value: 'all', label: 'Tutto' },
+                { value: 'last_7_days', label: '7 Giorni' },
+                { value: 'last_30_days', label: '30 Giorni' },
+                { value: 'this_month', label: 'Mese' },
+                { value: 'this_year', label: 'Anno' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSelectedDateRange(opt.value)}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    selectedDateRange === opt.value
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
 
             <div className="flex items-center gap-2">
@@ -613,9 +628,11 @@ const ContoEconomicoPage = () => {
             <BarChart3 className="w-5 h-5 text-blue-600" />
             <h3 className="font-semibold text-blue-900">Confronto con Periodo Precedente</h3>
             <span className="text-sm text-blue-600 ml-2">
-              ({selectedDateRange === 'last_7_days' ? 'vs 7 gg prima' : 
+              ({selectedDateRange === 'all' ? 'tutti i dati' :
+                selectedDateRange === 'last_7_days' ? 'vs 7 gg prima' : 
                 selectedDateRange === 'last_30_days' ? 'vs 30 gg prima' : 
                 selectedDateRange === 'last_90_days' ? 'vs 90 gg prima' : 
+                selectedDateRange === 'this_month' ? 'vs mese scorso' :
                 selectedDateRange === 'this_year' ? 'vs anno scorso' : 'vs periodo prec.'})
             </span>
           </div>
