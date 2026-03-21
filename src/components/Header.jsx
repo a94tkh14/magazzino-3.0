@@ -55,9 +55,14 @@ const Header = ({ sidebarCollapsed, onToggleSidebar }) => {
             )}
           </button>
           
-          {/* Logo MV Hub */}
+          {/* Logo Maison Victorio */}
           <div className="flex items-center">
-            <span className="text-2xl font-bold text-white tracking-wide">MV Hub</span>
+            <img 
+              src="https://maisonvictorio.com/cdn/shop/files/profumi_maison_victorio_logo.png?v=1730933628&width=400" 
+              alt="Maison Victorio" 
+              className="h-10 w-auto object-contain"
+              style={{ filter: 'brightness(0) invert(1)' }}
+            />
           </div>
         </div>
 

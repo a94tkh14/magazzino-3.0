@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { loadMagazzino, saveMagazzino } from '../lib/firebase';
 import { saveLargeData, loadLargeData, cleanupOldData } from '../lib/dataManager';
 import { safeToLowerCase, safeIncludes } from '../lib/utils';
 import { getOrdersLimit } from '../config/shopify';
-import { Download, Upload, Trash2, Edit, Plus, Search, Filter, TrendingUp, Calendar, DollarSign, FileText, Eye, EyeOff, Truck } from 'lucide-react';
+import { Download, Upload, Trash2, Edit, Plus, Search, Filter, TrendingUp, Calendar, DollarSign, FileText, Eye, EyeOff, Truck, Camera, Loader2, CheckCircle, AlertCircle, FileImage, X, File } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
+import Tesseract from 'tesseract.js';
+import * as pdfjsLib from 'pdfjs-dist';
 import { 
   loadCostiData, 
   saveCostoData, 
@@ -16,6 +18,9 @@ import {
   loadAppConfigData,
   saveAppConfigData
 } from '../lib/magazzinoStorage';
+
+// Configura il worker per PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const COSTO_EXPRESS = 4.5;
 const COSTO_PUNTO_RITIRO = 3.6;
@@ -53,9 +58,16 @@ const CostiPage = () => {
   const [shippingCost, setShippingCost] = useState(0);
   const [otherCosts, setOtherCosts] = useState(0);
   
-  // Stati per OCR
+  // Stati per OCR avanzato
   const [ocrResult, setOcrResult] = useState(null);
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrStatus, setOcrStatus] = useState('');
+  const [showOcrModal, setShowOcrModal] = useState(false);
+  const [ocrPreviewImage, setOcrPreviewImage] = useState(null);
+  const [ocrExtractedData, setOcrExtractedData] = useState(null);
+  const ocrInputRef = useRef(null);
+  
   const [manualInvoice, setManualInvoice] = useState({
     date: '',
     amount: '',
@@ -246,53 +258,260 @@ const CostiPage = () => {
     }
   }, []);
 
-  // Funzione per gestire il caricamento OCR
-  const handleOcrUpload = (file) => {
+  // Funzione per estrarre dati dalla fattura usando pattern matching
+  const extractInvoiceData = (text) => {
+    const result = {
+      numeroFattura: null,
+      data: null,
+      importoTotale: null,
+      importoIVA: null,
+      imponibile: null,
+      fornitore: null,
+      partitaIVA: null,
+      codiceFiscale: null,
+      rawText: text
+    };
+
+    // Pattern per numero fattura
+    const fatturaPatterns = [
+      /(?:fattura|fatt\.?|ft\.?|invoice|inv\.?)\s*(?:n\.?|nr\.?|num\.?|numero)?\s*[:\s]*([A-Z0-9\-\/]+)/i,
+      /(?:n\.?|nr\.?)\s*fattura\s*[:\s]*([A-Z0-9\-\/]+)/i,
+      /documento\s*(?:n\.?|nr\.?)?\s*[:\s]*([A-Z0-9\-\/]+)/i
+    ];
+    for (const pattern of fatturaPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        result.numeroFattura = match[1].trim();
+        break;
+      }
+    }
+
+    // Pattern per data (formato italiano dd/mm/yyyy o dd-mm-yyyy)
+    const dataPatterns = [
+      /(?:data|date|del|emissione)\s*[:\s]*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i,
+      /(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/,
+      /(\d{1,2})\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{4})/i
+    ];
+    for (const pattern of dataPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        let dateStr = match[1] || match[0];
+        // Converti in formato ISO
+        const parts = dateStr.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
+        if (parts) {
+          const day = parts[1].padStart(2, '0');
+          const month = parts[2].padStart(2, '0');
+          let year = parts[3];
+          if (year.length === 2) year = '20' + year;
+          result.data = `${year}-${month}-${day}`;
+        }
+        break;
+      }
+    }
+
+    // Pattern per importi (formato europeo con virgola decimale)
+    const importoPatterns = [
+      /(?:totale|tot\.?|total|importo\s*(?:totale)?|amount)\s*(?:documento|fattura|euro|eur|€)?\s*[:\s€]*\s*([\d\.,]+)\s*(?:€|euro|eur)?/i,
+      /(?:€|euro|eur)\s*([\d\.,]+)/i,
+      /([\d\.,]+)\s*(?:€|euro|eur)/i,
+      /totale\s*[:\s]*([\d\.,]+)/i
+    ];
+    
+    const amounts = [];
+    for (const pattern of importoPatterns) {
+      const matches = text.matchAll(new RegExp(pattern.source, 'gi'));
+      for (const match of matches) {
+        let numStr = match[1].replace(/\./g, '').replace(',', '.');
+        const num = parseFloat(numStr);
+        if (!isNaN(num) && num > 0) {
+          amounts.push(num);
+        }
+      }
+    }
+    
+    // Prendi l'importo più alto come totale
+    if (amounts.length > 0) {
+      amounts.sort((a, b) => b - a);
+      result.importoTotale = amounts[0];
+      if (amounts.length > 1) {
+        result.imponibile = amounts[1];
+        result.importoIVA = amounts[0] - amounts[1];
+      }
+    }
+
+    // Pattern per IVA
+    const ivaMatch = text.match(/(?:iva|i\.v\.a\.?)\s*(?:\d{1,2}\s*%?)?\s*[:\s€]*([\d\.,]+)/i);
+    if (ivaMatch && !result.importoIVA) {
+      result.importoIVA = parseFloat(ivaMatch[1].replace(/\./g, '').replace(',', '.'));
+    }
+
+    // Pattern per Partita IVA
+    const pIvaMatch = text.match(/(?:p\.?\s*iva|partita\s*iva|vat)\s*[:\s]*([A-Z]{0,2}\d{11,13})/i);
+    if (pIvaMatch) {
+      result.partitaIVA = pIvaMatch[1].toUpperCase();
+    }
+
+    // Pattern per Codice Fiscale
+    const cfMatch = text.match(/(?:c\.?\s*f\.?|codice\s*fiscale)\s*[:\s]*([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])/i);
+    if (cfMatch) {
+      result.codiceFiscale = cfMatch[1].toUpperCase();
+    }
+
+    // Estrai nome fornitore (prime righe che sembrano un nome azienda)
+    const lines = text.split('\n').filter(l => l.trim().length > 3);
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const line = lines[i].trim();
+      // Cerca pattern tipici di nomi azienda
+      if (line.match(/(?:s\.?r\.?l\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|ditta|azienda|società)/i) ||
+          (line.length > 5 && line.length < 60 && !line.match(/^\d/) && !line.match(/fattura|data|totale|iva/i))) {
+        result.fornitore = line.replace(/\s+/g, ' ');
+        break;
+      }
+    }
+
+    return result;
+  };
+
+  // Funzione per gestire il caricamento OCR con Tesseract.js
+  // Funzione per convertire PDF in immagine
+  const pdfToImage = async (file) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    // Prendi tutte le pagine (max 5 per evitare problemi di memoria)
+    const numPages = Math.min(pdf.numPages, 5);
+    const images = [];
+    let allText = '';
+    
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      setOcrStatus(`Elaborazione pagina ${pageNum}/${numPages}...`);
+      
+      const page = await pdf.getPage(pageNum);
+      const scale = 2; // Alta risoluzione per OCR migliore
+      const viewport = page.getViewport({ scale });
+      
+      // Crea canvas per rendering
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+      
+      // Converti in blob per Tesseract
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      images.push({ canvas, blob, pageNum });
+      
+      // Estrai anche il testo nativo del PDF (se presente)
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      allText += pageText + '\n';
+    }
+    
+    return { images, nativeText: allText, numPages };
+  };
+
+  const handleOcrUpload = async (file) => {
     if (!file) return;
     
     setOcrLoading(true);
+    setOcrProgress(0);
+    setOcrStatus('Preparazione documento...');
+    setShowOcrModal(true);
     
-    // Simula OCR (versione originale)
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64Data = e.target.result.split(',')[1];
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    
+    try {
+      let imageToProcess;
+      let previewImage;
+      let nativeText = '';
       
-      // Simula estrazione dati
-      const fileName = safeToLowerCase(file.name, '');
-      const fileSize = file.size;
-      
-      // Estrai data dal nome file o usa oggi
-      let extractedDate = '';
-      const dateMatch = fileName.match(/(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})/);
-      if (dateMatch) {
-        extractedDate = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+      if (isPdf) {
+        setOcrStatus('Conversione PDF in immagine...');
+        const pdfResult = await pdfToImage(file);
+        
+        // Usa la prima pagina per preview e OCR principale
+        const firstPage = pdfResult.images[0];
+        previewImage = firstPage.canvas.toDataURL('image/png');
+        imageToProcess = firstPage.blob;
+        nativeText = pdfResult.nativeText;
+        
+        setOcrPreviewImage(previewImage);
+        
+        // Se il PDF ha testo nativo, prova prima quello
+        if (nativeText.trim().length > 100) {
+          setOcrStatus('Analisi testo PDF nativo...');
+          const extractedData = extractInvoiceData(nativeText);
+          
+          // Se ha estratto dati significativi, usa quelli
+          if (extractedData.importoTotale || extractedData.fornitore) {
+            finalizeOcrResult(file, extractedData, 0.95, previewImage);
+            return;
+          }
+        }
       } else {
-        const today = new Date();
-        extractedDate = today.toISOString().slice(0, 10);
+        // Per immagini normali
+        const reader = new FileReader();
+        previewImage = await new Promise((resolve) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsDataURL(file);
+        });
+        setOcrPreviewImage(previewImage);
+        imageToProcess = file;
+      }
+
+      setOcrStatus('Inizializzazione OCR...');
+      
+      // Esegui OCR con Tesseract.js
+      const result = await Tesseract.recognize(
+        imageToProcess,
+        'ita+eng', // Italiano + Inglese
+        {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              setOcrProgress(Math.round(m.progress * 100));
+              setOcrStatus('Analisi testo in corso...');
+            } else if (m.status === 'loading language traineddata') {
+              setOcrStatus('Caricamento lingua...');
+            }
+          }
+        }
+      );
+
+      setOcrStatus('Estrazione dati fattura...');
+      
+      // Combina testo OCR con testo nativo PDF (se presente)
+      let extractedText = result.data.text;
+      if (nativeText && nativeText.trim().length > 0) {
+        extractedText = nativeText + '\n' + extractedText;
       }
       
-      // Simula importo basato su dimensione file
-      const baseAmount = Math.floor(fileSize / 1000) + 50;
-      const amount = (baseAmount + Math.random() * 100).toFixed(2);
+      const extractedData = extractInvoiceData(extractedText);
+      const confidence = result.data.confidence / 100;
       
-      // Simula intestazione
-      const intestazioni = [
-        'Fornitore ABC SRL',
-        'Servizi Digitali Srl', 
-        'Marketing Solutions',
-        'Agenzia Pubblicitaria XYZ',
-        'Google Ads',
-        'Meta Advertising',
-        'Spedizioni Express'
-      ];
-      const intestazione = intestazioni[Math.floor(Math.random() * intestazioni.length)];
+      finalizeOcrResult(file, extractedData, confidence, previewImage);
       
-      setOcrResult({
-        date: extractedDate,
-        amount: parseFloat(amount),
-        intestazione,
-        description: `Fattura ${file.name}`,
-        confidence: 0.8,
+    } catch (error) {
+      console.error('Errore OCR:', error);
+      setOcrStatus('Errore durante la lettura');
+      setOcrLoading(false);
+      alert('Errore durante la lettura della fattura: ' + error.message);
+    }
+  };
+  
+  // Funzione helper per finalizzare il risultato OCR
+  const finalizeOcrResult = async (file, extractedData, confidence, previewImage) => {
+    // Leggi il file originale come base64
+    const fileReader = new FileReader();
+    fileReader.onload = (e) => {
+      const base64Data = e.target.result;
+      
+      setOcrExtractedData({
+        ...extractedData,
+        confidence: confidence,
         fileData: {
           name: file.name,
           type: file.type,
@@ -300,9 +519,29 @@ const CostiPage = () => {
           data: base64Data
         }
       });
+      
+      // Pre-compila il form
+      setOcrResult({
+        date: extractedData.data || new Date().toISOString().slice(0, 10),
+        amount: extractedData.importoTotale || 0,
+        intestazione: extractedData.fornitore || '',
+        description: extractedData.numeroFattura ? `Fattura ${extractedData.numeroFattura}` : `Fattura ${file.name}`,
+        confidence: confidence,
+        iva: extractedData.importoIVA,
+        imponibile: extractedData.imponibile,
+        partitaIVA: extractedData.partitaIVA,
+        fileData: {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: base64Data
+        }
+      });
+      
+      setOcrStatus('Completato!');
       setOcrLoading(false);
     };
-    reader.readAsDataURL(file);
+    fileReader.readAsDataURL(file);
   };
 
   // Funzione per scaricare un file
@@ -538,129 +777,273 @@ const CostiPage = () => {
         </span>
       </div>
 
-      {/* Upload fattura OCR */}
-      <Card>
+      {/* Upload fattura OCR - Card migliorata */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Carica Fattura (OCR)
+          <CardTitle className="flex items-center gap-2 text-blue-800">
+            <Camera className="h-6 w-6" />
+            🧾 Scansione Fatture con OCR
           </CardTitle>
-          <CardDescription>
-            Carica una fattura per riconoscimento automatico di data e importo
+          <CardDescription className="text-blue-600">
+            Carica una fattura o pagamento - il sistema estrae automaticamente data, importo, fornitore e P.IVA
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-4">
-            <label className="block text-sm font-medium text-gray-700">
-              Carica Fattura (OCR)
-            </label>
+          <div 
+            className="border-2 border-dashed border-blue-300 rounded-xl p-8 text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer"
+            onClick={() => ocrInputRef.current?.click()}
+          >
             <input
+              ref={ocrInputRef}
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.pdf,application/pdf"
               onChange={(e) => {
                 const file = e.target.files[0];
                 if (file) {
                   handleOcrUpload(file);
                 }
               }}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              className="hidden"
             />
-            <p className="text-xs text-gray-500">
-              Supporta PDF, JPG, JPEG, PNG
+            <div className="flex justify-center gap-4 mb-4">
+              <FileImage className="w-12 h-12 text-blue-400" />
+              <File className="w-12 h-12 text-red-400" />
+            </div>
+            <p className="text-lg font-semibold text-blue-700 mb-2">
+              Clicca o trascina una fattura qui
             </p>
+            <p className="text-sm text-blue-500">
+              Supporta: PDF, JPG, PNG, WEBP (max 10MB)
+            </p>
+            <div className="mt-4 flex justify-center gap-4">
+              <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full">
+                <CheckCircle className="w-3 h-3" /> Estrae Data
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                <CheckCircle className="w-3 h-3" /> Estrae Importo
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full">
+                <CheckCircle className="w-3 h-3" /> Estrae Fornitore
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full">
+                <CheckCircle className="w-3 h-3" /> Estrae P.IVA
+              </span>
+            </div>
           </div>
-          
-          {ocrLoading && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-blue-800">Analizzando il documento...</p>
-            </div>
-          )}
-          
-          {ocrResult && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <h4 className="font-semibold text-green-800 mb-2">Risultati OCR - Conferma Dati:</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Data riconosciuta:</label>
-                  <input
-                    type="date"
-                    value={ocrResult.date}
-                    onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Importo riconosciuto (€):</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={ocrResult.amount}
-                    onChange={(e) => setOcrResult({...ocrResult, amount: parseFloat(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Intestazione:</label>
-                  <input
-                    type="text"
-                    value={ocrResult.intestazione}
-                    onChange={(e) => setOcrResult({...ocrResult, intestazione: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-md"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Categoria:</label>
-                  <select
-                    value={ocrResult.category || (costCategories.length > 0 ? costCategories[0].value : 'altro')}
-                    onChange={(e) => setOcrResult({...ocrResult, category: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-md"
-                  >
-                    {costCategories.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">Descrizione:</label>
-                  <input
-                    type="text"
-                    value={ocrResult.description}
-                    onChange={(e) => setOcrResult({...ocrResult, description: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-md"
-                  />
-                </div>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() => {
-                    saveCost({
-                      date: ocrResult.date,
-                      amount: parseFloat(ocrResult.amount),
-                      category: ocrResult.category || (costCategories.length > 0 ? costCategories[0].value : 'altro'),
-                      description: ocrResult.description,
-                      linkedTo: '',
-                      linkedType: 'none',
-                      nominativo: 'Sistema',
-                      method: 'ocr',
-                      fileData: ocrResult.fileData
-                    });
-                    alert('Costo OCR salvato con successo!');
-                  }}
-                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm"
-                >
-                  ✅ Conferma e Salva
-                </button>
-                <button
-                  onClick={() => setOcrResult(null)}
-                  className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 text-sm"
-                >
-                  ❌ Annulla
-                </button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* Modal OCR */}
+      {showOcrModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header Modal */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Camera className="w-6 h-6" />
+                Scansione Fattura OCR
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowOcrModal(false);
+                  setOcrResult(null);
+                  setOcrPreviewImage(null);
+                  setOcrExtractedData(null);
+                }}
+                className="hover:bg-white/20 p-2 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {/* Loading */}
+              {ocrLoading && (
+                <div className="text-center py-12">
+                  <Loader2 className="w-16 h-16 mx-auto text-blue-600 animate-spin mb-4" />
+                  <p className="text-lg font-semibold text-gray-700 mb-2">{ocrStatus}</p>
+                  <div className="w-64 mx-auto bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div 
+                      className="bg-blue-600 h-full transition-all duration-300"
+                      style={{ width: `${ocrProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">{ocrProgress}%</p>
+                </div>
+              )}
+
+              {/* Risultati */}
+              {!ocrLoading && ocrResult && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Preview Immagine */}
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <FileImage className="w-5 h-5" /> Documento Caricato
+                    </h4>
+                    {ocrPreviewImage && (
+                      <img 
+                        src={ocrPreviewImage} 
+                        alt="Preview fattura" 
+                        className="w-full rounded-lg border shadow-md max-h-96 object-contain bg-gray-100"
+                      />
+                    )}
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+                        ocrResult.confidence > 0.7 ? 'bg-green-100 text-green-700' :
+                        ocrResult.confidence > 0.5 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {ocrResult.confidence > 0.7 ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                        Affidabilità: {(ocrResult.confidence * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Form Dati Estratti */}
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" /> Dati Estratti (modifica se necessario)
+                    </h4>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-600 mb-1">📅 Data Fattura</label>
+                          <input
+                            type="date"
+                            value={ocrResult.date}
+                            onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
+                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-600 mb-1">💰 Importo Totale (€)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={ocrResult.amount}
+                            onChange={(e) => setOcrResult({...ocrResult, amount: parseFloat(e.target.value) || 0})}
+                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none text-lg font-bold text-green-600"
+                          />
+                        </div>
+                      </div>
+
+                      {(ocrResult.imponibile || ocrResult.iva) && (
+                        <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Imponibile</label>
+                            <span className="text-sm font-semibold">€ {(ocrResult.imponibile || 0).toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">IVA</label>
+                            <span className="text-sm font-semibold">€ {(ocrResult.iva || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">🏢 Fornitore</label>
+                        <input
+                          type="text"
+                          value={ocrResult.intestazione}
+                          onChange={(e) => setOcrResult({...ocrResult, intestazione: e.target.value})}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                          placeholder="Nome fornitore"
+                        />
+                      </div>
+
+                      {ocrResult.partitaIVA && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-600 mb-1">🔢 Partita IVA</label>
+                          <input
+                            type="text"
+                            value={ocrResult.partitaIVA}
+                            onChange={(e) => setOcrResult({...ocrResult, partitaIVA: e.target.value})}
+                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none font-mono"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">📁 Categoria</label>
+                        <select
+                          value={ocrResult.category || (costCategories.length > 0 ? costCategories[0].value : 'altro')}
+                          onChange={(e) => setOcrResult({...ocrResult, category: e.target.value})}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                        >
+                          {costCategories.map(cat => (
+                            <option key={cat.value} value={cat.value}>{cat.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">📝 Descrizione</label>
+                        <input
+                          type="text"
+                          value={ocrResult.description}
+                          onChange={(e) => setOcrResult({...ocrResult, description: e.target.value})}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                          placeholder="Descrizione costo"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottoni Azione */}
+                    <div className="mt-6 flex gap-3">
+                      <button
+                        onClick={() => {
+                          saveCost({
+                            date: ocrResult.date,
+                            amount: parseFloat(ocrResult.amount),
+                            category: ocrResult.category || (costCategories.length > 0 ? costCategories[0].value : 'altro'),
+                            description: ocrResult.description,
+                            linkedTo: '',
+                            linkedType: 'none',
+                            nominativo: ocrResult.intestazione || 'OCR',
+                            method: 'ocr',
+                            partitaIVA: ocrResult.partitaIVA,
+                            fileData: ocrResult.fileData
+                          });
+                          setShowOcrModal(false);
+                          setOcrResult(null);
+                          setOcrPreviewImage(null);
+                          alert('✅ Costo salvato con successo!');
+                        }}
+                        className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        Conferma e Salva
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowOcrModal(false);
+                          setOcrResult(null);
+                          setOcrPreviewImage(null);
+                        }}
+                        className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-all"
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Testo Raw (collapsible) */}
+              {ocrExtractedData?.rawText && (
+                <details className="mt-6">
+                  <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                    Mostra testo estratto (debug)
+                  </summary>
+                  <pre className="mt-2 p-4 bg-gray-100 rounded-lg text-xs overflow-auto max-h-48 whitespace-pre-wrap">
+                    {ocrExtractedData.rawText}
+                  </pre>
+                </details>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Form costo manuale */}
       <Card>

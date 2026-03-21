@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calculator, Package, ShoppingCart, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DollarSign, TrendingUp, TrendingDown, BarChart3, Calendar, Target, Calculator, Package, ShoppingCart, RefreshCw, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import DateRangePicker from '../components/DateRangePicker';
 import { safeToLowerCase } from '../lib/utils';
@@ -377,6 +377,67 @@ const ContoEconomicoPage = () => {
     productProfit: periodsWithCumulative.reduce((sum, p) => sum + p.productProfit, 0)
   } : {};
 
+  // Calcola periodo precedente per confronto
+  const getPreviousPeriodData = useMemo(() => {
+    const { startDate, endDate } = getDateRangeFromState(selectedDateRange, customStartDate, customEndDate);
+    const periodLength = endDate.getTime() - startDate.getTime();
+    const prevEndDate = new Date(startDate.getTime() - 1);
+    const prevStartDate = new Date(prevEndDate.getTime() - periodLength);
+
+    const prevOrders = orders.filter(order => {
+      const orderDate = getOrderDate(order);
+      return orderDate && orderDate >= prevStartDate && orderDate <= prevEndDate;
+    });
+
+    let prevRevenue = 0, prevCosts = 0, prevOrderCount = 0, prevQuantity = 0;
+
+    prevOrders.forEach(order => {
+      prevRevenue += getOrderTotal(order);
+      prevCosts += getShippingCost(order);
+      prevOrderCount++;
+      const products = getOrderProducts(order);
+      products.forEach(item => {
+        prevQuantity += parseInt(item.quantity || 1);
+      });
+    });
+
+    // Aggiungi costi marketing del periodo precedente
+    const prevMarketing = manualMetrics
+      .filter(m => {
+        const d = new Date(m.date);
+        return d >= prevStartDate && d <= prevEndDate;
+      })
+      .reduce((sum, m) => sum + (parseFloat(m.googleCost || 0) + parseFloat(m.metaCost || 0)), 0);
+
+    prevCosts += prevMarketing;
+    const prevProfit = prevRevenue - prevCosts;
+    const prevMargin = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0;
+
+    return {
+      revenue: prevRevenue,
+      costs: prevCosts,
+      profit: prevProfit,
+      orders: prevOrderCount,
+      quantity: prevQuantity,
+      margin: prevMargin
+    };
+  }, [orders, selectedDateRange, customStartDate, customEndDate, manualMetrics]);
+
+  // Calcola variazioni percentuali
+  const calcVariazione = (attuale, precedente) => {
+    if (precedente === 0) return attuale > 0 ? 100 : 0;
+    return ((attuale - precedente) / precedente) * 100;
+  };
+
+  const variazioni = {
+    revenue: calcVariazione(totals.revenue || 0, getPreviousPeriodData.revenue),
+    costs: calcVariazione(totals.costs || 0, getPreviousPeriodData.costs),
+    profit: calcVariazione(totals.profit || 0, getPreviousPeriodData.profit),
+    orders: calcVariazione(totals.orders || 0, getPreviousPeriodData.orders),
+    quantity: calcVariazione(totals.quantity || 0, getPreviousPeriodData.quantity),
+    margin: (totals.margin || 0) - (getPreviousPeriodData.margin || 0)
+  };
+
   const formatCurrency = (value) => {
     return (value || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
   };
@@ -462,6 +523,121 @@ const ContoEconomicoPage = () => {
         </CardContent>
       </Card>
 
+      {/* Confronto Periodo Precedente */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-blue-600" />
+            <h3 className="font-semibold text-blue-900">Confronto con Periodo Precedente</h3>
+            <span className="text-sm text-blue-600 ml-2">
+              ({selectedDateRange === 'last_7_days' ? 'vs 7 gg prima' : 
+                selectedDateRange === 'last_30_days' ? 'vs 30 gg prima' : 
+                selectedDateRange === 'last_90_days' ? 'vs 90 gg prima' : 
+                selectedDateRange === 'this_year' ? 'vs anno scorso' : 'vs periodo prec.'})
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {/* Ricavi */}
+            <div className="bg-white rounded-lg p-4 border border-green-200">
+              <p className="text-xs text-green-700 mb-1">Ricavi</p>
+              <p className="text-lg font-bold text-green-800">{formatCurrency(totals.revenue)}</p>
+              <div className="flex items-center gap-1 mt-1">
+                {variazioni.revenue >= 0 ? (
+                  <ArrowUpRight className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="w-4 h-4 text-red-600" />
+                )}
+                <span className={`text-sm font-semibold ${variazioni.revenue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {variazioni.revenue >= 0 ? '+' : ''}{variazioni.revenue.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Costi */}
+            <div className="bg-white rounded-lg p-4 border border-red-200">
+              <p className="text-xs text-red-700 mb-1">Costi</p>
+              <p className="text-lg font-bold text-red-800">{formatCurrency(totals.costs)}</p>
+              <div className="flex items-center gap-1 mt-1">
+                {variazioni.costs <= 0 ? (
+                  <ArrowDownRight className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ArrowUpRight className="w-4 h-4 text-red-600" />
+                )}
+                <span className={`text-sm font-semibold ${variazioni.costs <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {variazioni.costs >= 0 ? '+' : ''}{variazioni.costs.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Profitto */}
+            <div className="bg-white rounded-lg p-4 border border-blue-200">
+              <p className="text-xs text-blue-700 mb-1">Profitto</p>
+              <p className={`text-lg font-bold ${totals.profit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                {formatCurrency(totals.profit)}
+              </p>
+              <div className="flex items-center gap-1 mt-1">
+                {variazioni.profit >= 0 ? (
+                  <ArrowUpRight className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="w-4 h-4 text-red-600" />
+                )}
+                <span className={`text-sm font-semibold ${variazioni.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {variazioni.profit >= 0 ? '+' : ''}{variazioni.profit.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Ordini */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <p className="text-xs text-gray-700 mb-1">Ordini</p>
+              <p className="text-lg font-bold text-gray-800">{totals.orders || 0}</p>
+              <div className="flex items-center gap-1 mt-1">
+                {variazioni.orders >= 0 ? (
+                  <ArrowUpRight className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="w-4 h-4 text-red-600" />
+                )}
+                <span className={`text-sm font-semibold ${variazioni.orders >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {variazioni.orders >= 0 ? '+' : ''}{variazioni.orders.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Pezzi */}
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <p className="text-xs text-gray-700 mb-1">Pezzi</p>
+              <p className="text-lg font-bold text-gray-800">{totals.quantity || 0}</p>
+              <div className="flex items-center gap-1 mt-1">
+                {variazioni.quantity >= 0 ? (
+                  <ArrowUpRight className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="w-4 h-4 text-red-600" />
+                )}
+                <span className={`text-sm font-semibold ${variazioni.quantity >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {variazioni.quantity >= 0 ? '+' : ''}{variazioni.quantity.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Margine */}
+            <div className="bg-white rounded-lg p-4 border border-purple-200">
+              <p className="text-xs text-purple-700 mb-1">Margine</p>
+              <p className="text-lg font-bold text-purple-800">{(totals.margin || 0).toFixed(1)}%</p>
+              <div className="flex items-center gap-1 mt-1">
+                {variazioni.margin >= 0 ? (
+                  <ArrowUpRight className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="w-4 h-4 text-red-600" />
+                )}
+                <span className={`text-sm font-semibold ${variazioni.margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {variazioni.margin >= 0 ? '+' : ''}{variazioni.margin.toFixed(1)}pp
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-green-50 border-green-200">
@@ -470,6 +646,7 @@ const ContoEconomicoPage = () => {
               <div>
                 <p className="text-sm text-green-700">Ricavi Totali</p>
                 <p className="text-2xl font-bold text-green-800">{formatCurrency(totals.revenue)}</p>
+                <p className="text-xs text-green-600 mt-1">Prec: {formatCurrency(getPreviousPeriodData.revenue)}</p>
               </div>
               <TrendingUp className="w-8 h-8 text-green-600" />
             </div>
@@ -482,6 +659,7 @@ const ContoEconomicoPage = () => {
               <div>
                 <p className="text-sm text-red-700">Costi Totali</p>
                 <p className="text-2xl font-bold text-red-800">{formatCurrency(totals.costs)}</p>
+                <p className="text-xs text-red-600 mt-1">Prec: {formatCurrency(getPreviousPeriodData.costs)}</p>
               </div>
               <TrendingDown className="w-8 h-8 text-red-600" />
             </div>
@@ -496,6 +674,9 @@ const ContoEconomicoPage = () => {
                 <p className={`text-2xl font-bold ${totals.profit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
                   {formatCurrency(totals.profit)}
                 </p>
+                <p className={`text-xs mt-1 ${totals.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                  Prec: {formatCurrency(getPreviousPeriodData.profit)}
+                </p>
               </div>
               <DollarSign className={`w-8 h-8 ${totals.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`} />
             </div>
@@ -508,6 +689,7 @@ const ContoEconomicoPage = () => {
               <div>
                 <p className="text-sm text-purple-700">Margine %</p>
                 <p className="text-2xl font-bold text-purple-800">{(totals.margin || 0).toFixed(1)}%</p>
+                <p className="text-xs text-purple-600 mt-1">Prec: {(getPreviousPeriodData.margin || 0).toFixed(1)}%</p>
               </div>
               <BarChart3 className="w-8 h-8 text-purple-600" />
             </div>

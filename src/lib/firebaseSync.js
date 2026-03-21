@@ -94,24 +94,62 @@ export const deleteDocument = async (collectionName, docId) => {
   }
 };
 
-// Salva multipli documenti in batch
-export const saveBatch = async (collectionName, documents) => {
+// Salva multipli documenti in batch (con chunking e delay per evitare rate limiting)
+export const saveBatch = async (collectionName, documents, options = {}) => {
+  const { chunkSize = 100, delayMs = 200, silent = false } = options;
+  
   try {
-    const batch = writeBatch(db);
     const timestamp = new Date().toISOString();
+    const totalDocs = documents.length;
     
-    documents.forEach((document) => {
-      const docId = document.id || document.sku || `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const docRef = doc(db, collectionName, docId);
-      batch.set(docRef, {
-        ...document,
-        id: docId,
-        updatedAt: timestamp
-      }, { merge: true });
-    });
+    // Se pochi documenti, salva direttamente
+    if (totalDocs <= chunkSize) {
+      const batch = writeBatch(db);
+      documents.forEach((document) => {
+        const docId = document.id || document.sku || `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const docRef = doc(db, collectionName, docId);
+        batch.set(docRef, {
+          ...document,
+          id: docId,
+          updatedAt: timestamp
+        }, { merge: true });
+      });
+      await batch.commit();
+      if (!silent) console.log(`✅ Salvati ${totalDocs} documenti in ${collectionName}`);
+      return true;
+    }
     
-    await batch.commit();
-    console.log(`✅ Salvati ${documents.length} documenti in ${collectionName}`);
+    // Altrimenti, dividi in chunk con delay
+    const chunks = [];
+    for (let i = 0; i < totalDocs; i += chunkSize) {
+      chunks.push(documents.slice(i, i + chunkSize));
+    }
+    
+    if (!silent) console.log(`🔄 Salvando ${totalDocs} documenti in ${chunks.length} batch...`);
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const batch = writeBatch(db);
+      
+      chunk.forEach((document) => {
+        const docId = document.id || document.sku || `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const docRef = doc(db, collectionName, docId);
+        batch.set(docRef, {
+          ...document,
+          id: docId,
+          updatedAt: timestamp
+        }, { merge: true });
+      });
+      
+      await batch.commit();
+      
+      // Delay tra i batch per evitare rate limiting
+      if (i < chunks.length - 1 && delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    if (!silent) console.log(`✅ Salvati ${totalDocs} documenti in ${collectionName}`);
     return true;
   } catch (error) {
     console.error(`❌ Errore batch save ${collectionName}:`, error);

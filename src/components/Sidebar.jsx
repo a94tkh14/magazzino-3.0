@@ -12,6 +12,7 @@ import {
   Calculator,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   BookOpen
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -21,6 +22,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   const navigate = useNavigate();
   const [logo, setLogo] = useState(null);
   const [appName, setAppName] = useState('MV Hub');
+  const [expandedMenus, setExpandedMenus] = useState({});
   // Carica il logo e il nome dal localStorage all'avvio
   useEffect(() => {
     const savedLogo = localStorage.getItem('appLogo');
@@ -61,6 +63,20 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   };
 
 
+
+  const toggleSubmenu = (key) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  // Espandi automaticamente il menu se siamo in una sottopagina
+  useEffect(() => {
+    if (location.pathname.startsWith('/prima-nota')) {
+      setExpandedMenus(prev => ({ ...prev, 'conto-economico-menu': true }));
+    }
+  }, [location.pathname]);
 
   const navItems = [
     { 
@@ -114,8 +130,14 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
     { 
       key: 'prima-nota',
       icon: BookOpen, 
-      label: 'Conto Economico',
+      label: 'Amministrazione',
       path: '/prima-nota'
+    },
+    { 
+      key: 'logistica',
+      icon: Truck, 
+      label: 'Logistica',
+      path: '/logistica'
     },
     { 
       key: 'settings',
@@ -172,8 +194,75 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
         <ul className="space-y-1 px-3">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.path;
+            const isActive = item.path && location.pathname === item.path;
+            const isSubmenuActive = item.hasSubmenu && location.pathname.startsWith('/prima-nota');
+            const isExpanded = expandedMenus[item.key];
             
+            // Item con submenu
+            if (item.hasSubmenu) {
+              return (
+                <li key={item.key}>
+                  <button
+                    onClick={() => toggleSubmenu(item.key)}
+                    className={cn(
+                      'w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors group',
+                      isSubmenuActive
+                        ? 'bg-[#c68776]/10 text-[#c68776]'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    )}
+                    title={isCollapsed ? item.label : undefined}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Icon className={cn(
+                        'h-5 w-5',
+                        isSubmenuActive ? 'text-[#c68776]' : 'text-gray-400 group-hover:text-gray-600'
+                      )} />
+                      {!isCollapsed && <span>{item.label}</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <ChevronDown className={cn(
+                        'h-4 w-4 transition-transform duration-200',
+                        isExpanded ? 'rotate-180' : '',
+                        isSubmenuActive ? 'text-[#c68776]' : 'text-gray-400'
+                      )} />
+                    )}
+                  </button>
+                  
+                  {/* Submenu */}
+                  {!isCollapsed && isExpanded && (
+                    <ul className="mt-1 ml-4 pl-4 border-l border-gray-200 space-y-1">
+                      {item.submenu.map((subItem) => {
+                        const SubIcon = subItem.icon;
+                        const isSubActive = location.pathname + location.search === subItem.path || 
+                          (location.pathname === '/prima-nota' && subItem.path.includes(new URLSearchParams(location.search).get('tab') || 'prima-nota'));
+                        
+                        return (
+                          <li key={subItem.key}>
+                            <Link
+                              to={subItem.path}
+                              className={cn(
+                                'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                                isSubActive
+                                  ? 'bg-[#c68776]/10 text-[#c68776] font-medium'
+                                  : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                              )}
+                            >
+                              <SubIcon className={cn(
+                                'h-4 w-4',
+                                isSubActive ? 'text-[#c68776]' : 'text-gray-400'
+                              )} />
+                              <span>{subItem.label}</span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </li>
+              );
+            }
+            
+            // Item normale senza submenu
             return (
               <li key={item.key}>
                 <Link

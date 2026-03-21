@@ -6,6 +6,7 @@ import {
   deleteMagazzinoItem,
   clearMagazzino,
   loadShopifyOrders as loadShopifyOrdersFromFirebase,
+  saveShopifyOrder,
   saveShopifyOrdersBatch,
   loadSupplierOrders as loadSupplierOrdersFromFirebase,
   saveSupplierOrder as saveSupplierOrderToFirebase,
@@ -100,16 +101,69 @@ export const saveSingleProduct = async (product) => {
     await saveMagazzinoItem(product);
     // Aggiorna cache
     if (magazzinoCache) {
-      const idx = magazzinoCache.findIndex(p => p.sku === product.sku);
+      const idx = magazzinoCache.findIndex(p => p.sku === product.sku || p.id === product.id);
       if (idx >= 0) {
         magazzinoCache[idx] = product;
       } else {
         magazzinoCache.push(product);
       }
     }
+    // Aggiorna anche localStorage
+    const localData = loadFromLocalStorage('magazzino_data', []);
+    const localIdx = localData.findIndex(p => p.sku === product.sku || p.id === product.id);
+    if (localIdx >= 0) {
+      localData[localIdx] = product;
+    } else {
+      localData.push(product);
+    }
+    saveToLocalStorage('magazzino_data', localData);
     return { success: true };
   } catch (error) {
     console.error('❌ Errore salvataggio prodotto:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Salva solo i prodotti modificati (più efficiente di saveMagazzinoData)
+export const saveModifiedProducts = async (products) => {
+  try {
+    if (!products || products.length === 0) return { success: true };
+    
+    console.log(`🔄 Salvando ${products.length} prodotti modificati...`);
+    
+    // Salva su Firebase uno alla volta (per pochi prodotti è più efficiente)
+    for (const product of products) {
+      await saveMagazzinoItem(product);
+    }
+    
+    // Aggiorna cache
+    if (magazzinoCache) {
+      products.forEach(product => {
+        const idx = magazzinoCache.findIndex(p => p.sku === product.sku || p.id === product.id);
+        if (idx >= 0) {
+          magazzinoCache[idx] = product;
+        } else {
+          magazzinoCache.push(product);
+        }
+      });
+    }
+    
+    // Aggiorna localStorage
+    const localData = loadFromLocalStorage('magazzino_data', []);
+    products.forEach(product => {
+      const localIdx = localData.findIndex(p => p.sku === product.sku || p.id === product.id);
+      if (localIdx >= 0) {
+        localData[localIdx] = product;
+      } else {
+        localData.push(product);
+      }
+    });
+    saveToLocalStorage('magazzino_data', localData);
+    
+    console.log(`✅ ${products.length} prodotti salvati`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio prodotti:', error);
     return { success: false, error: error.message };
   }
 };
@@ -182,12 +236,46 @@ export const saveShopifyOrdersData = async (orders) => {
     console.log(`🔄 Salvando ${orders.length} ordini Shopify su Firebase...`);
     await saveShopifyOrdersBatch(orders);
     shopifyOrdersCache = orders;
-    localStorage.setItem('shopify_orders', JSON.stringify(orders));
+    
+    // Prova a salvare in localStorage, ma non fallire se quota exceeded
+    try {
+      // Se ci sono troppi ordini, salva solo gli ultimi 1000 in localStorage
+      const ordersForLocalStorage = orders.length > 1000 
+        ? orders.slice(-1000) 
+        : orders;
+      localStorage.setItem('shopify_orders', JSON.stringify(ordersForLocalStorage));
+    } catch (storageError) {
+      console.warn('⚠️ localStorage pieno, ordini salvati solo su Firebase');
+    }
+    
     console.log('✅ Ordini Shopify salvati');
     return { success: true };
   } catch (error) {
     console.error('❌ Errore salvataggio ordini Shopify:', error);
-    localStorage.setItem('shopify_orders', JSON.stringify(orders));
+    // Non provare localStorage se Firebase ha fallito - potrebbe essere troppo grande
+    return { success: false, error: error.message };
+  }
+};
+
+// Salva un singolo ordine (più efficiente per aggiornamenti singoli)
+export const saveSingleShopifyOrder = async (order) => {
+  try {
+    await saveShopifyOrder(order);
+    
+    // Aggiorna cache
+    if (shopifyOrdersCache) {
+      const idx = shopifyOrdersCache.findIndex(o => o.id === order.id);
+      if (idx >= 0) {
+        shopifyOrdersCache[idx] = order;
+      } else {
+        shopifyOrdersCache.push(order);
+      }
+    }
+    
+    console.log(`✅ Ordine ${order.order_number || order.id} salvato`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Errore salvataggio ordine:', error);
     return { success: false, error: error.message };
   }
 };

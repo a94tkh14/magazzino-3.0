@@ -14,6 +14,7 @@ import SupplierOrderDetailPage from './pages/SupplierOrderDetailPage';
 import CostiPage from './pages/CostiPage';
 import ContoEconomicoPage from './pages/ContoEconomicoPage';
 import ContoEconomicoNuovoPage from './pages/ContoEconomicoNuovoPage';
+import PrimaNotaLogisticaPage from './pages/PrimaNotaLogisticaPage';
 import MagazzinoDetailPage from './pages/MagazzinoDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import MarketingPage from './pages/MarketingPage';
@@ -137,6 +138,7 @@ function App() {
                 <Route path="/costi" element={<CostiPage />} />
                 <Route path="/conto-economico" element={<ContoEconomicoPage />} />
                 <Route path="/prima-nota" element={<ContoEconomicoNuovoPage />} />
+                <Route path="/logistica" element={<PrimaNotaLogisticaPage />} />
                 <Route path="/magazzino/:sku" element={<MagazzinoDetailPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 
