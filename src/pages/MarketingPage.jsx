@@ -64,6 +64,11 @@ const MarketingPage = () => {
   const [importPreview, setImportPreview] = useState([]);
   const fileInputRef = useRef(null);
   
+  // Range date per import senza date nel CSV
+  const [importDateFrom, setImportDateFrom] = useState('');
+  const [importDateTo, setImportDateTo] = useState('');
+  const [hasDateColumn, setHasDateColumn] = useState(true);
+  
   // === STATI FORM MANUALE ===
   const [showManualForm, setShowManualForm] = useState(false);
   const [editingMetric, setEditingMetric] = useState(null);
@@ -442,34 +447,98 @@ const MarketingPage = () => {
     setImportLoading(true);
     
     try {
-      const newMetrics = csvData.map((row, idx) => {
-        // Parse date
-        let date = new Date().toISOString().slice(0, 10);
-        if (csvMapping.date && row[csvMapping.date]) {
-          const parsedDate = parseDate(row[csvMapping.date]);
-          if (parsedDate) date = parsedDate;
+      // Parse numeric values helper
+      const parseNum = (val) => {
+        if (!val) return 0;
+        const cleaned = val.toString().replace(/[€$,\s]/g, '').replace(',', '.');
+        return parseFloat(cleaned) || 0;
+      };
+      
+      let newMetrics = [];
+      
+      // Se NON c'è colonna date, dividi per il range specificato
+      if (!hasDateColumn && importDateFrom && importDateTo) {
+        const startDate = new Date(importDateFrom);
+        const endDate = new Date(importDateTo);
+        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (daysDiff <= 0) {
+          alert('Il range di date non è valido');
+          setImportLoading(false);
+          return;
         }
         
-        // Parse numeric values
-        const parseNum = (val) => {
-          if (!val) return 0;
-          const cleaned = val.toString().replace(/[€$,\s]/g, '').replace(',', '.');
-          return parseFloat(cleaned) || 0;
-        };
+        // Calcola totali dal CSV
+        let totalSpent = 0, totalImpressions = 0, totalClicks = 0, totalConversions = 0, totalRevenue = 0;
+        const campaignName = csvData[0]?.[csvMapping.campaignName] || `Import ${PIATTAFORME[importPlatform].name}`;
         
-        return {
-          id: `import_${Date.now()}_${idx}`,
-          date,
-          platform: importPlatform,
-          spent: parseNum(row[csvMapping.spent]),
-          impressions: parseNum(row[csvMapping.impressions]),
-          clicks: parseNum(row[csvMapping.clicks]),
-          conversions: parseNum(row[csvMapping.conversions]),
-          revenue: parseNum(row[csvMapping.revenue]),
-          campaignName: row[csvMapping.campaignName] || `Import ${PIATTAFORME[importPlatform].name}`,
-          importedAt: new Date().toISOString()
-        };
-      });
+        csvData.forEach(row => {
+          totalSpent += parseNum(row[csvMapping.spent]);
+          totalImpressions += parseNum(row[csvMapping.impressions]);
+          totalClicks += parseNum(row[csvMapping.clicks]);
+          totalConversions += parseNum(row[csvMapping.conversions]);
+          totalRevenue += parseNum(row[csvMapping.revenue]);
+        });
+        
+        // Calcola medie giornaliere
+        const dailySpent = totalSpent / daysDiff;
+        const dailyImpressions = Math.round(totalImpressions / daysDiff);
+        const dailyClicks = Math.round(totalClicks / daysDiff);
+        const dailyConversions = totalConversions / daysDiff;
+        const dailyRevenue = totalRevenue / daysDiff;
+        
+        console.log(`📊 Distribuendo su ${daysDiff} giorni:`);
+        console.log(`   Spesa totale: €${totalSpent.toFixed(2)} → €${dailySpent.toFixed(2)}/giorno`);
+        
+        // Crea una metrica per ogni giorno del range
+        for (let i = 0; i < daysDiff; i++) {
+          const currentDate = new Date(startDate);
+          currentDate.setDate(currentDate.getDate() + i);
+          const dateStr = currentDate.toISOString().slice(0, 10);
+          
+          newMetrics.push({
+            id: `import_${Date.now()}_${i}`,
+            date: dateStr,
+            platform: importPlatform,
+            spent: Math.round(dailySpent * 100) / 100,
+            impressions: dailyImpressions,
+            clicks: dailyClicks,
+            conversions: Math.round(dailyConversions * 100) / 100,
+            revenue: Math.round(dailyRevenue * 100) / 100,
+            campaignName: campaignName,
+            importedAt: new Date().toISOString(),
+            isAveraged: true, // Flag per indicare che sono dati medi
+            originalDays: daysDiff,
+            originalTotals: { totalSpent, totalImpressions, totalClicks, totalConversions, totalRevenue }
+          });
+        }
+        
+        alert(`✅ Importate ${daysDiff} metriche giornaliere (media) da ${PIATTAFORME[importPlatform].name}\n\nTotale: €${totalSpent.toFixed(2)} → €${dailySpent.toFixed(2)}/giorno`);
+      } else {
+        // Import normale con date dal CSV
+        newMetrics = csvData.map((row, idx) => {
+          let date = new Date().toISOString().slice(0, 10);
+          if (csvMapping.date && row[csvMapping.date]) {
+            const parsedDate = parseDate(row[csvMapping.date]);
+            if (parsedDate) date = parsedDate;
+          }
+          
+          return {
+            id: `import_${Date.now()}_${idx}`,
+            date,
+            platform: importPlatform,
+            spent: parseNum(row[csvMapping.spent]),
+            impressions: parseNum(row[csvMapping.impressions]),
+            clicks: parseNum(row[csvMapping.clicks]),
+            conversions: parseNum(row[csvMapping.conversions]),
+            revenue: parseNum(row[csvMapping.revenue]),
+            campaignName: row[csvMapping.campaignName] || `Import ${PIATTAFORME[importPlatform].name}`,
+            importedAt: new Date().toISOString()
+          };
+        });
+        
+        alert(`✅ Importate ${newMetrics.length} metriche da ${PIATTAFORME[importPlatform].name}`);
+      }
       
       // Aggiungi alle metriche esistenti
       const updatedMetrics = [...manualMetrics, ...newMetrics];
@@ -482,8 +551,10 @@ const MarketingPage = () => {
       setCsvData([]);
       setCsvHeaders([]);
       setCsvMapping({});
+      setImportDateFrom('');
+      setImportDateTo('');
+      setHasDateColumn(true);
       
-      alert(`Importate ${newMetrics.length} metriche da ${PIATTAFORME[importPlatform].name}`);
     } catch (error) {
       console.error('Errore import:', error);
       alert('Errore durante l\'importazione: ' + error.message);
@@ -1333,6 +1404,9 @@ const MarketingPage = () => {
                     setCsvData([]);
                     setCsvHeaders([]);
                     setCsvMapping({});
+                    setImportDateFrom('');
+                    setImportDateTo('');
+                    setHasDateColumn(true);
                   }}
                   className="p-2 hover:bg-white/20 rounded-lg"
                 >
@@ -1420,18 +1494,83 @@ const MarketingPage = () => {
                     </div>
                   </div>
                   
+                  {/* Opzione: Date nel CSV o Range manuale */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-800 mb-3">Come vuoi gestire le date?</h4>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={hasDateColumn}
+                          onChange={() => setHasDateColumn(true)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span>Il CSV ha una colonna con le date</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={!hasDateColumn}
+                          onChange={() => setHasDateColumn(false)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span>Inserisco un range e dividi automaticamente</span>
+                      </label>
+                    </div>
+                    
+                    {/* Range date manuale */}
+                    {!hasDateColumn && (
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="text-sm text-blue-800 mb-3">
+                          <strong>📅 Range periodo:</strong> I totali del CSV verranno divisi equamente per ogni giorno del range.
+                        </p>
+                        <div className="flex gap-4 items-center">
+                          <div>
+                            <label className="block text-xs font-medium text-blue-700 mb-1">Data Inizio</label>
+                            <input
+                              type="date"
+                              value={importDateFrom}
+                              onChange={(e) => setImportDateFrom(e.target.value)}
+                              className="px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                            />
+                          </div>
+                          <span className="text-blue-600 font-bold mt-5">→</span>
+                          <div>
+                            <label className="block text-xs font-medium text-blue-700 mb-1">Data Fine</label>
+                            <input
+                              type="date"
+                              value={importDateTo}
+                              onChange={(e) => setImportDateTo(e.target.value)}
+                              className="px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                            />
+                          </div>
+                          {importDateFrom && importDateTo && (
+                            <div className="mt-5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+                              {Math.ceil((new Date(importDateTo) - new Date(importDateFrom)) / (1000 * 60 * 60 * 24)) + 1} giorni
+                            </div>
+                          )}
+                        </div>
+                        {importDateFrom && importDateTo && csvData.length > 0 && csvMapping.spent && (
+                          <div className="mt-3 text-sm text-blue-700">
+                            💡 I totali saranno divisi per {Math.ceil((new Date(importDateTo) - new Date(importDateFrom)) / (1000 * 60 * 60 * 24)) + 1} giorni (media giornaliera)
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
                   <div>
                     <h3 className="font-medium text-gray-900 mb-4">Mappa le colonne del CSV</h3>
                     <div className="grid grid-cols-2 gap-4">
                       {[
-                        { key: 'date', label: 'Data', required: true },
+                        { key: 'date', label: 'Data', required: hasDateColumn, hidden: !hasDateColumn },
                         { key: 'spent', label: 'Spesa', required: true },
                         { key: 'impressions', label: 'Impressioni', required: false },
                         { key: 'clicks', label: 'Click', required: false },
                         { key: 'conversions', label: 'Conversioni', required: false },
                         { key: 'revenue', label: 'Ricavi', required: false },
                         { key: 'campaignName', label: 'Nome Campagna', required: false }
-                      ].map(field => (
+                      ].filter(f => !f.hidden).map(field => (
                         <div key={field.key}>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             {field.label} {field.required && <span className="text-red-500">*</span>}
@@ -1486,7 +1625,11 @@ const MarketingPage = () => {
                     </Button>
                     <Button 
                       onClick={() => setImportStep(3)}
-                      disabled={!csvMapping.date || !csvMapping.spent}
+                      disabled={
+                        !csvMapping.spent || 
+                        (hasDateColumn && !csvMapping.date) ||
+                        (!hasDateColumn && (!importDateFrom || !importDateTo))
+                      }
                       className="bg-blue-600 text-white"
                     >
                       Continua
@@ -1506,18 +1649,67 @@ const MarketingPage = () => {
                         <span className="ml-2 font-medium">{PIATTAFORME[importPlatform].name}</span>
                       </div>
                       <div>
-                        <span className="text-gray-600">Righe da importare:</span>
+                        <span className="text-gray-600">Righe CSV:</span>
                         <span className="ml-2 font-medium">{csvData.length}</span>
                       </div>
-                      <div>
-                        <span className="text-gray-600">Colonna Data:</span>
-                        <span className="ml-2 font-medium">{csvMapping.date}</span>
-                      </div>
+                      
+                      {hasDateColumn ? (
+                        <div>
+                          <span className="text-gray-600">Colonna Data:</span>
+                          <span className="ml-2 font-medium">{csvMapping.date}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="col-span-2 mt-2 p-3 bg-blue-100 rounded-lg">
+                            <p className="font-medium text-blue-800">📅 Distribuzione automatica su periodo</p>
+                            <p className="text-sm text-blue-700 mt-1">
+                              Dal <strong>{new Date(importDateFrom).toLocaleDateString('it-IT')}</strong> al{' '}
+                              <strong>{new Date(importDateTo).toLocaleDateString('it-IT')}</strong> = {' '}
+                              <strong>{Math.ceil((new Date(importDateTo) - new Date(importDateFrom)) / (1000 * 60 * 60 * 24)) + 1} giorni</strong>
+                            </p>
+                            <p className="text-xs text-blue-600 mt-1">
+                              I totali saranno divisi equamente per ogni giorno del periodo
+                            </p>
+                          </div>
+                        </>
+                      )}
+                      
                       <div>
                         <span className="text-gray-600">Colonna Spesa:</span>
                         <span className="ml-2 font-medium">{csvMapping.spent}</span>
                       </div>
                     </div>
+                    
+                    {/* Preview totali per import con range */}
+                    {!hasDateColumn && importDateFrom && importDateTo && csvMapping.spent && (
+                      <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <p className="font-medium text-green-800 mb-2">📊 Preview distribuzione:</p>
+                        {(() => {
+                          const parseNum = (val) => {
+                            if (!val) return 0;
+                            const cleaned = val.toString().replace(/[€$,\s]/g, '').replace(',', '.');
+                            return parseFloat(cleaned) || 0;
+                          };
+                          const days = Math.ceil((new Date(importDateTo) - new Date(importDateFrom)) / (1000 * 60 * 60 * 24)) + 1;
+                          const totalSpent = csvData.reduce((sum, row) => sum + parseNum(row[csvMapping.spent]), 0);
+                          const totalImpressions = csvData.reduce((sum, row) => sum + parseNum(row[csvMapping.impressions]), 0);
+                          const totalClicks = csvData.reduce((sum, row) => sum + parseNum(row[csvMapping.clicks]), 0);
+                          const totalConversions = csvData.reduce((sum, row) => sum + parseNum(row[csvMapping.conversions]), 0);
+                          const totalRevenue = csvData.reduce((sum, row) => sum + parseNum(row[csvMapping.revenue]), 0);
+                          
+                          return (
+                            <div className="grid grid-cols-2 gap-2 text-sm text-green-700">
+                              <div>💰 Spesa totale: <strong>€{totalSpent.toFixed(2)}</strong></div>
+                              <div>📅 Media/giorno: <strong>€{(totalSpent / days).toFixed(2)}</strong></div>
+                              {totalImpressions > 0 && <div>👁️ Impressioni: {totalImpressions.toLocaleString()} → {Math.round(totalImpressions / days).toLocaleString()}/g</div>}
+                              {totalClicks > 0 && <div>🖱️ Click: {totalClicks.toLocaleString()} → {Math.round(totalClicks / days).toLocaleString()}/g</div>}
+                              {totalConversions > 0 && <div>🎯 Conversioni: {totalConversions} → {(totalConversions / days).toFixed(2)}/g</div>}
+                              {totalRevenue > 0 && <div>💵 Ricavi: €{totalRevenue.toFixed(2)} → €{(totalRevenue / days).toFixed(2)}/g</div>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex justify-between">
