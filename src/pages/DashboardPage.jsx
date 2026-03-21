@@ -468,22 +468,9 @@ const DashboardPage = () => {
   const contoEconomicoStats = useMemo(() => {
     const { movimenti, contiBancari, movimentiBanca } = contoEconomicoData;
     
-    // Filtra movimenti per periodo
-    const filteredMovimenti = movimenti.filter(m => {
-      const date = new Date(m.data);
-      return date >= mainDateRange.startDate && date <= mainDateRange.endDate;
-    });
+    console.log('📊 Dashboard EBITDA - movimentiBanca:', movimentiBanca?.length || 0);
     
-    // Calcola totali
-    const totDare = filteredMovimenti
-      .filter(m => m.tipo === 'dare')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
-    
-    const totAvere = filteredMovimenti
-      .filter(m => m.tipo === 'avere')
-      .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
-    
-    // Calcola saldo banca
+    // Calcola saldo banca totale
     let saldoBanca = 0;
     contiBancari.forEach(c => {
       saldoBanca += parseFloat(c.saldoIniziale || 0);
@@ -496,29 +483,40 @@ const DashboardPage = () => {
       }
     });
     
-    // Movimenti banca nel periodo
+    // Movimenti banca nel periodo - QUESTI SONO I DATI REALI
     const filteredMovBanca = movimentiBanca.filter(m => {
+      if (!m.data) return false;
       const date = new Date(m.data);
       return date >= mainDateRange.startDate && date <= mainDateRange.endDate;
     });
     
+    console.log('📊 Dashboard EBITDA - filteredMovBanca nel periodo:', filteredMovBanca.length);
+    
+    // Entrate (Ricavi)
     const entrateBanca = filteredMovBanca
       .filter(m => m.tipo === 'entrata')
       .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
     
+    // Uscite (Costi)
     const usciteBanca = filteredMovBanca
       .filter(m => m.tipo === 'uscita')
       .reduce((sum, m) => sum + parseFloat(m.importo || 0), 0);
     
+    // EBITDA = Entrate - Uscite
+    const ebitda = entrateBanca - usciteBanca;
+    const margine = entrateBanca > 0 ? (ebitda / entrateBanca * 100) : 0;
+    
+    console.log(`📊 Dashboard EBITDA: Entrate €${entrateBanca.toFixed(2)}, Uscite €${usciteBanca.toFixed(2)}, EBITDA €${ebitda.toFixed(2)}`);
+    
     return {
-      ricavi: totAvere,
-      costi: totDare,
-      ebitda: totAvere - totDare,
-      margine: totAvere > 0 ? ((totAvere - totDare) / totAvere * 100) : 0,
+      ricavi: entrateBanca,
+      costi: usciteBanca,
+      ebitda: ebitda,
+      margine: margine,
       saldoBanca,
       entrateBanca,
       usciteBanca,
-      movimentiCount: filteredMovimenti.length,
+      movimentiCount: filteredMovBanca.length,
       contiBancariCount: contiBancari.length
     };
   }, [contoEconomicoData, mainDateRange]);
