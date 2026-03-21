@@ -554,23 +554,48 @@ const OrdiniPage = () => {
             nome: productName,
             quantita: -qty,
             quantity: -qty,
-            prezzo: parseFloat(item.price || 0)
+            prezzo: parseFloat(item.price || 0),
+            costo: 0 // Costo sconosciuto per prodotto non in magazzino
           };
           magazzino.push(newProduct);
-          updates.push({ sku: newProduct.sku, name: productName, oldQty: 0, newQty: -qty, created: true, product: newProduct });
+          updates.push({ 
+            sku: newProduct.sku, 
+            name: productName, 
+            oldQty: 0, 
+            newQty: -qty, 
+            created: true, 
+            product: newProduct,
+            // Salva il costo al momento dell'evasione
+            costoUnitario: 0,
+            costoTotale: 0,
+            quantitaEvasa: qty,
+            prezzoVendita: parseFloat(item.price || 0)
+          });
         } else {
           // Scala la quantità (può andare in negativo)
           const oldQty = parseInt(magazzino[prodIndex].quantita || magazzino[prodIndex].quantity || 0);
           const newQty = oldQty - qty;
           magazzino[prodIndex].quantita = newQty;
           magazzino[prodIndex].quantity = newQty;
+          
+          // CATTURA IL COSTO DI ACQUISTO ATTUALE DAL MAGAZZINO
+          const costoUnitario = parseFloat(magazzino[prodIndex].costo || magazzino[prodIndex].prezzo_acquisto || magazzino[prodIndex].cost || 0);
+          const costoTotale = costoUnitario * qty;
+          
+          console.log(`    💰 Costo unitario: €${costoUnitario.toFixed(2)} x ${qty} = €${costoTotale.toFixed(2)}`);
+          
           updates.push({ 
             sku: magazzino[prodIndex].sku || magazzino[prodIndex].barcode || 'N/A', 
             name: productName, 
             oldQty, 
             newQty, 
             created: false,
-            product: magazzino[prodIndex]
+            product: magazzino[prodIndex],
+            // Salva il costo al momento dell'evasione
+            costoUnitario: costoUnitario,
+            costoTotale: costoTotale,
+            quantitaEvasa: qty,
+            prezzoVendita: parseFloat(item.price || 0)
           });
           console.log(`    ✓ SCALATO: ${oldQty} → ${newQty}`);
         }
@@ -723,7 +748,18 @@ const OrdiniPage = () => {
       }
     }
     
-    // Aggiorna ordine
+    // Calcola costo totale acquisto al momento dell'evasione
+    const costiAcquisto = scalaResult.success ? scalaResult.updates : [];
+    const costoTotaleAcquisto = costiAcquisto.reduce((sum, u) => sum + (u.costoTotale || 0), 0);
+    const ricavoTotale = costiAcquisto.reduce((sum, u) => sum + (u.prezzoVendita * u.quantitaEvasa || 0), 0);
+    const margineEvasione = ricavoTotale - costoTotaleAcquisto;
+    
+    console.log(`💰 Riepilogo costi evasione:`);
+    console.log(`   Costo acquisto: €${costoTotaleAcquisto.toFixed(2)}`);
+    console.log(`   Ricavo: €${ricavoTotale.toFixed(2)}`);
+    console.log(`   Margine: €${margineEvasione.toFixed(2)}`);
+    
+    // Aggiorna ordine con costi al momento dell'evasione
     const updatedOrder = {
       ...order,
       fulfillment_status: isCompleta ? 'fulfilled' : 'partial',
@@ -733,6 +769,22 @@ const OrdiniPage = () => {
       receiptPrinted: true,
       receiptPrintedAt: new Date().toISOString(),
       stockUpdates: scalaResult.success ? scalaResult.updates : [],
+      // COSTI AL MOMENTO DELL'EVASIONE - per il Cruscotto
+      costiEvasione: {
+        costoTotaleAcquisto,
+        ricavoTotale,
+        margineEvasione,
+        dataCalcolo: new Date().toISOString(),
+        dettaglioProdotti: costiAcquisto.map(u => ({
+          sku: u.sku,
+          nome: u.name,
+          quantita: u.quantitaEvasa,
+          costoUnitario: u.costoUnitario,
+          costoTotale: u.costoTotale,
+          prezzoVendita: u.prezzoVendita,
+          margine: (u.prezzoVendita * u.quantitaEvasa) - u.costoTotale
+        }))
+      },
       evasioneDetails: {
         totaleOrdinato,
         totaleEvaso,

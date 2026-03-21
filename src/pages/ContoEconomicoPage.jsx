@@ -127,6 +127,7 @@ const ContoEconomicoPage = () => {
   };
 
   // Calcola costi di acquisto e quantità vendute per periodo
+  // USA I COSTI SALVATI AL MOMENTO DELL'EVASIONE (più preciso)
   const calculateProductMetrics = (periodOrders) => {
     let totalPurchaseCosts = 0;
     let totalQuantitySold = 0;
@@ -134,12 +135,29 @@ const ContoEconomicoPage = () => {
     const productsSoldMap = new Map();
 
     periodOrders.forEach(order => {
+      // PRIMA: Usa i costi salvati al momento dell'evasione (se disponibili)
+      if (order.costiEvasione && order.costiEvasione.costoTotaleAcquisto > 0) {
+        totalPurchaseCosts += order.costiEvasione.costoTotaleAcquisto;
+        
+        // Conta quantità e prodotti dai dettagli evasione
+        if (order.costiEvasione.dettaglioProdotti) {
+          order.costiEvasione.dettaglioProdotti.forEach(p => {
+            totalQuantitySold += p.quantita || 0;
+            if (p.sku && !productsSoldMap.has(p.sku)) {
+              productsSoldMap.set(p.sku, true);
+              totalProductsSold++;
+            }
+          });
+        }
+        return; // Usa solo i dati dell'evasione per questo ordine
+      }
+      
+      // FALLBACK: Calcola dai prodotti dell'ordine (per ordini vecchi senza costiEvasione)
       const products = getOrderProducts(order);
       
       products.forEach(item => {
         const sku = item.sku || item.variant_id?.toString() || '';
         const quantity = parseInt(item.quantity || 1);
-        const itemPrice = parseFloat(item.price || 0);
         
         totalQuantitySold += quantity;
         
@@ -158,7 +176,7 @@ const ContoEconomicoPage = () => {
           );
           
           if (magazzinoItem) {
-            const costPrice = parseFloat(magazzinoItem.prezzo || magazzinoItem.costo || 0);
+            const costPrice = parseFloat(magazzinoItem.costo || magazzinoItem.prezzo_acquisto || magazzinoItem.cost || 0);
             if (costPrice > 0) {
               totalPurchaseCosts += costPrice * quantity;
             }
